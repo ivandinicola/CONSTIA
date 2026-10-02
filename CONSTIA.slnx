@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Constia.API/Constia.API.csproj" />
+    <Project Path="src/Constia.Application/Constia.Application.csproj" />
+    <Project Path="src/Constia.Domain/Constia.Domain.csproj" />
+    <Project Path="src/Constia.Infrastructure/Constia.Infrastructure.csproj" />
+    <Project Path="src/Constia.Web/Constia.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Constia.Tests/Constia.Tests.csproj" />
+  </Folder>
+</Solution>

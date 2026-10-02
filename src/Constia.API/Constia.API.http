@@ -1,0 +1,6 @@
+@Constia.API_HostAddress = http://localhost:5167
+
+GET {{Constia.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
