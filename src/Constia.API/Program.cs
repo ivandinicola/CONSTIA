@@ -18,6 +18,7 @@ builder.Services.AddDbContext<ConstiaDbContext>(options =>
 builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
 builder.Services.AddScoped<IUsuarioPasswordHasher, AspNetCorePasswordHasher>();
 builder.Services.AddScoped<RegistrarUsuario>();
+builder.Services.AddScoped<AutenticarUsuario>();
 
 builder.Services.AddControllers();
 

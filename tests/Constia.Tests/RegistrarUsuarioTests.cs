@@ -106,6 +106,11 @@ public class RegistrarUsuarioTests
 
         public bool RechazarInsertPorEmailDuplicado { get; init; }
 
+        public Task<Usuario?> BuscarPorEmailAsync(string email, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<Usuario?>(null);
+        }
+
         public Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken)
         {
             return Task.FromResult(Emails.Contains(email));
