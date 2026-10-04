@@ -1,4 +1,7 @@
+using Constia.Application.Usuarios;
 using Constia.Infrastructure;
+using Constia.Infrastructure.Security;
+using Constia.Infrastructure.Usuarios;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,6 +14,10 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 
 builder.Services.AddDbContext<ConstiaDbContext>(options =>
     options.UseSqlServer(connectionString));
+
+builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
+builder.Services.AddScoped<IUsuarioPasswordHasher, AspNetCorePasswordHasher>();
+builder.Services.AddScoped<RegistrarUsuario>();
 
 builder.Services.AddControllers();
 
