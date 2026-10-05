@@ -1,3 +1,8 @@
 namespace Constia.API.Contracts;
 
-public sealed record LoginUsuarioResponse(Guid UserId, string Name, string Email);
+public sealed record LoginUsuarioResponse(
+    string AccessToken,
+    DateTimeOffset ExpiresAt,
+    Guid UserId,
+    string Name,
+    string Email);

@@ -8,5 +8,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Constia.Tests/Constia.Tests.csproj" />
+    <Project Path="tests/Constia.API.Tests/Constia.API.Tests.csproj" />
   </Folder>
 </Solution>

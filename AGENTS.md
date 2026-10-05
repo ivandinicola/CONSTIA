@@ -21,6 +21,7 @@ Arquitectura prevista:
 - `Constia.Domain`
 - `Constia.Infrastructure`
 - `Constia.Tests`
+- `Constia.API.Tests`
 
 Dependencias permitidas:
 
@@ -28,6 +29,9 @@ Dependencias permitidas:
 - Application → Domain
 - Infrastructure → Application, Domain
 - Tests → Domain, Application
+- API.Tests → API, Application, Domain, Infrastructure
+
+`Constia.Tests` se reserva para pruebas unitarias de Domain y Application. `Constia.API.Tests` contiene las pruebas de integración del host, la API y su pipeline. No convertir el proyecto unitario en un proyecto de integración.
 
 No agregar dependencias circulares. Respetar las dependencias permitidas y las responsabilidades de cada proyecto.
 

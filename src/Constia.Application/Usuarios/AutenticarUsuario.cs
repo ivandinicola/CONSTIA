@@ -2,7 +2,8 @@ namespace Constia.Application.Usuarios;
 
 public sealed class AutenticarUsuario(
     IUsuarioRepository usuarios,
-    IUsuarioPasswordHasher passwordHasher)
+    IUsuarioPasswordHasher passwordHasher,
+    IAccessTokenService accessTokenService)
 {
     /// <summary>
     /// Returns null for any invalid credentials.
@@ -21,6 +22,13 @@ public sealed class AutenticarUsuario(
             return null;
         }
 
-        return new UsuarioAutenticado(usuario.Id, usuario.Nombre, usuario.Email);
+        var token = accessTokenService.Emitir(usuario.Id, usuario.Nombre, usuario.Email);
+
+        return new UsuarioAutenticado(
+            usuario.Id,
+            usuario.Nombre,
+            usuario.Email,
+            token.Value,
+            token.ExpiresAt);
     }
 }

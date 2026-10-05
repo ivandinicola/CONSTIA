@@ -4,6 +4,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
     <ProjectReference Include="..\Constia.Application\Constia.Application.csproj" />
     <ProjectReference Include="..\Constia.Infrastructure\Constia.Infrastructure.csproj" />
   </ItemGroup>

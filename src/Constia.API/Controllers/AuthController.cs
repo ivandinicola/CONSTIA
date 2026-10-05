@@ -31,6 +31,11 @@ public sealed class AuthController(AutenticarUsuario autenticarUsuario) : Contro
             });
         }
 
-        return Ok(new LoginUsuarioResponse(usuario.UserId, usuario.Name, usuario.Email));
+        return Ok(new LoginUsuarioResponse(
+            usuario.AccessToken,
+            usuario.ExpiresAt,
+            usuario.UserId,
+            usuario.Name,
+            usuario.Email));
     }
 }

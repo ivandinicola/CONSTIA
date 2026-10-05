@@ -15,7 +15,8 @@ CONSTIA/
 │   ├── Constia.Domain
 │   └── Constia.Infrastructure
 └── tests/
-    └── Constia.Tests
+    ├── Constia.Tests
+    └── Constia.API.Tests
 ```
 
 El stack previsto es C#, .NET 10, Blazor, ASP.NET Core Web API, Entity Framework Core 10 y SQL Server 2022.
@@ -44,7 +45,11 @@ Implementa el acceso a datos y los detalles técnicos de persistencia previstos,
 
 ### `Constia.Tests`
 
-Contiene pruebas de las reglas del dominio y de los casos de uso de aplicación. Las pruebas ayudan a verificar el comportamiento acordado en `MVP-SCOPE.md` y `SPECIFICATION.md`.
+Contiene pruebas unitarias de las reglas del dominio y de los casos de uso de aplicación. No referencia API ni Infrastructure y no se utiliza para pruebas de integración.
+
+### `Constia.API.Tests`
+
+Contiene pruebas de integración del host ASP.NET Core, los contratos HTTP y el pipeline de autenticación. Puede referenciar API, Application, Domain e Infrastructure para preparar fakes y verificar el comportamiento real del host, sin depender de SQL Server.
 
 ## 3. Dependencias permitidas
 
@@ -56,6 +61,7 @@ Las dependencias entre proyectos son:
 - Application → Domain
 - Infrastructure → Application, Domain
 - Tests → Domain, Application
+- API.Tests → API, Application, Domain, Infrastructure
 
 No se permiten dependencias circulares. No deben agregarse referencias entre proyectos fuera de las permitidas sin revisar y actualizar primero la arquitectura acordada.
 
@@ -66,7 +72,8 @@ No se permiten dependencias circulares. No deben agregarse referencias entre pro
 - **Application:** coordinación de casos de uso y de los pasos necesarios para cumplirlos. Las reglas propias del negocio deben permanecer en Domain.
 - **Domain:** reglas y conceptos funcionales, por ejemplo, que un hábito tenga al menos un día programado, que un hábito nuevo sea activo y cómo se determina el cumplimiento de las reglas de rachas.
 - **Infrastructure:** consultas, persistencia y adaptación a Entity Framework Core y SQL Server. No debe definir reglas de negocio.
-- **Tests:** verificaciones del comportamiento de Domain y Application. No deben alterar la funcionalidad para hacer pasar una prueba.
+- **Tests:** pruebas unitarias del comportamiento de Domain y Application. No deben alterar la funcionalidad para hacer pasar una prueba.
+- **API.Tests:** pruebas de integración del host, los contratos HTTP y el pipeline real de API, incluyendo autenticación Bearer. Deben usar configuración aislada y no depender de SQL Server.
 
 ## 5. Responsabilidades que deben evitarse
 
@@ -75,7 +82,8 @@ No se permiten dependencias circulares. No deben agregarse referencias entre pro
 - **Application:** no debe asumir las responsabilidades del transporte HTTP ni depender de detalles concretos de SQL Server para definir reglas funcionales.
 - **Domain:** no debe depender de ASP.NET Core, Entity Framework Core, SQL Server ni de la interfaz.
 - **Infrastructure:** no debe decidir reglas del producto ni convertirse en el lugar donde se coordinan los casos de uso.
-- **Tests:** no deben cambiarse o eliminarse únicamente para conseguir que pasen. Si contradicen la especificación, se debe informar el conflicto.
+- **Tests:** no deben cambiarse o eliminarse únicamente para conseguir que pasen. Si contradicen la especificación, se debe informar el conflicto. `Constia.Tests` no debe convertirse en el proyecto de integración.
+- **API.Tests:** no debe contener lógica de producción ni incorporar rutas de prueba al API. Sus dependencias se limitan a verificar la integración real de las capas existentes.
 
 ## 6. Flujo general de una operación
 
