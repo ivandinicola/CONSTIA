@@ -38,6 +38,7 @@ builder.Services.AddScoped<RegistrarUsuario>();
 builder.Services.AddScoped<AutenticarUsuario>();
 builder.Services.AddScoped<CrearHabito>();
 builder.Services.AddScoped<ListarHabitosActivos>();
+builder.Services.AddScoped<ObtenerHabitoPorId>();
 
 var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SigningKey));
 builder.Services

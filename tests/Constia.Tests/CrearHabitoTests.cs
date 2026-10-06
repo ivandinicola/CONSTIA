@@ -164,5 +164,10 @@ public class CrearHabitoTests
         {
             throw new NotSupportedException();
         }
+
+        public Task<Habito?> BuscarPorIdYUsuarioAsync(
+            Guid habitId,
+            Guid usuarioId,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

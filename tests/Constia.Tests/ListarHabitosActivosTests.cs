@@ -82,5 +82,10 @@ public sealed class ListarHabitosActivosTests
             CancellationTokenRecibido = cancellationToken;
             return Task.FromResult(resultados);
         }
+
+        public Task<Habito?> BuscarPorIdYUsuarioAsync(
+            Guid habitId,
+            Guid usuarioId,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

@@ -26,4 +26,18 @@ public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoReposi
             .ThenBy(habito => habito.Id)
             .ToListAsync(cancellationToken);
     }
+
+    public Task<Habito?> BuscarPorIdYUsuarioAsync(
+        Guid habitId,
+        Guid usuarioId,
+        CancellationToken cancellationToken)
+    {
+        return dbContext.Set<Habito>()
+            .Where(habito =>
+                habito.Id == habitId &&
+                EF.Property<Guid>(habito, "UsuarioId") == usuarioId)
+            .Include(habito => habito.DiasProgramados)
+            .AsNoTracking()
+            .SingleOrDefaultAsync(cancellationToken);
+    }
 }

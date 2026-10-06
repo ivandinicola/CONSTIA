@@ -14,6 +14,86 @@ namespace Constia.API.Tests;
 public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixture<JwtApiFactory>
 {
     [Fact]
+    public async Task ObtenerHabitoPorId_SinBearer_Devuelve401()
+    {
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync($"/api/habitos/{Guid.NewGuid():D}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ObtenerHabitoPorId_Propio_Devuelve200ConDiasYSinUsuarioId()
+    {
+        var habito = CrearHabitoConIdYFecha(
+            factory.Usuario,
+            "Consultar libro",
+            Guid.NewGuid(),
+            new DateTimeOffset(2026, 2, 3, 4, 5, 6, TimeSpan.Zero));
+        factory.ReemplazarHabitos([habito]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var response = await client.GetAsync($"/api/habitos/{habito.Id:D}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<HabitoResponse>();
+        Assert.NotNull(body);
+        Assert.Equal(habito.Id, body.Id);
+        Assert.Equal(habito.Nombre, body.Nombre);
+        Assert.Equal([DayOfWeek.Monday], body.DiasProgramados);
+        Assert.DoesNotContain("usuarioId", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ObtenerHabitoPorId_Inexistente_Devuelve404()
+    {
+        factory.ReemplazarHabitos([]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var response = await client.GetAsync($"/api/habitos/{Guid.NewGuid():D}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ObtenerHabitoPorId_DeOtroUsuario_Devuelve404()
+    {
+        var usuarioAjeno = new Usuario("Otro", $"{Guid.NewGuid()}@example.invalid", "fake-hash");
+        var habitoAjeno = CrearHabitoConIdYFecha(
+            usuarioAjeno,
+            "Privado",
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow);
+        factory.ReemplazarHabitos([habitoAjeno]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var response = await client.GetAsync($"/api/habitos/{habitoAjeno.Id:D}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ObtenerHabitoPorId_PropioInactivo_Devuelve200()
+    {
+        var habito = CrearHabitoConIdYFecha(
+            factory.Usuario,
+            "Hábito inactivo",
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow);
+        habito.Desactivar();
+        factory.ReemplazarHabitos([habito]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var response = await client.GetAsync($"/api/habitos/{habito.Id:D}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<HabitoResponse>();
+        Assert.NotNull(body);
+        Assert.Equal(EstadoHabito.Inactivo, body.Estado);
+    }
+
+    [Fact]
     public async Task ListarHabitosActivos_SinBearer_Devuelve401()
     {
         using var client = factory.CreateClient();
