@@ -1,5 +1,6 @@
 using Constia.Application.Usuarios;
 using Constia.Application.Habitos;
+using Constia.API.Authentication;
 using Constia.Infrastructure;
 using Constia.Infrastructure.Habitos;
 using Constia.Infrastructure.Security;
@@ -26,9 +27,11 @@ jwtSettings.Validate();
 builder.Services.AddDbContext<ConstiaDbContext>(options =>
     options.UseSqlServer(connectionString));
 builder.Services.AddSingleton(jwtSettings);
+builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
 builder.Services.AddScoped<IHabitoRepository, HabitoRepository>();
+builder.Services.AddScoped<IUsuarioActual, HttpContextUsuarioActual>();
 builder.Services.AddScoped<IUsuarioPasswordHasher, AspNetCorePasswordHasher>();
 builder.Services.AddScoped<IAccessTokenService, JwtAccessTokenService>();
 builder.Services.AddScoped<RegistrarUsuario>();
