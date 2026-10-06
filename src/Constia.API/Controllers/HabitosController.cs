@@ -11,8 +11,37 @@ namespace Constia.API.Controllers;
 [Authorize]
 public sealed class HabitosController(
     IUsuarioActual usuarioActual,
-    CrearHabito crearHabito) : ControllerBase
+    CrearHabito crearHabito,
+    ListarHabitosActivos listarHabitosActivos) : ControllerBase
 {
+    [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<HabitoResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<IReadOnlyList<HabitoResponse>>> ListarActivos(
+        CancellationToken cancellationToken)
+    {
+        if (usuarioActual.UsuarioId is not Guid usuarioId)
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "No se pudo identificar al usuario autenticado."
+            });
+        }
+
+        var habitos = await listarHabitosActivos.EjecutarAsync(usuarioId, cancellationToken);
+        var response = habitos.Select(habito => new HabitoResponse(
+            habito.Id,
+            habito.Nombre,
+            habito.Descripcion,
+            habito.FechaCreacion,
+            habito.FechaInicio,
+            habito.Estado,
+            habito.DiasProgramados)).ToArray();
+
+        return Ok(response);
+    }
+
     [HttpPost]
     [ProducesResponseType(typeof(HabitoResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

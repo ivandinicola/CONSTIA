@@ -157,5 +157,12 @@ public class CrearHabitoTests
             CancellationTokenRecibido = cancellationToken;
             return Task.CompletedTask;
         }
+
+        public Task<IReadOnlyList<Habito>> ListarActivosPorUsuarioAsync(
+            Guid usuarioId,
+            CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
     }
 }

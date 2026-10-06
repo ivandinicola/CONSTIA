@@ -23,6 +23,15 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
 
     public ConcurrentQueue<Habito> HabitosPersistidos { get; } = new();
 
+    public void ReemplazarHabitos(IEnumerable<Habito> habitos)
+    {
+        HabitosPersistidos.Clear();
+        foreach (var habito in habitos)
+        {
+            HabitosPersistidos.Enqueue(habito);
+        }
+    }
+
     static JwtApiFactory()
     {
         Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", "Server=unused;Database=unused;Trusted_Connection=True");
@@ -88,6 +97,21 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
         {
             habitos.Enqueue(habito);
             return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<Habito>> ListarActivosPorUsuarioAsync(
+            Guid usuarioId,
+            CancellationToken cancellationToken)
+        {
+            IReadOnlyList<Habito> resultados = habitos
+                .Where(habito =>
+                    habito.Usuario.Id == usuarioId &&
+                    habito.Estado == EstadoHabito.Activo)
+                .OrderBy(habito => habito.FechaCreacion)
+                .ThenBy(habito => habito.Id)
+                .ToArray();
+
+            return Task.FromResult(resultados);
         }
     }
 }

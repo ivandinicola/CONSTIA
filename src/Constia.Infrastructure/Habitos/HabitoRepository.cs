@@ -1,5 +1,6 @@
 using Constia.Application.Habitos;
 using Constia.Domain;
+using Microsoft.EntityFrameworkCore;
 
 namespace Constia.Infrastructure.Habitos;
 
@@ -9,5 +10,20 @@ public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoReposi
     {
         dbContext.Set<Habito>().Add(habito);
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Habito>> ListarActivosPorUsuarioAsync(
+        Guid usuarioId,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.Set<Habito>()
+            .Where(habito =>
+                habito.Usuario.Id == usuarioId &&
+                habito.Estado == EstadoHabito.Activo)
+            .Include(habito => habito.DiasProgramados)
+            .AsNoTracking()
+            .OrderBy(habito => habito.FechaCreacion)
+            .ThenBy(habito => habito.Id)
+            .ToListAsync(cancellationToken);
     }
 }

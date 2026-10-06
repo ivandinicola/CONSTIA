@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Reflection;
 using System.Security.Claims;
 using System.Text;
 using Constia.API.Contracts;
@@ -12,6 +13,75 @@ namespace Constia.API.Tests;
 
 public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixture<JwtApiFactory>
 {
+    [Fact]
+    public async Task ListarHabitosActivos_SinBearer_Devuelve401()
+    {
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/habitos");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ListarHabitosActivos_SinHabitos_Devuelve200ConListaVacia()
+    {
+        factory.ReemplazarHabitos([]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var response = await client.GetAsync("/api/habitos");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("[]", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task ListarHabitosActivos_FiltraPorPropietarioYEstadoYOrdenaDeterministicamente()
+    {
+        var fechaEmpatada = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var fechaAnterior = fechaEmpatada.AddDays(-1);
+        var usuarioAjeno = new Usuario("Otro", $"{Guid.NewGuid()}@example.invalid", "fake-hash");
+        var desempateAlto = CrearHabitoConIdYFecha(
+            factory.Usuario,
+            "Empate alto",
+            Guid.Parse("00000000-0000-0000-0000-000000000002"),
+            fechaEmpatada);
+        var anterior = CrearHabitoConIdYFecha(
+            factory.Usuario,
+            "Anterior",
+            Guid.Parse("00000000-0000-0000-0000-000000000003"),
+            fechaAnterior);
+        var desempateBajo = CrearHabitoConIdYFecha(
+            factory.Usuario,
+            "Empate bajo",
+            Guid.Parse("00000000-0000-0000-0000-000000000001"),
+            fechaEmpatada);
+        var ajeno = CrearHabitoConIdYFecha(
+            usuarioAjeno,
+            "Ajeno",
+            Guid.Parse("00000000-0000-0000-0000-000000000004"),
+            fechaAnterior);
+        var inactivo = CrearHabitoConIdYFecha(
+            factory.Usuario,
+            "Inactivo",
+            Guid.Parse("00000000-0000-0000-0000-000000000005"),
+            fechaAnterior);
+        inactivo.Desactivar();
+        factory.ReemplazarHabitos([desempateAlto, ajeno, inactivo, desempateBajo, anterior]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var response = await client.GetAsync("/api/habitos");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<HabitoResponse[]>();
+        Assert.NotNull(body);
+        Assert.Equal(["Anterior", "Empate bajo", "Empate alto"], body.Select(habito => habito.Nombre));
+        Assert.All(body, habito => Assert.NotEqual(ajeno.Id, habito.Id));
+        Assert.All(body, habito => Assert.NotEqual(inactivo.Id, habito.Id));
+        Assert.Equal([DayOfWeek.Monday], body[0].DiasProgramados);
+        Assert.DoesNotContain("usuarioId", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task CrearHabito_SinBearer_Devuelve401()
     {
@@ -144,4 +214,16 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
         fechaInicio = "2026-10-06",
         diasProgramados = new[] { (int)DayOfWeek.Monday, (int)DayOfWeek.Wednesday }
     };
+
+    private static Habito CrearHabitoConIdYFecha(
+        Usuario propietario,
+        string nombre,
+        Guid id,
+        DateTimeOffset fechaCreacion)
+    {
+        var habito = new Habito(propietario, nombre, null, new DateOnly(2026, 1, 1), [DayOfWeek.Monday]);
+        typeof(Habito).GetProperty(nameof(Habito.Id))!.SetValue(habito, id);
+        typeof(Habito).GetProperty(nameof(Habito.FechaCreacion))!.SetValue(habito, fechaCreacion);
+        return habito;
+    }
 }
