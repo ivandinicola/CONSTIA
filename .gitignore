@@ -9,3 +9,27 @@
 .DS_Store
 Thumbs.db
 **/appsettings.Local.json
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+secrets.json
+secrets.*.json
+*.secrets.json
+
+# Local certificates and private keys
+*.pfx
+*.p12
+*.pem
+*.key
+
+# Local databases and backups
+*.db
+*.sqlite
+*.sqlite3
+*.bak
+*.backup
+
+# Local editor configuration
+.vscode/
