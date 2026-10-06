@@ -28,7 +28,7 @@ public class HabitoTests
         Assert.InRange(habito.FechaCreacion, antesDeCrear, despuesDeCrear);
         Assert.Equal(new DateOnly(2026, 10, 5), habito.FechaInicio);
         Assert.Equal(EstadoHabito.Activo, habito.Estado);
-        Assert.Equal([DayOfWeek.Monday, DayOfWeek.Wednesday], habito.DiasProgramados);
+        Assert.Equal([DayOfWeek.Monday, DayOfWeek.Wednesday], habito.DiasProgramados.Select(dia => dia.Dia));
         Assert.Null(otroHabito.Descripcion);
     }
 
@@ -68,7 +68,7 @@ public class HabitoTests
         var habito = new Habito(
             CrearUsuario(), "Leer", null, new DateOnly(2026, 10, 5), [DayOfWeek.Monday, DayOfWeek.Monday]);
 
-        Assert.Equal([DayOfWeek.Monday], habito.DiasProgramados);
+        Assert.Equal([DayOfWeek.Monday], habito.DiasProgramados.Select(dia => dia.Dia));
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public class HabitoTests
         Assert.Equal("Leer", habito.Nombre);
         Assert.Equal("Leer un libro", habito.Descripcion);
         Assert.Equal(new DateOnly(2026, 10, 5), habito.FechaInicio);
-        Assert.Equal([DayOfWeek.Monday, DayOfWeek.Wednesday], habito.DiasProgramados);
+        Assert.Equal([DayOfWeek.Monday, DayOfWeek.Wednesday], habito.DiasProgramados.Select(dia => dia.Dia));
     }
 
     private static Usuario CrearUsuario() => new("Ana", "ana@example.com", "hashed-value");

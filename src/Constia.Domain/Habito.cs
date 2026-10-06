@@ -2,6 +2,8 @@ namespace Constia.Domain;
 
 public class Habito
 {
+    private readonly List<DiaProgramado> _diasProgramados = [];
+
     public Guid Id { get; private set; }
 
     public Usuario Usuario { get; private set; }
@@ -16,7 +18,13 @@ public class Habito
 
     public EstadoHabito Estado { get; private set; }
 
-    public IReadOnlyList<DayOfWeek> DiasProgramados { get; private set; }
+    public IReadOnlyCollection<DiaProgramado> DiasProgramados => _diasProgramados.AsReadOnly();
+
+    private Habito()
+    {
+        Usuario = null!;
+        Nombre = null!;
+    }
 
     public Habito(
         Usuario usuario,
@@ -47,7 +55,7 @@ public class Habito
         FechaCreacion = DateTimeOffset.UtcNow;
         FechaInicio = fechaInicio;
         Estado = EstadoHabito.Activo;
-        DiasProgramados = Array.AsReadOnly(dias);
+        _diasProgramados.AddRange(dias.Select(dia => new DiaProgramado(dia)));
     }
 
     public void Desactivar()
