@@ -83,6 +83,11 @@ public class AutenticarUsuarioTests
 
     private sealed class FakeUsuarioRepository(Usuario? usuario) : IUsuarioRepository
     {
+        public Task<Usuario?> BuscarPorIdAsync(Guid id, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<Usuario?>(usuario?.Id == id ? usuario : null);
+        }
+
         public Task<Usuario?> BuscarPorEmailAsync(string email, CancellationToken cancellationToken)
         {
             return Task.FromResult(usuario?.Email == email ? usuario : null);

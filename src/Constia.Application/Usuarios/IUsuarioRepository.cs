@@ -4,6 +4,8 @@ namespace Constia.Application.Usuarios;
 
 public interface IUsuarioRepository
 {
+    Task<Usuario?> BuscarPorIdAsync(Guid id, CancellationToken cancellationToken);
+
     Task<Usuario?> BuscarPorEmailAsync(string email, CancellationToken cancellationToken);
 
     Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken);

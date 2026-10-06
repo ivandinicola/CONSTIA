@@ -1,5 +1,7 @@
 using Constia.Application.Usuarios;
+using Constia.Application.Habitos;
 using Constia.Infrastructure;
+using Constia.Infrastructure.Habitos;
 using Constia.Infrastructure.Security;
 using Constia.Infrastructure.Usuarios;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -26,10 +28,12 @@ builder.Services.AddDbContext<ConstiaDbContext>(options =>
 builder.Services.AddSingleton(jwtSettings);
 
 builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
+builder.Services.AddScoped<IHabitoRepository, HabitoRepository>();
 builder.Services.AddScoped<IUsuarioPasswordHasher, AspNetCorePasswordHasher>();
 builder.Services.AddScoped<IAccessTokenService, JwtAccessTokenService>();
 builder.Services.AddScoped<RegistrarUsuario>();
 builder.Services.AddScoped<AutenticarUsuario>();
+builder.Services.AddScoped<CrearHabito>();
 
 var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SigningKey));
 builder.Services

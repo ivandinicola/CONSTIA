@@ -9,6 +9,12 @@ public sealed class UsuarioRepository(ConstiaDbContext dbContext) : IUsuarioRepo
 {
     private const string EmailUniqueIndexName = "IX_Usuario_Email";
 
+    public Task<Usuario?> BuscarPorIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        return dbContext.Set<Usuario>()
+            .SingleOrDefaultAsync(usuario => usuario.Id == id, cancellationToken);
+    }
+
     public Task<Usuario?> BuscarPorEmailAsync(string email, CancellationToken cancellationToken)
     {
         return dbContext.Set<Usuario>()

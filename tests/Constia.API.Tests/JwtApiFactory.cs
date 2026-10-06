@@ -63,6 +63,11 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
 
     private sealed class FakeUsuarioRepository(Usuario usuario) : IUsuarioRepository
     {
+        public Task<Usuario?> BuscarPorIdAsync(Guid id, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<Usuario?>(usuario.Id == id ? usuario : null);
+        }
+
         public Task<Usuario?> BuscarPorEmailAsync(string email, CancellationToken cancellationToken)
         {
             return Task.FromResult<Usuario?>(usuario.Email == email ? usuario : null);
