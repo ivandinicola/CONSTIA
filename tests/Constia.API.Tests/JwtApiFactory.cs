@@ -1,4 +1,5 @@
-using System.Security.Cryptography;
+using System.Collections.Concurrent;
+using Constia.Application.Habitos;
 using Constia.Application.Usuarios;
 using Constia.Domain;
 using Microsoft.AspNetCore.Hosting;
@@ -14,20 +15,21 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
     public const string TestIssuer = "constia-tests";
     public const string TestAudience = "constia-api-tests";
     public const string TestPassword = "fictitious-test-password";
+    private const string TestSigningKey = "constia-test-signing-key-not-a-secret-32-bytes";
 
-    public string SigningKey { get; } = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+    public string SigningKey => TestSigningKey;
 
     public Usuario Usuario { get; } = new("Test User", "test@example.invalid", "not-a-real-password-hash");
 
-    private readonly Dictionary<string, string?> _previousEnvironmentValues = [];
+    public ConcurrentQueue<Habito> HabitosPersistidos { get; } = new();
 
-    public JwtApiFactory()
+    static JwtApiFactory()
     {
-        SetEnvironmentValue("ConnectionStrings__DefaultConnection", "Server=unused;Database=unused;Trusted_Connection=True");
-        SetEnvironmentValue("JwtSettings__SigningKey", SigningKey);
-        SetEnvironmentValue("JwtSettings__Issuer", TestIssuer);
-        SetEnvironmentValue("JwtSettings__Audience", TestAudience);
-        SetEnvironmentValue("JwtSettings__ExpirationMinutes", "10");
+        Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", "Server=unused;Database=unused;Trusted_Connection=True");
+        Environment.SetEnvironmentVariable("JwtSettings__SigningKey", TestSigningKey);
+        Environment.SetEnvironmentVariable("JwtSettings__Issuer", TestIssuer);
+        Environment.SetEnvironmentVariable("JwtSettings__Audience", TestAudience);
+        Environment.SetEnvironmentVariable("JwtSettings__ExpirationMinutes", "10");
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -39,26 +41,9 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
             services.AddScoped<IUsuarioRepository>(_ => new FakeUsuarioRepository(Usuario));
             services.RemoveAll<IUsuarioPasswordHasher>();
             services.AddScoped<IUsuarioPasswordHasher, FakeUsuarioPasswordHasher>();
+            services.RemoveAll<IHabitoRepository>();
+            services.AddScoped<IHabitoRepository>(_ => new FakeHabitoRepository(HabitosPersistidos));
         });
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            foreach (var (key, value) in _previousEnvironmentValues)
-            {
-                Environment.SetEnvironmentVariable(key, value);
-            }
-        }
-
-        base.Dispose(disposing);
-    }
-
-    private void SetEnvironmentValue(string key, string value)
-    {
-        _previousEnvironmentValues[key] = Environment.GetEnvironmentVariable(key);
-        Environment.SetEnvironmentVariable(key, value);
     }
 
     private sealed class FakeUsuarioRepository(Usuario usuario) : IUsuarioRepository
@@ -94,6 +79,15 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
         public bool VerifyPassword(string passwordHash, string password)
         {
             return passwordHash == "not-a-real-password-hash" && password == TestPassword;
+        }
+    }
+
+    private sealed class FakeHabitoRepository(ConcurrentQueue<Habito> habitos) : IHabitoRepository
+    {
+        public Task AgregarAsync(Habito habito, CancellationToken cancellationToken)
+        {
+            habitos.Enqueue(habito);
+            return Task.CompletedTask;
         }
     }
 }

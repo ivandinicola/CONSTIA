@@ -1,0 +1,147 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Security.Claims;
+using System.Text;
+using Constia.API.Contracts;
+using Constia.Domain;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+
+namespace Constia.API.Tests;
+
+public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixture<JwtApiFactory>
+{
+    [Fact]
+    public async Task CrearHabito_SinBearer_Devuelve401()
+    {
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/habitos", CrearRequest());
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CrearHabito_ConTokenInvalido_Devuelve401()
+    {
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "invalid-token");
+
+        var response = await client.PostAsJsonAsync("/api/habitos", CrearRequest());
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CrearHabito_ConJwtValido_Devuelve201YGuardaElHabito()
+    {
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+        var nombre = $"Leer {Guid.NewGuid()}";
+
+        var response = await client.PostAsJsonAsync("/api/habitos", CrearRequest(nombre));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<HabitoResponse>();
+        Assert.NotNull(body);
+        Assert.Equal(nombre, body.Nombre);
+        Assert.Equal(DateOnly.Parse("2026-10-06"), body.StartDate);
+        Assert.Equal(EstadoHabito.Activo, body.Estado);
+        Assert.DoesNotContain("usuarioId", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(factory.HabitosPersistidos, habit => habit.Nombre == nombre && habit.Usuario.Id == factory.Usuario.Id);
+    }
+
+    [Fact]
+    public async Task CrearHabito_IgnoraUsuarioIdEnJsonYUsaElSubDelToken()
+    {
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+        var nombre = $"Caminar {Guid.NewGuid()}";
+        var otroUsuarioId = Guid.NewGuid();
+        var request = new
+        {
+            nombre,
+            descripcion = "Paseo diario",
+            fechaInicio = "2026-10-06",
+            diasProgramados = new[] { (int)DayOfWeek.Monday },
+            usuarioId = otroUsuarioId
+        };
+
+        var response = await client.PostAsJsonAsync("/api/habitos", request);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Contains(factory.HabitosPersistidos, habit => habit.Nombre == nombre && habit.Usuario.Id == factory.Usuario.Id);
+        Assert.DoesNotContain(factory.HabitosPersistidos, habit => habit.Nombre == nombre && habit.Usuario.Id == otroUsuarioId);
+    }
+
+    [Fact]
+    public async Task CrearHabito_ConDiasInvalidos_Devuelve400()
+    {
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+        var request = new
+        {
+            nombre = "Leer",
+            descripcion = "",
+            fechaInicio = "2026-10-06",
+            diasProgramados = Array.Empty<int>()
+        };
+
+        var response = await client.PostAsJsonAsync("/api/habitos", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Registro_SigueSiendoPublico()
+    {
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/usuarios", new
+        {
+            nombre = "Existing User",
+            email = factory.Usuario.Email,
+            password = JwtApiFactory.TestPassword
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    private HttpClient ClienteAutenticado(Guid subject)
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CrearToken(subject));
+        return client;
+    }
+
+    private string CrearToken(Guid subject)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var claims = new[]
+        {
+            new Claim("sub", subject.ToString()),
+            new Claim("name", factory.Usuario.Nombre),
+            new Claim("email", factory.Usuario.Email),
+            new Claim("iat", now.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64),
+            new Claim("jti", Guid.NewGuid().ToString())
+        };
+        var credentials = new SigningCredentials(
+            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(factory.SigningKey)),
+            SecurityAlgorithms.HmacSha256);
+        var token = new JwtSecurityToken(
+            JwtApiFactory.TestIssuer,
+            JwtApiFactory.TestAudience,
+            claims,
+            now.AddMinutes(-1).UtcDateTime,
+            now.AddMinutes(5).UtcDateTime,
+            credentials);
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    private static object CrearRequest(string nombre = "Leer") => new
+    {
+        nombre,
+        descripcion = "Diez páginas",
+        fechaInicio = "2026-10-06",
+        diasProgramados = new[] { (int)DayOfWeek.Monday, (int)DayOfWeek.Wednesday }
+    };
+}
