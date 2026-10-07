@@ -83,6 +83,10 @@ public sealed class ListarHabitosActivosTests
             return Task.FromResult(resultados);
         }
 
+        public Task<IReadOnlyList<Habito>> ListarInactivosPorUsuarioAsync(
+            Guid usuarioId,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
         public Task<Habito?> BuscarPorIdYUsuarioAsync(
             Guid habitId,
             Guid usuarioId,

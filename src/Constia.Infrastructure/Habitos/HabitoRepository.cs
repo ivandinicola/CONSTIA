@@ -27,6 +27,21 @@ public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoReposi
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Habito>> ListarInactivosPorUsuarioAsync(
+        Guid usuarioId,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.Set<Habito>()
+            .Where(habito =>
+                habito.Usuario.Id == usuarioId &&
+                habito.Estado == EstadoHabito.Inactivo)
+            .Include(habito => habito.DiasProgramados)
+            .AsNoTracking()
+            .OrderBy(habito => habito.FechaCreacion)
+            .ThenBy(habito => habito.Id)
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<Habito?> BuscarPorIdYUsuarioAsync(
         Guid habitId,
         Guid usuarioId,

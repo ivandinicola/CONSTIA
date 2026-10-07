@@ -304,6 +304,112 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     }
 
     [Fact]
+    public async Task ListarHabitosInactivos_SinBearer_Devuelve401()
+    {
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/habitos/inactivos");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ListarHabitosInactivos_FiltraPorUsuarioYEstadoYOrdenaDeterministicamente()
+    {
+        var fechaEmpatada = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var fechaAnterior = fechaEmpatada.AddDays(-1);
+        var otroUsuario = new Usuario("Otro", $"{Guid.NewGuid()}@example.invalid", "fake-hash");
+        var propioDesempateAlto = CrearHabitoConIdYFecha(
+            factory.Usuario,
+            "Empate alto",
+            Guid.Parse("00000000-0000-0000-0000-000000000002"),
+            fechaEmpatada);
+        propioDesempateAlto.Desactivar();
+        var propioAnterior = CrearHabitoConIdYFecha(
+            factory.Usuario,
+            "Anterior",
+            Guid.Parse("00000000-0000-0000-0000-000000000003"),
+            fechaAnterior);
+        propioAnterior.Desactivar();
+        var propioDesempateBajo = CrearHabitoConIdYFecha(
+            factory.Usuario,
+            "Empate bajo",
+            Guid.Parse("00000000-0000-0000-0000-000000000001"),
+            fechaEmpatada);
+        propioDesempateBajo.Desactivar();
+        var propioActivo = CrearHabitoConIdYFecha(
+            factory.Usuario,
+            "Activo propio",
+            Guid.NewGuid(),
+            fechaAnterior);
+        var ajenoInactivo = CrearHabitoConIdYFecha(
+            otroUsuario,
+            "Ajeno inactivo",
+            Guid.NewGuid(),
+            fechaAnterior);
+        ajenoInactivo.Desactivar();
+        var ajenoActivo = CrearHabitoConIdYFecha(
+            otroUsuario,
+            "Ajeno activo",
+            Guid.NewGuid(),
+            fechaAnterior);
+        factory.ReemplazarHabitos([
+            propioDesempateAlto,
+            ajenoInactivo,
+            propioActivo,
+            propioDesempateBajo,
+            ajenoActivo,
+            propioAnterior]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var response = await client.GetAsync("/api/habitos/inactivos");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<HabitoResponse[]>();
+        Assert.NotNull(body);
+        Assert.Equal(["Anterior", "Empate bajo", "Empate alto"], body.Select(habit => habit.Nombre));
+        Assert.All(body, habit => Assert.Equal(EstadoHabito.Inactivo, habit.Estado));
+        Assert.Equal([DayOfWeek.Monday], body[0].DiasProgramados);
+        var json = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("usuarioId", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Activo propio", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("Ajeno", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ListarHabitosInactivos_SinInactivos_Devuelve200ConListaVacia()
+    {
+        var activo = CrearHabitoConIdYFecha(factory.Usuario, "Solo activo", Guid.NewGuid(), DateTimeOffset.UtcNow);
+        factory.ReemplazarHabitos([activo]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var response = await client.GetAsync("/api/habitos/inactivos");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("[]", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task ListarHabitosInactivos_DespuesDeDesactivar_DevuelveElHabitoDesactivado()
+    {
+        var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var deleteResponse = await client.DeleteAsync($"/api/habitos/{habit.Id:D}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        var response = await client.GetAsync("/api/habitos/inactivos");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<HabitoResponse[]>();
+        var listed = Assert.Single(body!);
+        Assert.Equal(habit.Id, listed.Id);
+        Assert.Equal(EstadoHabito.Inactivo, listed.Estado);
+        Assert.Equal([DayOfWeek.Monday], listed.DiasProgramados);
+    }
+
+    [Fact]
     public async Task ListarHabitosActivos_SinHabitos_Devuelve200ConListaVacia()
     {
         factory.ReemplazarHabitos([]);

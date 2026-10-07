@@ -62,6 +62,10 @@ public sealed class ObtenerHabitoPorIdTests
             Guid usuarioId,
             CancellationToken cancellationToken) => throw new NotSupportedException();
 
+        public Task<IReadOnlyList<Habito>> ListarInactivosPorUsuarioAsync(
+            Guid usuarioId,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
         public Task<Habito?> BuscarPorIdYUsuarioAsync(
             Guid habitId,
             Guid usuarioId,

@@ -13,6 +13,7 @@ public sealed class HabitosController(
     IUsuarioActual usuarioActual,
     CrearHabito crearHabito,
     ListarHabitosActivos listarHabitosActivos,
+    ListarHabitosInactivos listarHabitosInactivos,
     ObtenerHabitoPorId obtenerHabitoPorId,
     EditarHabito editarHabito,
     DesactivarHabito desactivarHabito) : ControllerBase
@@ -36,6 +37,34 @@ public sealed class HabitosController(
 
         var desactivado = await desactivarHabito.EjecutarAsync(id, usuarioId, cancellationToken);
         return desactivado ? NoContent() : NotFound();
+    }
+
+    [HttpGet("inactivos")]
+    [ProducesResponseType(typeof(IReadOnlyList<HabitoResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<IReadOnlyList<HabitoResponse>>> ListarInactivos(
+        CancellationToken cancellationToken)
+    {
+        if (usuarioActual.UsuarioId is not Guid usuarioId)
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "No se pudo identificar al usuario autenticado."
+            });
+        }
+
+        var habitos = await listarHabitosInactivos.EjecutarAsync(usuarioId, cancellationToken);
+        var response = habitos.Select(habito => new HabitoResponse(
+            habito.Id,
+            habito.Nombre,
+            habito.Descripcion,
+            habito.FechaCreacion,
+            habito.FechaInicio,
+            habito.Estado,
+            habito.DiasProgramados)).ToArray();
+
+        return Ok(response);
     }
 
     [HttpPut("{id:guid}")]

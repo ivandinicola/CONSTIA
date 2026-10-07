@@ -38,6 +38,7 @@ builder.Services.AddScoped<RegistrarUsuario>();
 builder.Services.AddScoped<AutenticarUsuario>();
 builder.Services.AddScoped<CrearHabito>();
 builder.Services.AddScoped<ListarHabitosActivos>();
+builder.Services.AddScoped<ListarHabitosInactivos>();
 builder.Services.AddScoped<ObtenerHabitoPorId>();
 builder.Services.AddScoped<EditarHabito>();
 builder.Services.AddScoped<DesactivarHabito>();

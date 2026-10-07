@@ -114,6 +114,21 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
             return Task.FromResult(resultados);
         }
 
+        public Task<IReadOnlyList<Habito>> ListarInactivosPorUsuarioAsync(
+            Guid usuarioId,
+            CancellationToken cancellationToken)
+        {
+            IReadOnlyList<Habito> resultados = habitos
+                .Where(habito =>
+                    habito.Usuario.Id == usuarioId &&
+                    habito.Estado == EstadoHabito.Inactivo)
+                .OrderBy(habito => habito.FechaCreacion)
+                .ThenBy(habito => habito.Id)
+                .ToArray();
+
+            return Task.FromResult(resultados);
+        }
+
         public Task<Habito?> BuscarPorIdYUsuarioAsync(
             Guid habitId,
             Guid usuarioId,

@@ -10,6 +10,10 @@ public interface IHabitoRepository
         Guid usuarioId,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<Habito>> ListarInactivosPorUsuarioAsync(
+        Guid usuarioId,
+        CancellationToken cancellationToken);
+
     Task<Habito?> BuscarPorIdYUsuarioAsync(
         Guid habitId,
         Guid usuarioId,
