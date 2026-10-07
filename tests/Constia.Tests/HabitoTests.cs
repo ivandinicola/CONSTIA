@@ -93,6 +93,33 @@ public class HabitoTests
     }
 
     [Fact]
+    public void Desactivar_Repetidamente_MantieneEstadoInactivoYSusDatos()
+    {
+        var usuario = CrearUsuario();
+        var habito = new Habito(
+            usuario,
+            "Leer",
+            "Un capítulo",
+            new DateOnly(2026, 10, 5),
+            [DayOfWeek.Monday, DayOfWeek.Wednesday]);
+        var id = habito.Id;
+        var fechaCreacion = habito.FechaCreacion;
+        var fechaInicio = habito.FechaInicio;
+
+        habito.Desactivar();
+        habito.Desactivar();
+
+        Assert.Equal(EstadoHabito.Inactivo, habito.Estado);
+        Assert.Equal(id, habito.Id);
+        Assert.Same(usuario, habito.Usuario);
+        Assert.Equal("Leer", habito.Nombre);
+        Assert.Equal("Un capítulo", habito.Descripcion);
+        Assert.Equal(fechaCreacion, habito.FechaCreacion);
+        Assert.Equal(fechaInicio, habito.FechaInicio);
+        Assert.Equal([DayOfWeek.Monday, DayOfWeek.Wednesday], habito.DiasProgramados.Select(dia => dia.Dia));
+    }
+
+    [Fact]
     public void ActualizarConfiguracion_ActualizaCamposEditablesYSincronizaDiasSinCambiarIdentidadEstadoNiFechas()
     {
         var usuario = CrearUsuario();

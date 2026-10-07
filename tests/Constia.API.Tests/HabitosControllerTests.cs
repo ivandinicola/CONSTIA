@@ -14,6 +14,93 @@ namespace Constia.API.Tests;
 public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixture<JwtApiFactory>
 {
     [Fact]
+    public async Task DesactivarHabito_SinBearer_Devuelve401()
+    {
+        using var client = factory.CreateClient();
+
+        var response = await client.DeleteAsync($"/api/habitos/{Guid.NewGuid():D}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DesactivarHabito_ConTokenInvalido_Devuelve401()
+    {
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "invalid-token");
+
+        var response = await client.DeleteAsync($"/api/habitos/{Guid.NewGuid():D}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DesactivarHabito_Propio_Devuelve204YConservaRegistroParaConsultasHistoricas()
+    {
+        var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var deleteResponse = await client.DeleteAsync($"/api/habitos/{habit.Id:D}");
+
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+        Assert.Equal(string.Empty, await deleteResponse.Content.ReadAsStringAsync());
+        Assert.Equal(EstadoHabito.Inactivo, habit.Estado);
+        Assert.Contains(factory.HabitosPersistidos, persisted => ReferenceEquals(habit, persisted));
+
+        var listResponse = await client.GetAsync("/api/habitos");
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+        Assert.Equal("[]", await listResponse.Content.ReadAsStringAsync());
+
+        var detailResponse = await client.GetAsync($"/api/habitos/{habit.Id:D}");
+        Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
+        var body = await detailResponse.Content.ReadFromJsonAsync<HabitoResponse>();
+        Assert.NotNull(body);
+        Assert.Equal(habit.Id, body.Id);
+        Assert.Equal(EstadoHabito.Inactivo, body.Estado);
+    }
+
+    [Fact]
+    public async Task DesactivarHabito_PropioYaInactivo_Devuelve204()
+    {
+        var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow);
+        habit.Desactivar();
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var response = await client.DeleteAsync($"/api/habitos/{habit.Id:D}");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(EstadoHabito.Inactivo, habit.Estado);
+        Assert.Contains(factory.HabitosPersistidos, persisted => ReferenceEquals(habit, persisted));
+    }
+
+    [Fact]
+    public async Task DesactivarHabito_Inexistente_Devuelve404()
+    {
+        factory.ReemplazarHabitos([]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var response = await client.DeleteAsync($"/api/habitos/{Guid.NewGuid():D}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DesactivarHabito_DeOtroUsuario_Devuelve404YSinModificarlo()
+    {
+        var otroUsuario = new Usuario("Otro", $"{Guid.NewGuid()}@example.invalid", "fake-hash");
+        var habit = CrearHabitoConIdYFecha(otroUsuario, "Privado", Guid.NewGuid(), DateTimeOffset.UtcNow);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var response = await client.DeleteAsync($"/api/habitos/{habit.Id:D}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(EstadoHabito.Activo, habit.Estado);
+    }
+
+    [Fact]
     public async Task EditarHabito_SinBearer_Devuelve401()
     {
         using var client = factory.CreateClient();

@@ -125,7 +125,7 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
             return Task.FromResult(resultado);
         }
 
-        public Task<Habito?> BuscarParaEditarPorIdYUsuarioAsync(
+        public Task<Habito?> BuscarParaModificarPorIdYUsuarioAsync(
             Guid habitId,
             Guid usuarioId,
             CancellationToken cancellationToken)

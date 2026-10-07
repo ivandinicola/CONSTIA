@@ -10,7 +10,7 @@ public sealed class EditarHabito(IHabitoRepository habitos)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var habito = await habitos.BuscarParaEditarPorIdYUsuarioAsync(
+        var habito = await habitos.BuscarParaModificarPorIdYUsuarioAsync(
             habitId,
             usuarioId,
             cancellationToken);

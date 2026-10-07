@@ -170,7 +170,7 @@ public class CrearHabitoTests
             Guid usuarioId,
             CancellationToken cancellationToken) => throw new NotSupportedException();
 
-        public Task<Habito?> BuscarParaEditarPorIdYUsuarioAsync(
+        public Task<Habito?> BuscarParaModificarPorIdYUsuarioAsync(
             Guid habitId,
             Guid usuarioId,
             CancellationToken cancellationToken) => throw new NotSupportedException();

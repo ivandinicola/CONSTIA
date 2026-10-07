@@ -41,7 +41,7 @@ public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoReposi
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-    public Task<Habito?> BuscarParaEditarPorIdYUsuarioAsync(
+    public Task<Habito?> BuscarParaModificarPorIdYUsuarioAsync(
         Guid habitId,
         Guid usuarioId,
         CancellationToken cancellationToken)

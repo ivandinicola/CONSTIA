@@ -15,7 +15,7 @@ public interface IHabitoRepository
         Guid usuarioId,
         CancellationToken cancellationToken);
 
-    Task<Habito?> BuscarParaEditarPorIdYUsuarioAsync(
+    Task<Habito?> BuscarParaModificarPorIdYUsuarioAsync(
         Guid habitId,
         Guid usuarioId,
         CancellationToken cancellationToken);

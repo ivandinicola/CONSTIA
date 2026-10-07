@@ -14,8 +14,30 @@ public sealed class HabitosController(
     CrearHabito crearHabito,
     ListarHabitosActivos listarHabitosActivos,
     ObtenerHabitoPorId obtenerHabitoPorId,
-    EditarHabito editarHabito) : ControllerBase
+    EditarHabito editarHabito,
+    DesactivarHabito desactivarHabito) : ControllerBase
 {
+    [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Desactivar(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        if (usuarioActual.UsuarioId is not Guid usuarioId)
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "No se pudo identificar al usuario autenticado."
+            });
+        }
+
+        var desactivado = await desactivarHabito.EjecutarAsync(id, usuarioId, cancellationToken);
+        return desactivado ? NoContent() : NotFound();
+    }
+
     [HttpPut("{id:guid}")]
     [ProducesResponseType(typeof(HabitoResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

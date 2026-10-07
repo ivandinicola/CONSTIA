@@ -40,6 +40,7 @@ builder.Services.AddScoped<CrearHabito>();
 builder.Services.AddScoped<ListarHabitosActivos>();
 builder.Services.AddScoped<ObtenerHabitoPorId>();
 builder.Services.AddScoped<EditarHabito>();
+builder.Services.AddScoped<DesactivarHabito>();
 
 var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SigningKey));
 builder.Services
