@@ -62,4 +62,35 @@ public class Habito
     {
         Estado = EstadoHabito.Inactivo;
     }
+
+    public void ActualizarConfiguracion(
+        string nombre,
+        string? descripcion,
+        IEnumerable<DayOfWeek> diasProgramados)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(nombre);
+        ArgumentNullException.ThrowIfNull(diasProgramados);
+
+        var dias = diasProgramados.Distinct().ToArray();
+        if (dias.Length == 0)
+        {
+            throw new ArgumentException("Debe seleccionarse al menos un día programado.", nameof(diasProgramados));
+        }
+
+        if (dias.Any(dia => !Enum.IsDefined(dia)))
+        {
+            throw new ArgumentException("Los días programados deben ser días de la semana válidos.", nameof(diasProgramados));
+        }
+
+        var diasSeleccionados = dias.ToHashSet();
+        var diasNuevos = dias
+            .Where(dia => _diasProgramados.All(actual => actual.Dia != dia))
+            .Select(dia => new DiaProgramado(dia))
+            .ToArray();
+
+        _diasProgramados.RemoveAll(dia => !diasSeleccionados.Contains(dia.Dia));
+        _diasProgramados.AddRange(diasNuevos);
+        Nombre = nombre;
+        Descripcion = descripcion;
+    }
 }

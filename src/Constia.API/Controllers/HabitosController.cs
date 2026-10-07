@@ -13,8 +13,64 @@ public sealed class HabitosController(
     IUsuarioActual usuarioActual,
     CrearHabito crearHabito,
     ListarHabitosActivos listarHabitosActivos,
-    ObtenerHabitoPorId obtenerHabitoPorId) : ControllerBase
+    ObtenerHabitoPorId obtenerHabitoPorId,
+    EditarHabito editarHabito) : ControllerBase
 {
+    [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(HabitoResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<HabitoResponse>> Editar(
+        Guid id,
+        EditarHabitoHttpRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (usuarioActual.UsuarioId is not Guid usuarioId)
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "No se pudo identificar al usuario autenticado."
+            });
+        }
+
+        try
+        {
+            var editado = await editarHabito.EjecutarAsync(
+                id,
+                usuarioId,
+                new EditarHabitoRequest(
+                    request.Nombre,
+                    request.Descripcion,
+                    request.DiasProgramados!),
+                cancellationToken);
+
+            if (editado is null)
+            {
+                return NotFound();
+            }
+
+            return Ok(new HabitoResponse(
+                editado.Id,
+                editado.Nombre,
+                editado.Descripcion,
+                editado.FechaCreacion,
+                editado.FechaInicio,
+                editado.Estado,
+                editado.DiasProgramados));
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Los datos del hábito no son válidos.",
+                Detail = exception.Message
+            });
+        }
+    }
+
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(HabitoResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

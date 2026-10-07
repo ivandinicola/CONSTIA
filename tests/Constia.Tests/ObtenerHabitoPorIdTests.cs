@@ -72,5 +72,12 @@ public sealed class ObtenerHabitoPorIdTests
             CancellationTokenRecibido = cancellationToken;
             return Task.FromResult<Habito?>(resultado);
         }
+
+        public Task<Habito?> BuscarParaEditarPorIdYUsuarioAsync(
+            Guid habitId,
+            Guid usuarioId,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task GuardarCambiosAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

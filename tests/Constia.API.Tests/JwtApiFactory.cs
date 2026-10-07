@@ -124,5 +124,18 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
 
             return Task.FromResult(resultado);
         }
+
+        public Task<Habito?> BuscarParaEditarPorIdYUsuarioAsync(
+            Guid habitId,
+            Guid usuarioId,
+            CancellationToken cancellationToken)
+        {
+            var resultado = habitos.SingleOrDefault(habito =>
+                habito.Id == habitId && habito.Usuario.Id == usuarioId);
+
+            return Task.FromResult(resultado);
+        }
+
+        public Task GuardarCambiosAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

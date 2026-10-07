@@ -87,5 +87,12 @@ public sealed class ListarHabitosActivosTests
             Guid habitId,
             Guid usuarioId,
             CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<Habito?> BuscarParaEditarPorIdYUsuarioAsync(
+            Guid habitId,
+            Guid usuarioId,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task GuardarCambiosAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

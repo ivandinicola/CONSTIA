@@ -14,6 +14,119 @@ namespace Constia.API.Tests;
 public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixture<JwtApiFactory>
 {
     [Fact]
+    public async Task EditarHabito_SinBearer_Devuelve401()
+    {
+        using var client = factory.CreateClient();
+
+        var response = await client.PutAsJsonAsync($"/api/habitos/{Guid.NewGuid():D}", CrearRequestEdicion());
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task EditarHabito_Propio_DevuelveCambiosYSinUsuarioId()
+    {
+        var habit = CrearHabitoConIdYFecha(
+            factory.Usuario,
+            "Leer",
+            Guid.NewGuid(),
+            new DateTimeOffset(2026, 2, 3, 4, 5, 6, TimeSpan.Zero));
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/habitos/{habit.Id:D}",
+            CrearRequestEdicion("Caminar", "Nueva descripción", [DayOfWeek.Wednesday, DayOfWeek.Friday]));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<HabitoResponse>();
+        Assert.NotNull(body);
+        Assert.Equal("Caminar", body.Nombre);
+        Assert.Equal("Nueva descripción", body.Descripcion);
+        Assert.Equal([DayOfWeek.Wednesday, DayOfWeek.Friday], body.DiasProgramados);
+        Assert.DoesNotContain("usuarioId", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Caminar", habit.Nombre);
+    }
+
+    [Fact]
+    public async Task EditarHabito_Inexistente_Devuelve404()
+    {
+        factory.ReemplazarHabitos([]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/habitos/{Guid.NewGuid():D}",
+            CrearRequestEdicion());
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task EditarHabito_DeOtroUsuario_Devuelve404()
+    {
+        var usuarioAjeno = new Usuario("Otro", $"{Guid.NewGuid()}@example.invalid", "fake-hash");
+        var habit = CrearHabitoConIdYFecha(usuarioAjeno, "Privado", Guid.NewGuid(), DateTimeOffset.UtcNow);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/habitos/{habit.Id:D}",
+            CrearRequestEdicion());
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task EditarHabito_ConDiasInvalidos_Devuelve400()
+    {
+        var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/habitos/{habit.Id:D}",
+            CrearRequestEdicion(diasProgramados: []));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("Leer", habit.Nombre);
+    }
+
+    [Fact]
+    public async Task EditarHabito_InactivoPermiteEdicionSinCambiarPropietarioEstadoNiFechas()
+    {
+        var originalCreatedAt = new DateTimeOffset(2026, 3, 4, 5, 6, 7, TimeSpan.Zero);
+        var originalStartDate = new DateOnly(2026, 1, 1);
+        var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(), originalCreatedAt);
+        habit.Desactivar();
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+        var maliciousBody = new
+        {
+            nombre = "Caminar",
+            descripcion = "Actualizada",
+            diasProgramados = new[] { (int)DayOfWeek.Friday },
+            usuarioId = Guid.NewGuid(),
+            estado = (int)EstadoHabito.Activo,
+            fechaInicio = "2035-12-31",
+            createdAt = "2035-12-31T00:00:00Z"
+        };
+
+        var response = await client.PutAsJsonAsync($"/api/habitos/{habit.Id:D}", maliciousBody);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<HabitoResponse>();
+        Assert.NotNull(body);
+        Assert.Equal(EstadoHabito.Inactivo, body.Estado);
+        Assert.Equal(originalCreatedAt, body.CreatedAt);
+        Assert.Equal(originalStartDate, body.StartDate);
+        Assert.Same(factory.Usuario, habit.Usuario);
+        Assert.Equal(EstadoHabito.Inactivo, habit.Estado);
+        Assert.Equal(originalCreatedAt, habit.FechaCreacion);
+        Assert.Equal(originalStartDate, habit.FechaInicio);
+        Assert.DoesNotContain("usuarioId", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ObtenerHabitoPorId_SinBearer_Devuelve401()
     {
         using var client = factory.CreateClient();
@@ -293,6 +406,18 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
         descripcion = "Diez páginas",
         fechaInicio = "2026-10-06",
         diasProgramados = new[] { (int)DayOfWeek.Monday, (int)DayOfWeek.Wednesday }
+    };
+
+    private static object CrearRequestEdicion(
+        string nombre = "Caminar",
+        string? descripcion = "Hacer una caminata",
+        DayOfWeek[]? diasProgramados = null) => new
+    {
+        nombre,
+        descripcion,
+        diasProgramados = (diasProgramados ?? [DayOfWeek.Monday, DayOfWeek.Wednesday])
+            .Select(dia => (int)dia)
+            .ToArray()
     };
 
     private static Habito CrearHabitoConIdYFecha(

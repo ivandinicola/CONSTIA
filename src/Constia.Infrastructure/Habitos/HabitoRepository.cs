@@ -40,4 +40,23 @@ public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoReposi
             .AsNoTracking()
             .SingleOrDefaultAsync(cancellationToken);
     }
+
+    public Task<Habito?> BuscarParaEditarPorIdYUsuarioAsync(
+        Guid habitId,
+        Guid usuarioId,
+        CancellationToken cancellationToken)
+    {
+        return dbContext.Set<Habito>()
+            .Where(habito =>
+                habito.Id == habitId &&
+                EF.Property<Guid>(habito, "UsuarioId") == usuarioId)
+            .Include(habito => habito.DiasProgramados)
+            .AsTracking()
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task GuardarCambiosAsync(CancellationToken cancellationToken)
+    {
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
 }
