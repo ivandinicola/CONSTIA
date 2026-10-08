@@ -47,7 +47,7 @@ public sealed class CumplimientoTests
     }
 
     private static Habito CrearHabito() => new(
-        new Usuario("Ana", "ana@example.com", "hashed-value"),
+        new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC"),
         "Leer",
         null,
         new DateOnly(2026, 10, 5),

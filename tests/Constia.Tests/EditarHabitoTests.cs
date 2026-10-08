@@ -8,7 +8,7 @@ public sealed class EditarHabitoTests
     [Fact]
     public async Task EjecutarAsync_ConCoincidencia_ActualizaPersisteYDevuelveElResultado()
     {
-        var usuario = new Usuario("Ana", "ana@example.com", "hashed-value");
+        var usuario = new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC");
         var habit = new Habito(usuario, "Leer", "Antes", new DateOnly(2026, 10, 5),
             [DayOfWeek.Monday, DayOfWeek.Wednesday]);
         var originalCreatedAt = habit.FechaCreacion;

@@ -34,6 +34,7 @@ public sealed class JwtAuthenticationTests(JwtApiFactory factory) : IClassFixtur
         Assert.Equal(JwtApiFactory.TestIssuer, jwt.Issuer);
         Assert.Contains(JwtApiFactory.TestAudience, jwt.Audiences);
         Assert.DoesNotContain(jwt.Claims, claim => claim.Type.Contains("password", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(jwt.Claims, claim => claim.Type.Equals("TimeZoneId", StringComparison.OrdinalIgnoreCase));
 
         var autenticacion = await AutenticarAsync(respuesta.AccessToken);
         Assert.True(autenticacion.Succeeded, autenticacion.Failure?.Message);

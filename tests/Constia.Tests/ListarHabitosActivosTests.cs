@@ -55,7 +55,7 @@ public sealed class ListarHabitosActivosTests
         Assert.Equal([DayOfWeek.Sunday], resultado[0].DiasProgramados);
     }
 
-    private static Usuario CrearUsuario() => new("Ana", $"{Guid.NewGuid()}@example.com", "hashed-value");
+    private static Usuario CrearUsuario() => new("Ana", $"{Guid.NewGuid()}@example.com", "hashed-value", "Etc/UTC");
 
     private static Habito CrearHabito(
         Usuario usuario,

@@ -1,4 +1,5 @@
 using Constia.Application.Usuarios;
+using Constia.Application.Temporal;
 using Constia.Domain;
 using Microsoft.AspNetCore.Identity;
 
@@ -13,9 +14,9 @@ public class RegistrarUsuarioTests
     {
         var usuarios = new FakeUsuarioRepository();
         var hasher = new IdentityPasswordHasherForTests();
-        var casoDeUso = new RegistrarUsuario(usuarios, hasher);
+        var casoDeUso = CrearCasoDeUso(usuarios, hasher);
 
-        var resultado = await casoDeUso.EjecutarAsync("Ana", "ana@example.com", PasswordDePrueba);
+        var resultado = await casoDeUso.EjecutarAsync("Ana", "ana@example.com", PasswordDePrueba, "America/Argentina/Buenos_Aires");
 
         var usuarioPersistido = Assert.IsType<Usuario>(usuarios.UsuarioPersistido);
         var usuarioRegistrado = Assert.IsType<UsuarioRegistrado>(resultado);
@@ -23,6 +24,7 @@ public class RegistrarUsuarioTests
         Assert.Equal(usuarioPersistido.Id, usuarioRegistrado.Id);
         Assert.Equal("Ana", usuarioRegistrado.Nombre);
         Assert.Equal("ana@example.com", usuarioRegistrado.Email);
+        Assert.Equal("America/Argentina/Buenos_Aires", usuarioPersistido.TimeZoneId);
         Assert.Equal(1, hasher.CantidadDeHashes);
         Assert.NotEqual(PasswordDePrueba, usuarioPersistido.PasswordHash);
         Assert.True(hasher.VerifyPassword(usuarioPersistido.PasswordHash, PasswordDePrueba));
@@ -35,9 +37,9 @@ public class RegistrarUsuarioTests
         var usuarios = new FakeUsuarioRepository();
         usuarios.Emails.Add("ana@example.com");
         var hasher = new IdentityPasswordHasherForTests();
-        var casoDeUso = new RegistrarUsuario(usuarios, hasher);
+        var casoDeUso = CrearCasoDeUso(usuarios, hasher);
 
-        var resultado = await casoDeUso.EjecutarAsync("Ana", "ana@example.com", PasswordDePrueba);
+        var resultado = await casoDeUso.EjecutarAsync("Ana", "ana@example.com", PasswordDePrueba, "Etc/UTC");
 
         Assert.Null(resultado);
         Assert.Null(usuarios.UsuarioPersistido);
@@ -48,9 +50,9 @@ public class RegistrarUsuarioTests
     public async Task EjecutarAsync_CuandoEmailSeDuplicaDuranteElInsert_RechazaSinPropagarErrorTecnico()
     {
         var usuarios = new FakeUsuarioRepository { RechazarInsertPorEmailDuplicado = true };
-        var casoDeUso = new RegistrarUsuario(usuarios, new IdentityPasswordHasherForTests());
+        var casoDeUso = CrearCasoDeUso(usuarios, new IdentityPasswordHasherForTests());
 
-        var resultado = await casoDeUso.EjecutarAsync("Ana", "ana@example.com", PasswordDePrueba);
+        var resultado = await casoDeUso.EjecutarAsync("Ana", "ana@example.com", PasswordDePrueba, "Etc/UTC");
 
         Assert.Null(resultado);
         Assert.Null(usuarios.UsuarioPersistido);
@@ -67,10 +69,10 @@ public class RegistrarUsuarioTests
     {
         var usuarios = new FakeUsuarioRepository();
         var hasher = new IdentityPasswordHasherForTests();
-        var casoDeUso = new RegistrarUsuario(usuarios, hasher);
+        var casoDeUso = CrearCasoDeUso(usuarios, hasher);
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            casoDeUso.EjecutarAsync(nombre, email, password));
+            casoDeUso.EjecutarAsync(nombre, email, password, "Etc/UTC"));
 
         Assert.Null(usuarios.UsuarioPersistido);
         Assert.Equal(0, hasher.CantidadDeHashes);
@@ -82,10 +84,10 @@ public class RegistrarUsuarioTests
         var hasher = new IdentityPasswordHasherForTests();
         var primerRepositorio = new FakeUsuarioRepository();
         var segundoRepositorio = new FakeUsuarioRepository();
-        var primerUsuario = await new RegistrarUsuario(primerRepositorio, hasher)
-            .EjecutarAsync("Ana", "ana@example.com", PasswordDePrueba);
-        var segundoUsuario = await new RegistrarUsuario(segundoRepositorio, hasher)
-            .EjecutarAsync("Bea", "bea@example.com", PasswordDePrueba);
+        var primerUsuario = await CrearCasoDeUso(primerRepositorio, hasher)
+            .EjecutarAsync("Ana", "ana@example.com", PasswordDePrueba, "Etc/UTC");
+        var segundoUsuario = await CrearCasoDeUso(segundoRepositorio, hasher)
+            .EjecutarAsync("Bea", "bea@example.com", PasswordDePrueba, "Etc/UTC");
 
         Assert.IsType<UsuarioRegistrado>(primerUsuario);
         Assert.IsType<UsuarioRegistrado>(segundoUsuario);
@@ -97,6 +99,54 @@ public class RegistrarUsuarioTests
         Assert.True(hasher.VerifyPassword(primerHash, PasswordDePrueba));
         Assert.True(hasher.VerifyPassword(segundoHash, PasswordDePrueba));
     }
+
+    [Fact]
+    public async Task EjecutarAsync_ConZonaHorariaInvalida_NoPersisteNiGeneraHash()
+    {
+        var usuarios = new FakeUsuarioRepository();
+        var hasher = new IdentityPasswordHasherForTests();
+        var casoDeUso = CrearCasoDeUso(usuarios, hasher);
+
+        await Assert.ThrowsAsync<ZonaHorariaIanaInvalidaException>(() =>
+            casoDeUso.EjecutarAsync("Ana", "ana@example.com", PasswordDePrueba, "Eastern Standard Time"));
+
+        Assert.Null(usuarios.UsuarioPersistido);
+        Assert.Equal(0, hasher.CantidadDeHashes);
+    }
+
+    [Fact]
+    public async Task EjecutarAsync_SinZonaHoraria_LanzaZonaHorariaIanaInvalidaException()
+    {
+        var usuarios = new FakeUsuarioRepository();
+        var hasher = new IdentityPasswordHasherForTests();
+
+        await Assert.ThrowsAsync<ZonaHorariaIanaInvalidaException>(() =>
+            CrearCasoDeUso(usuarios, hasher).EjecutarAsync("Ana", "ana@example.com", PasswordDePrueba, " "));
+
+        Assert.Null(usuarios.UsuarioPersistido);
+        Assert.Equal(0, hasher.CantidadDeHashes);
+    }
+
+    [Fact]
+    public async Task EjecutarAsync_ConZonaMayorAlLimite_NoPersisteNiGeneraHash()
+    {
+        var usuarios = new FakeUsuarioRepository();
+        var hasher = new IdentityPasswordHasherForTests();
+
+        await Assert.ThrowsAsync<ZonaHorariaIanaInvalidaException>(() =>
+            CrearCasoDeUso(usuarios, hasher).EjecutarAsync(
+                "Ana",
+                "ana@example.com",
+                PasswordDePrueba,
+                new string('x', ZonaHorariaIana.LongitudMaximaIdentificador + 1)));
+
+        Assert.Null(usuarios.UsuarioPersistido);
+        Assert.Equal(0, hasher.CantidadDeHashes);
+    }
+
+    private static RegistrarUsuario CrearCasoDeUso(
+        IUsuarioRepository usuarios,
+        IUsuarioPasswordHasher hasher) => new(usuarios, hasher, new ZonaHorariaIana());
 
     private sealed class FakeUsuarioRepository : IUsuarioRepository
     {
@@ -131,6 +181,8 @@ public class RegistrarUsuarioTests
             UsuarioPersistido = usuario;
             return Task.FromResult(true);
         }
+
+        public Task GuardarCambiosAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class IdentityPasswordHasherForTests : IUsuarioPasswordHasher

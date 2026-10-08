@@ -1,5 +1,6 @@
 using Constia.Application.Usuarios;
 using Constia.Application.Habitos;
+using Constia.Application.Temporal;
 using Constia.API.Authentication;
 using Constia.Infrastructure;
 using Constia.Infrastructure.Habitos;
@@ -28,6 +29,9 @@ builder.Services.AddDbContext<ConstiaDbContext>(options =>
     options.UseSqlServer(connectionString));
 builder.Services.AddSingleton(jwtSettings);
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IZonaHorariaIana, ZonaHorariaIana>();
+builder.Services.AddSingleton<IFechaLocalUsuario, FechaLocalUsuario>();
 
 builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
 builder.Services.AddScoped<IHabitoRepository, HabitoRepository>();
@@ -35,6 +39,7 @@ builder.Services.AddScoped<IUsuarioActual, HttpContextUsuarioActual>();
 builder.Services.AddScoped<IUsuarioPasswordHasher, AspNetCorePasswordHasher>();
 builder.Services.AddScoped<IAccessTokenService, JwtAccessTokenService>();
 builder.Services.AddScoped<RegistrarUsuario>();
+builder.Services.AddScoped<CambiarZonaHorariaUsuario>();
 builder.Services.AddScoped<AutenticarUsuario>();
 builder.Services.AddScoped<CrearHabito>();
 builder.Services.AddScoped<ListarHabitosActivos>();

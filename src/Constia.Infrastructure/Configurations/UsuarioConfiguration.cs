@@ -21,5 +21,9 @@ public class UsuarioConfiguration : IEntityTypeConfiguration<Usuario>
 
         builder.Property(usuario => usuario.PasswordHash)
             .IsRequired();
+
+        builder.Property(usuario => usuario.TimeZoneId)
+            .HasMaxLength(100)
+            .IsRequired();
     }
 }

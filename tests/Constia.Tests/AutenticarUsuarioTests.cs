@@ -10,7 +10,7 @@ public class AutenticarUsuarioTests
     [Fact]
     public async Task EjecutarAsync_ConCredencialesCorrectas_DevuelveDatosPublicosYVerificaHash()
     {
-        var usuario = new Usuario("Ana", "ana@example.com", "hash-seguro");
+        var usuario = new Usuario("Ana", "ana@example.com", "hash-seguro", "Etc/UTC");
         var usuarios = new FakeUsuarioRepository(usuario);
         var passwordHasher = new FakePasswordHasher(resultadoVerificacion: true);
         var accessTokenService = new FakeAccessTokenService();
@@ -51,7 +51,7 @@ public class AutenticarUsuarioTests
     [Fact]
     public async Task EjecutarAsync_CuandoPasswordEsIncorrecta_DevuelveFalloComun()
     {
-        var usuario = new Usuario("Ana", "ana@example.com", "hash-seguro");
+        var usuario = new Usuario("Ana", "ana@example.com", "hash-seguro", "Etc/UTC");
         var passwordHasher = new FakePasswordHasher(resultadoVerificacion: false);
         var accessTokenService = new FakeAccessTokenService();
         var casoDeUso = new AutenticarUsuario(new FakeUsuarioRepository(usuario), passwordHasher, accessTokenService);
@@ -102,6 +102,8 @@ public class AutenticarUsuarioTests
         {
             throw new NotSupportedException();
         }
+
+        public Task GuardarCambiosAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class FakePasswordHasher(bool resultadoVerificacion) : IUsuarioPasswordHasher

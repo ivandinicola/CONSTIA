@@ -14,4 +14,6 @@ public interface IUsuarioRepository
     /// Persists the user and returns false only when the unique email index rejects it.
     /// </summary>
     Task<bool> IntentarAgregarAsync(Usuario usuario, CancellationToken cancellationToken);
+
+    Task GuardarCambiosAsync(CancellationToken cancellationToken);
 }

@@ -19,9 +19,20 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
 
     public string SigningKey => TestSigningKey;
 
-    public Usuario Usuario { get; } = new("Test User", "test@example.invalid", "not-a-real-password-hash");
+    public Usuario Usuario { get; } = new("Test User", "test@example.invalid", "not-a-real-password-hash", "Etc/UTC");
+
+    public ConcurrentDictionary<Guid, Usuario> UsuariosPersistidos { get; } = new();
+
+    private int _cantidadDeCambiosGuardados;
+
+    public int CantidadDeCambiosGuardados => Volatile.Read(ref _cantidadDeCambiosGuardados);
 
     public ConcurrentQueue<Habito> HabitosPersistidos { get; } = new();
+
+    public JwtApiFactory()
+    {
+        UsuariosPersistidos[Usuario.Id] = Usuario;
+    }
 
     public void ReemplazarHabitos(IEnumerable<Habito> habitos)
     {
@@ -47,7 +58,7 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<IUsuarioRepository>();
-            services.AddScoped<IUsuarioRepository>(_ => new FakeUsuarioRepository(Usuario));
+            services.AddScoped<IUsuarioRepository>(_ => new FakeUsuarioRepository(UsuariosPersistidos, RegistrarCambioGuardado));
             services.RemoveAll<IUsuarioPasswordHasher>();
             services.AddScoped<IUsuarioPasswordHasher, FakeUsuarioPasswordHasher>();
             services.RemoveAll<IHabitoRepository>();
@@ -55,26 +66,45 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
         });
     }
 
-    private sealed class FakeUsuarioRepository(Usuario usuario) : IUsuarioRepository
+    private void RegistrarCambioGuardado()
+    {
+        Interlocked.Increment(ref _cantidadDeCambiosGuardados);
+    }
+
+    private sealed class FakeUsuarioRepository(
+        ConcurrentDictionary<Guid, Usuario> usuarios,
+        Action registrarCambioGuardado) : IUsuarioRepository
     {
         public Task<Usuario?> BuscarPorIdAsync(Guid id, CancellationToken cancellationToken)
         {
-            return Task.FromResult<Usuario?>(usuario.Id == id ? usuario : null);
+            usuarios.TryGetValue(id, out var usuario);
+            return Task.FromResult(usuario);
         }
 
         public Task<Usuario?> BuscarPorEmailAsync(string email, CancellationToken cancellationToken)
         {
-            return Task.FromResult<Usuario?>(usuario.Email == email ? usuario : null);
+            return Task.FromResult<Usuario?>(usuarios.Values.SingleOrDefault(usuario => usuario.Email == email));
         }
 
         public Task<bool> ExistePorEmailAsync(string email, CancellationToken cancellationToken)
         {
-            return Task.FromResult(usuario.Email == email);
+            return Task.FromResult(usuarios.Values.Any(usuario => usuario.Email == email));
         }
 
         public Task<bool> IntentarAgregarAsync(Usuario usuario, CancellationToken cancellationToken)
         {
-            throw new NotSupportedException();
+            if (usuarios.Values.Any(existente => existente.Email == usuario.Email))
+            {
+                return Task.FromResult(false);
+            }
+
+            return Task.FromResult(usuarios.TryAdd(usuario.Id, usuario));
+        }
+
+        public Task GuardarCambiosAsync(CancellationToken cancellationToken)
+        {
+            registrarCambioGuardado();
+            return Task.CompletedTask;
         }
     }
 
@@ -82,7 +112,7 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
     {
         public string HashPassword(string password)
         {
-            throw new NotSupportedException();
+            return $"test-hash:{password}";
         }
 
         public bool VerifyPassword(string passwordHash, string password)

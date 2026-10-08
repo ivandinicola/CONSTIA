@@ -44,6 +44,11 @@ public sealed class UsuarioRepository(ConstiaDbContext dbContext) : IUsuarioRepo
         }
     }
 
+    public async Task GuardarCambiosAsync(CancellationToken cancellationToken)
+    {
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
     private static bool EsDuplicadoDeEmail(DbUpdateException exception)
     {
         return exception.InnerException is SqlException sqlException

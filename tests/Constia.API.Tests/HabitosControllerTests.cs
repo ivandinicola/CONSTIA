@@ -89,7 +89,7 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     [Fact]
     public async Task DesactivarHabito_DeOtroUsuario_Devuelve404YSinModificarlo()
     {
-        var otroUsuario = new Usuario("Otro", $"{Guid.NewGuid()}@example.invalid", "fake-hash");
+        var otroUsuario = new Usuario("Otro", $"{Guid.NewGuid()}@example.invalid", "fake-hash", "Etc/UTC");
         var habit = CrearHabitoConIdYFecha(otroUsuario, "Privado", Guid.NewGuid(), DateTimeOffset.UtcNow);
         factory.ReemplazarHabitos([habit]);
         using var client = ClienteAutenticado(factory.Usuario.Id);
@@ -151,7 +151,7 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     [Fact]
     public async Task EditarHabito_DeOtroUsuario_Devuelve404()
     {
-        var usuarioAjeno = new Usuario("Otro", $"{Guid.NewGuid()}@example.invalid", "fake-hash");
+        var usuarioAjeno = new Usuario("Otro", $"{Guid.NewGuid()}@example.invalid", "fake-hash", "Etc/UTC");
         var habit = CrearHabitoConIdYFecha(usuarioAjeno, "Privado", Guid.NewGuid(), DateTimeOffset.UtcNow);
         factory.ReemplazarHabitos([habit]);
         using var client = ClienteAutenticado(factory.Usuario.Id);
@@ -259,7 +259,7 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     [Fact]
     public async Task ObtenerHabitoPorId_DeOtroUsuario_Devuelve404()
     {
-        var usuarioAjeno = new Usuario("Otro", $"{Guid.NewGuid()}@example.invalid", "fake-hash");
+        var usuarioAjeno = new Usuario("Otro", $"{Guid.NewGuid()}@example.invalid", "fake-hash", "Etc/UTC");
         var habitoAjeno = CrearHabitoConIdYFecha(
             usuarioAjeno,
             "Privado",
@@ -318,7 +318,7 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     {
         var fechaEmpatada = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
         var fechaAnterior = fechaEmpatada.AddDays(-1);
-        var otroUsuario = new Usuario("Otro", $"{Guid.NewGuid()}@example.invalid", "fake-hash");
+        var otroUsuario = new Usuario("Otro", $"{Guid.NewGuid()}@example.invalid", "fake-hash", "Etc/UTC");
         var propioDesempateAlto = CrearHabitoConIdYFecha(
             factory.Usuario,
             "Empate alto",
@@ -426,7 +426,7 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     {
         var fechaEmpatada = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
         var fechaAnterior = fechaEmpatada.AddDays(-1);
-        var usuarioAjeno = new Usuario("Otro", $"{Guid.NewGuid()}@example.invalid", "fake-hash");
+        var usuarioAjeno = new Usuario("Otro", $"{Guid.NewGuid()}@example.invalid", "fake-hash", "Etc/UTC");
         var desempateAlto = CrearHabitoConIdYFecha(
             factory.Usuario,
             "Empate alto",
@@ -555,7 +555,8 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
         {
             nombre = "Existing User",
             email = factory.Usuario.Email,
-            password = JwtApiFactory.TestPassword
+            password = JwtApiFactory.TestPassword,
+            timeZoneId = "Etc/UTC"
         });
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);

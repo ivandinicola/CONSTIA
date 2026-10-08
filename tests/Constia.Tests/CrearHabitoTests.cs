@@ -98,7 +98,7 @@ public class CrearHabitoTests
         Assert.Equal(solicitud.DiasProgramados, resultado.DiasProgramados);
     }
 
-    private static Usuario CrearUsuario() => new("Ana", "ana@example.com", "hashed-value");
+    private static Usuario CrearUsuario() => new("Ana", "ana@example.com", "hashed-value", "Etc/UTC");
 
     private static CrearHabitoRequest CrearSolicitud(
         Guid? usuarioId = null,
@@ -140,6 +140,8 @@ public class CrearHabitoTests
         {
             throw new NotSupportedException();
         }
+
+        public Task GuardarCambiosAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class FakeHabitoRepository : IHabitoRepository

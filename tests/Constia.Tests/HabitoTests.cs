@@ -222,7 +222,7 @@ public class HabitoTests
         Assert.Equal(EstadoHabito.Inactivo, habito.Estado);
     }
 
-    private static Usuario CrearUsuario() => new("Ana", "ana@example.com", "hashed-value");
+    private static Usuario CrearUsuario() => new("Ana", "ana@example.com", "hashed-value", "Etc/UTC");
 
     private static Habito CrearHabitoParaActualizacion() => new(
         CrearUsuario(),

@@ -8,7 +8,7 @@ public sealed class DesactivarHabitoTests
     [Fact]
     public async Task EjecutarAsync_ConHabitoPropio_DesactivaPersisteYPropagaParametros()
     {
-        var usuario = new Usuario("Ana", "ana@example.com", "hashed-value");
+        var usuario = new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC");
         var habit = new Habito(usuario, "Leer", "Un capítulo", new DateOnly(2026, 10, 5),
             [DayOfWeek.Monday, DayOfWeek.Wednesday]);
         var repository = new FakeHabitoRepository(habit);
@@ -33,7 +33,7 @@ public sealed class DesactivarHabitoTests
     [Fact]
     public async Task EjecutarAsync_ConHabitoYaInactivo_DevuelveTrueYPersiste()
     {
-        var usuario = new Usuario("Ana", "ana@example.com", "hashed-value");
+        var usuario = new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC");
         var habit = new Habito(usuario, "Leer", null, new DateOnly(2026, 10, 5), [DayOfWeek.Monday]);
         habit.Desactivar();
         var repository = new FakeHabitoRepository(habit);
@@ -50,7 +50,7 @@ public sealed class DesactivarHabitoTests
     public async Task EjecutarAsync_SinCoincidencia_DevuelveFalseYSinGuardar()
     {
         var habit = new Habito(
-            new Usuario("Ana", "ana@example.com", "hashed-value"),
+            new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC"),
             "Leer",
             null,
             new DateOnly(2026, 10, 5),

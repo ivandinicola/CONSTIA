@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="NodaTime" Version="3.3.5" />
     <ProjectReference Include="..\Constia.Domain\Constia.Domain.csproj" />
   </ItemGroup>
 
