@@ -10,6 +10,7 @@ Cada usuario estará compuesto por:
 * Nombre.
 * Email.
 * Contraseña.
+* Identificador de zona horaria IANA.
 
 ### 1.2. Registro
 
@@ -18,8 +19,13 @@ El usuario podrá registrarse proporcionando:
 * Nombre.
 * Email.
 * Contraseña.
+* Una zona horaria seleccionada explícitamente mediante un identificador IANA válido.
 
 El email deberá ser único.
+
+Los usuarios existentes recibirán provisionalmente la zona horaria `Etc/UTC`, sin inferir su ubicación. El usuario podrá modificar posteriormente su zona horaria. Ese cambio no modificará las fechas civiles de cumplimientos ni las vigencias históricas ya almacenadas.
+
+La fecha actual del usuario se determinará a partir del instante UTC convertido a su zona horaria. El cálculo deberá poder probarse mediante `TimeProvider`.
 
 ### 1.3. Autenticación
 
@@ -78,6 +84,16 @@ Los días posibles son:
 
 Un hábito solamente corresponderá a un día cuando ese día esté incluido en su configuración.
 
+### Versiones históricas
+
+La programación semanal de cada hábito se conservará mediante versiones. Cada versión tendrá `VigenteDesde: DateOnly` y `VigenteHasta: DateOnly?`, y representará el intervalo semiabierto `[VigenteDesde, VigenteHasta)`. Para cada fecha desde `FechaInicio` deberá existir una única versión aplicable, sin períodos solapados ni fechas ambiguas.
+
+Los cambios de días programados tendrán vigencia desde la fecha local del usuario en que se realicen. No se permitirá editar retroactivamente versiones históricas en V1. Si se realizan varias ediciones durante un mismo día local, se consolidarán en una única versión: prevalecerá la última programación para todo ese día y los estados intermedios intradía no se conservarán.
+
+Los cambios de nombre o descripción no crearán versiones de programación. Si se modifica la programación antes de `FechaInicio`, se actualizará la versión inicial sin adelantar su vigencia.
+
+La programación actualmente almacenada se convertirá en la versión inicial, vigente desde `FechaInicio` y con `VigenteHasta` nulo hasta que exista una versión posterior. No se reconstruirán cambios históricos que nunca fueron registrados.
+
 ---
 
 # 3. Estado del hábito
@@ -106,6 +122,7 @@ Un hábito inactivo:
 * Conserva su información.
 * Conserva sus cumplimientos históricos.
 * Puede ser consultado posteriormente.
+* No admite nuevos cumplimientos, incluso para fechas pasadas.
 
 ## 3.3. Eliminación
 
@@ -114,6 +131,12 @@ En V1 no se eliminará físicamente un hábito.
 La acción de "eliminar" un hábito se interpretará como **desactivarlo**.
 
 La desactivación no elimina los cumplimientos existentes.
+
+## 3.4. Interpretación histórica del estado
+
+El estado **Activo/Inactivo** de un hábito tendrá interpretación histórica por fecha civil. Para determinar las oportunidades programadas de una fecha se considerarán conjuntamente la programación vigente en esa fecha, el estado vigente en esa fecha y `FechaInicio`. No se utilizará el estado actual para reinterpretar todas las fechas pasadas.
+
+La implementación del historial de estados corresponde a TEMP-005 y deberá completarse antes de implementar las métricas históricas. Los cambios de estado anteriores a la incorporación de ese historial no podrán reconstruirse con certeza si no fueron almacenados.
 
 ---
 
@@ -137,6 +160,10 @@ La existencia del registro representa el cumplimiento.
 
 No se almacenará un registro adicional para representar "no realizado".
 
+Se permitirá registrar cumplimientos para la fecha local actual del usuario y para fechas pasadas que correspondieran según la programación histórica. Se rechazarán fechas futuras, fechas anteriores a `FechaInicio`, fechas no programadas según la versión aplicable y nuevos cumplimientos de hábitos actualmente inactivos. La fecha "hoy" se determina con la zona horaria del usuario, no con la del servidor.
+
+Un hábito inexistente o perteneciente a otro usuario responderá `404 Not Found`, sin revelar si existe. Sin autenticación válida se responderá `401 Unauthorized`. Un cumplimiento duplicado responderá `409 Conflict`. COMP-004 realizará una comprobación previa de duplicados; COMP-005 agregará la garantía de unicidad ante concurrencia.
+
 ## 4.3. Duplicados
 
 Un mismo hábito no podrá tener más de un cumplimiento para la misma fecha.
@@ -144,6 +171,8 @@ Un mismo hábito no podrá tener más de un cumplimiento para la misma fecha.
 ## 4.4. Días no programados
 
 No se considera incumplimiento que un hábito no tenga un registro en una fecha en la que no estaba programado.
+
+No se permitirá registrar un cumplimiento para un día no programado según la versión vigente en esa fecha.
 
 Ejemplo:
 
@@ -155,7 +184,7 @@ Días:
 * Miércoles.
 * Viernes.
 
-El martes no genera una obligación y no participa negativamente del cálculo de cumplimiento.
+El martes no genera una obligación, no participa negativamente del cálculo de cumplimiento y no admite un nuevo cumplimiento para ese hábito.
 
 ---
 
@@ -163,8 +192,8 @@ El martes no genera una obligación y no participa negativamente del cálculo de
 
 Para una fecha determinada, CONSTIA deberá obtener:
 
-1. Los hábitos activos del usuario.
-2. Los hábitos cuya configuración incluye el día de la semana correspondiente.
+1. Los hábitos que estaban activos para el usuario en la fecha consultada.
+2. Los hábitos cuya versión de programación vigente en esa fecha incluye el día de la semana correspondiente y cuya `FechaInicio` ya se alcanzó.
 3. El estado de cumplimiento de esos hábitos para esa fecha.
 
 Esto permite construir la lista diaria de hábitos.
@@ -175,7 +204,7 @@ Esto permite construir la lista diaria de hábitos.
 
 El usuario podrá navegar por fechas y consultar los hábitos correspondientes.
 
-Para cada fecha deberán diferenciarse:
+Para cada fecha, usando la programación y el estado vigentes en ese día, deberán diferenciarse:
 
 * Hábitos programados y cumplidos.
 * Hábitos programados todavía no cumplidos.
@@ -195,7 +224,7 @@ La racha general representa la cantidad de días consecutivos en los que el usua
 
 Para cada día:
 
-1. Obtener los hábitos activos programados para ese día.
+1. Obtener los hábitos que estaban activos y programados para ese día según su versión histórica y `FechaInicio`.
 2. Contar cuántos fueron cumplidos.
 3. Calcular el porcentaje de cumplimiento.
 4. Determinar si se alcanzó el mínimo del 70%.
@@ -226,7 +255,7 @@ El día se considera neutro.
 
 ## 7.4. Hábitos inactivos
 
-Los hábitos inactivos no participan del cálculo de la racha actual.
+Los hábitos inactivos no participan del cálculo de la racha actual durante el período en que estuvieron inactivos. La interpretación de fechas históricas deberá utilizar el estado vigente en cada fecha, no el estado actual.
 
 Sus cumplimientos históricos pueden seguir utilizándose para consultas y estadísticas históricas del hábito.
 
@@ -236,7 +265,7 @@ Sus cumplimientos históricos pueden seguir utilizándose para consultas y estad
 
 ## 8.1. Definición
 
-La racha individual mide los cumplimientos consecutivos de un hábito en las ocasiones en que ese hábito estaba programado.
+La racha individual mide los cumplimientos consecutivos de un hábito en las ocasiones en que ese hábito estaba programado según la versión vigente en cada fecha. Las fechas anteriores a `FechaInicio` no son ocasiones programadas.
 
 ## 8.2. Ejemplo
 
@@ -316,6 +345,7 @@ Los días sin cumplimiento no requieren un registro persistido de "no realizado"
 ## Usuarios
 
 * El email debe ser único.
+* Cada usuario debe tener una zona horaria identificada mediante un identificador IANA válido.
 * Un usuario solamente puede acceder a sus propios datos.
 
 ## Hábitos
@@ -324,13 +354,22 @@ Los días sin cumplimiento no requieren un registro persistido de "no realizado"
 * Todo hábito debe tener al menos un día programado.
 * Un hábito nuevo comienza activo.
 * Desactivar un hábito no elimina su historial.
+* Las versiones de programación deben tener intervalos semiabiertos sin solapamientos y una única versión aplicable para cada fecha desde `FechaInicio`.
+* Los cambios de programación tienen vigencia desde la fecha local del usuario y no editan versiones históricas anteriores en V1.
+* Las ediciones de programación de un mismo día local se consolidan en una versión; prevalece la última configuración para todo ese día.
+* El estado del hábito se interpreta históricamente por fecha civil. Los cambios anteriores a la implementación de ese historial no se pueden reconstruir con certeza.
 
 ## Cumplimientos
 
 * Todo cumplimiento debe pertenecer a un hábito.
 * No puede existir más de un cumplimiento del mismo hábito para una misma fecha.
 * Un cumplimiento solamente debe registrarse para un hábito válido del usuario.
-* Los días no programados no generan incumplimientos persistidos.
+* Solo se permiten cumplimientos para hoy o fechas pasadas, nunca futuras ni anteriores a `FechaInicio`.
+* La fecha actual se determina según la zona horaria del usuario.
+* Un cumplimiento debe corresponder a un día programado según la versión histórica aplicable.
+* No se admiten nuevos cumplimientos para hábitos actualmente inactivos.
+* Los días no programados no generan incumplimientos persistidos ni admiten nuevos cumplimientos.
+* Un cumplimiento que deja de corresponder a un día programado por una edición consolidada de esa fecha permanece almacenado y representa un hecho realizado, pero no es una oportunidad programada ni contribuye a métricas basadas en cumplimientos programados. No se elimina ni modifica retroactivamente.
 
 ---
 

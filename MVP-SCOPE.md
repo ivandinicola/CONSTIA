@@ -43,8 +43,11 @@ La cuenta estará compuesta por:
 * Nombre.
 * Email.
 * Contraseña.
+* Zona horaria identificada por un identificador IANA válido.
 
 Las contraseñas no se almacenarán en texto plano.
+
+Los usuarios nuevos deberán seleccionar explícitamente su zona horaria al registrarse y podrán modificarla posteriormente. Los usuarios existentes recibirán provisionalmente `Etc/UTC`, sin inferir su ubicación. Cambiar la zona no modificará fechas civiles de cumplimientos ni vigencias históricas. La fecha actual se determinará usando el instante UTC convertido a la zona del usuario, y el cálculo deberá poder probarse mediante `TimeProvider`.
 
 ---
 
@@ -67,6 +70,7 @@ Un hábito tendrá:
 * Estado.
 * Usuario propietario.
 * Días de la semana en los que debe realizarse.
+* Versiones históricas de sus días programados.
 
 Un hábito deberá tener al menos un día de la semana seleccionado.
 
@@ -99,6 +103,10 @@ Ejemplos:
 
 Los hábitos solamente serán considerados para un día cuando estén programados para ese día.
 
+Las versiones tendrán vigencias semiabiertas `[VigenteDesde, VigenteHasta)`, sin solapamientos, y habrá una única versión aplicable desde `FechaInicio`. Los cambios de programación regirán desde la fecha local del usuario y no se permitirá editar retroactivamente versiones anteriores en V1. Varias ediciones durante el mismo día local se consolidarán en una versión, prevaleciendo la última programación para todo ese día. Cambiar nombre o descripción no generará una versión. Si se edita antes de `FechaInicio`, se actualizará la versión inicial sin adelantar su vigencia.
+
+La programación actualmente almacenada se convertirá en la versión inicial desde `FechaInicio`; no se reconstruirán cambios históricos desconocidos.
+
 ---
 
 ### 3.4. Cumplimientos
@@ -114,13 +122,17 @@ Solo se almacenarán los cumplimientos realizados.
 
 No se generarán registros separados para representar un hábito no realizado.
 
+Se podrán registrar cumplimientos para hoy y para fechas pasadas que correspondieran según la programación histórica. Se rechazarán fechas futuras, anteriores a `FechaInicio` o no programadas, así como nuevos cumplimientos de hábitos actualmente inactivos, incluso retroactivos. "Hoy" se determina según la zona horaria del usuario. Un hábito ajeno o inexistente responderá `404`; la falta de autenticación válida responderá `401`; un duplicado responderá `409`. COMP-004 realizará una comprobación previa y COMP-005 incorporará la garantía ante concurrencia.
+
+Si un cumplimiento ya registrado deja de corresponder a un día programado debido a una edición consolidada de esa fecha, permanecerá almacenado como hecho realizado. No se contará como oportunidad programada ni contribuirá a métricas basadas en cumplimientos programados; no se eliminará ni modificará retroactivamente.
+
 ---
 
 ### 3.5. Calendario
 
 El usuario podrá consultar sus hábitos organizados por fecha.
 
-Para cada día se deberán mostrar únicamente los hábitos activos que correspondan a ese día.
+Para cada día se deberán mostrar únicamente los hábitos que estaban activos en esa fecha, cuya `FechaInicio` ya se alcanzó y cuya versión de programación vigente incluía ese día.
 
 La interfaz permitirá registrar cumplimientos desde la vista correspondiente.
 
@@ -140,10 +152,14 @@ CONSTIA tendrá una racha general del usuario.
 
 Un día contará para la racha cuando el usuario complete al menos el 70% de los hábitos programados para ese día.
 
+La cantidad mínima de hábitos que deben completarse se redondeará hacia arriba.
+
 Un día sin hábitos programados:
 
 * No incrementa la racha.
 * No rompe la racha.
+
+Para cada fecha se utilizarán la programación y el estado vigentes en esa fecha. Las rachas individuales y estadísticas interpretarán las versiones históricas de programación, sin cambiar las fórmulas definidas en la especificación. Los cambios de estado anteriores a la incorporación del historial no podrán reconstruirse con certeza. La implementación del historial de estados corresponde a TEMP-005 y debe preceder a las métricas históricas.
 
 ---
 
@@ -152,6 +168,8 @@ Un día sin hábitos programados:
 Cada hábito tendrá una racha individual.
 
 La racha individual se calculará según los cumplimientos consecutivos en las ocasiones en que el hábito estaba programado.
+
+Las ocasiones programadas se determinarán mediante la versión histórica correspondiente y el estado vigente del hábito en cada fecha. Los hábitos inactivos conservarán su historial y los cumplimientos fuera de programación no contarán como cumplimientos programados.
 
 Esto permitirá comparar hábitos diarios con hábitos programados únicamente determinados días.
 
