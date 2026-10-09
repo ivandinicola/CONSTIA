@@ -118,7 +118,7 @@ namespace Constia.Infrastructure.Migrations
                 (
                     SELECT [HabitoId], [VigenteDesde]
                     FROM [ProgramacionHabito]
-                    WHERE [VigenteHasta] IS NOT NULL
+                    WHERE [VigenteHasta] IS NULL
                     EXCEPT
                     SELECT [Id], [StartDate]
                     FROM [Habito]
