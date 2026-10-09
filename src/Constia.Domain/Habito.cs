@@ -2,7 +2,7 @@ namespace Constia.Domain;
 
 public class Habito
 {
-    private readonly List<DiaProgramado> _diasProgramados = [];
+    private readonly List<ProgramacionHabito> _programaciones = [];
 
     public Guid Id { get; private set; }
 
@@ -18,7 +18,13 @@ public class Habito
 
     public EstadoHabito Estado { get; private set; }
 
-    public IReadOnlyCollection<DiaProgramado> DiasProgramados => _diasProgramados.AsReadOnly();
+    public IReadOnlyCollection<ProgramacionHabito> Programaciones => _programaciones.AsReadOnly();
+
+    public IReadOnlyCollection<DiaProgramado> DiasProgramados => ProgramacionActual.DiasProgramados;
+
+    private ProgramacionHabito ProgramacionActual =>
+        _programaciones.SingleOrDefault(programacion => programacion.VigenteHasta is null)
+        ?? throw new InvalidOperationException("El hábito debe tener una única programación vigente.");
 
     private Habito()
     {
@@ -37,17 +43,6 @@ public class Habito
         ArgumentException.ThrowIfNullOrWhiteSpace(nombre);
         ArgumentNullException.ThrowIfNull(diasProgramados);
 
-        var dias = diasProgramados.Distinct().ToArray();
-        if (dias.Length == 0)
-        {
-            throw new ArgumentException("Debe seleccionarse al menos un día programado.", nameof(diasProgramados));
-        }
-
-        if (dias.Any(dia => !Enum.IsDefined(dia)))
-        {
-            throw new ArgumentException("Los días programados deben ser días de la semana válidos.", nameof(diasProgramados));
-        }
-
         Id = Guid.NewGuid();
         Usuario = usuario;
         Nombre = nombre;
@@ -55,7 +50,7 @@ public class Habito
         FechaCreacion = DateTimeOffset.UtcNow;
         FechaInicio = fechaInicio;
         Estado = EstadoHabito.Activo;
-        _diasProgramados.AddRange(dias.Select(dia => new DiaProgramado(dia)));
+        _programaciones.Add(new ProgramacionHabito(fechaInicio, null, diasProgramados));
     }
 
     public void Desactivar()
@@ -82,15 +77,36 @@ public class Habito
             throw new ArgumentException("Los días programados deben ser días de la semana válidos.", nameof(diasProgramados));
         }
 
-        var diasSeleccionados = dias.ToHashSet();
-        var diasNuevos = dias
-            .Where(dia => _diasProgramados.All(actual => actual.Dia != dia))
-            .Select(dia => new DiaProgramado(dia))
-            .ToArray();
+        var diasActuales = DiasProgramados.Select(dia => dia.Dia).ToHashSet();
+        if (!diasActuales.SetEquals(dias))
+        {
+            throw new ArgumentException(
+                "Los días programados no se pueden modificar hasta que esté disponible la edición versionada.",
+                nameof(diasProgramados));
+        }
 
-        _diasProgramados.RemoveAll(dia => !diasSeleccionados.Contains(dia.Dia));
-        _diasProgramados.AddRange(diasNuevos);
         Nombre = nombre;
         Descripcion = descripcion;
+    }
+
+    public ProgramacionHabito? ObtenerProgramacionPara(DateOnly fecha)
+    {
+        if (fecha < FechaInicio)
+        {
+            return null;
+        }
+
+        var programacionesAplicables = _programaciones
+            .Where(programacion => programacion.AplicaA(fecha))
+            .Take(2)
+            .ToArray();
+
+        if (programacionesAplicables.Length != 1)
+        {
+            throw new InvalidOperationException(
+                "Desde la fecha de inicio debe existir exactamente una programación aplicable.");
+        }
+
+        return programacionesAplicables[0];
     }
 }

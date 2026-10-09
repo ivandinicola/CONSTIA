@@ -16,11 +16,10 @@ public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoReposi
         Guid usuarioId,
         CancellationToken cancellationToken)
     {
-        return await dbContext.Set<Habito>()
+        return await HabitosConProgramaciones()
             .Where(habito =>
                 habito.Usuario.Id == usuarioId &&
                 habito.Estado == EstadoHabito.Activo)
-            .Include(habito => habito.DiasProgramados)
             .AsNoTracking()
             .OrderBy(habito => habito.FechaCreacion)
             .ThenBy(habito => habito.Id)
@@ -31,11 +30,10 @@ public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoReposi
         Guid usuarioId,
         CancellationToken cancellationToken)
     {
-        return await dbContext.Set<Habito>()
+        return await HabitosConProgramaciones()
             .Where(habito =>
                 habito.Usuario.Id == usuarioId &&
                 habito.Estado == EstadoHabito.Inactivo)
-            .Include(habito => habito.DiasProgramados)
             .AsNoTracking()
             .OrderBy(habito => habito.FechaCreacion)
             .ThenBy(habito => habito.Id)
@@ -47,11 +45,10 @@ public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoReposi
         Guid usuarioId,
         CancellationToken cancellationToken)
     {
-        return dbContext.Set<Habito>()
+        return HabitosConProgramaciones()
             .Where(habito =>
                 habito.Id == habitId &&
                 EF.Property<Guid>(habito, "UsuarioId") == usuarioId)
-            .Include(habito => habito.DiasProgramados)
             .AsNoTracking()
             .SingleOrDefaultAsync(cancellationToken);
     }
@@ -61,11 +58,10 @@ public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoReposi
         Guid usuarioId,
         CancellationToken cancellationToken)
     {
-        return dbContext.Set<Habito>()
+        return HabitosConProgramaciones()
             .Where(habito =>
                 habito.Id == habitId &&
                 EF.Property<Guid>(habito, "UsuarioId") == usuarioId)
-            .Include(habito => habito.DiasProgramados)
             .AsTracking()
             .SingleOrDefaultAsync(cancellationToken);
     }
@@ -74,4 +70,8 @@ public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoReposi
     {
         await dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    private IQueryable<Habito> HabitosConProgramaciones() => dbContext.Set<Habito>()
+        .Include(habito => habito.Programaciones)
+        .ThenInclude(programacion => programacion.DiasProgramados);
 }

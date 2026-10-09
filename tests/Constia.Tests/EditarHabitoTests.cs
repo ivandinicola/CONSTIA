@@ -15,7 +15,10 @@ public sealed class EditarHabitoTests
         var originalStartDate = habit.FechaInicio;
         var repository = new FakeHabitoRepository(habit);
         var useCase = new EditarHabito(repository);
-        var request = new EditarHabitoRequest("Caminar", "Después", [DayOfWeek.Wednesday, DayOfWeek.Friday]);
+        var request = new EditarHabitoRequest(
+            "Caminar",
+            "Después",
+            [DayOfWeek.Wednesday, DayOfWeek.Monday, DayOfWeek.Monday]);
         var usuarioId = usuario.Id;
         using var cancellation = new CancellationTokenSource();
 
@@ -28,14 +31,34 @@ public sealed class EditarHabitoTests
         Assert.Equal(1, repository.CantidadDeGuardados);
         Assert.Equal("Caminar", habit.Nombre);
         Assert.Equal("Después", habit.Descripcion);
-        Assert.Equal([DayOfWeek.Wednesday, DayOfWeek.Friday], habit.DiasProgramados.Select(dia => dia.Dia));
+        Assert.Equal([DayOfWeek.Monday, DayOfWeek.Wednesday], habit.DiasProgramados.Select(dia => dia.Dia));
         Assert.NotNull(result);
         Assert.Equal(habit.Id, result.Id);
         Assert.Equal("Caminar", result.Nombre);
         Assert.Equal("Después", result.Descripcion);
         Assert.Equal(originalCreatedAt, result.FechaCreacion);
         Assert.Equal(originalStartDate, result.FechaInicio);
-        Assert.Equal([DayOfWeek.Wednesday, DayOfWeek.Friday], result.DiasProgramados);
+        Assert.Equal([DayOfWeek.Monday, DayOfWeek.Wednesday], result.DiasProgramados);
+    }
+
+    [Fact]
+    public async Task EjecutarAsync_ConDiasDiferentes_RechazaYNoGuardaCambios()
+    {
+        var usuario = new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC");
+        var habit = new Habito(usuario, "Leer", "Antes", new DateOnly(2026, 10, 5),
+            [DayOfWeek.Monday, DayOfWeek.Wednesday]);
+        var repository = new FakeHabitoRepository(habit);
+        var useCase = new EditarHabito(repository);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => useCase.EjecutarAsync(
+            habit.Id,
+            usuario.Id,
+            new EditarHabitoRequest("Caminar", "Después", [DayOfWeek.Friday])));
+
+        Assert.Equal("Leer", habit.Nombre);
+        Assert.Equal("Antes", habit.Descripcion);
+        Assert.Equal([DayOfWeek.Monday, DayOfWeek.Wednesday], habit.DiasProgramados.Select(dia => dia.Dia));
+        Assert.Equal(0, repository.CantidadDeGuardados);
     }
 
     [Fact]
