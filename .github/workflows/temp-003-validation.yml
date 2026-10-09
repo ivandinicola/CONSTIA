@@ -11,8 +11,27 @@ permissions:
 jobs:
   validate-and-generate-script:
     runs-on: ubuntu-latest
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: "Constia_TEMP003_CI_Only!2026"
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/bin/bash -c '</dev/tcp/127.0.0.1/1433'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 18
+          --health-start-period 30s
 
     steps:
+      - name: Mask disposable SQL Server password
+        env:
+          TEMP003_SQLSERVER_PASSWORD: "Constia_TEMP003_CI_Only!2026"
+        run: echo "::add-mask::$TEMP003_SQLSERVER_PASSWORD"
+
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
 
@@ -32,6 +51,34 @@ jobs:
 
       - name: Test Constia.API.Tests
         run: dotnet test tests/Constia.API.Tests/Constia.API.Tests.csproj --no-build --configuration Release
+
+      - name: Test TEMP-003 migration against disposable SQL Server
+        env:
+          CONSTIA_TEMP003_SQLSERVER_TESTS: "true"
+          CONSTIA_TEMP003_SQLSERVER_CONNECTION: "Server=127.0.0.1,1433;Initial Catalog=master;User Id=sa;Password=Constia_TEMP003_CI_Only!2026;Encrypt=False;TrustServerCertificate=True;Connect Timeout=5"
+        run: |
+          results_dir="$RUNNER_TEMP/temp003-results"
+          mkdir -p "$results_dir"
+          dotnet test tests/Constia.API.Tests/Constia.API.Tests.csproj \
+            --no-build \
+            --configuration Release \
+            --filter FullyQualifiedName~Temp003MigrationSqlServerTests \
+            --logger "trx;LogFileName=temp003-migration.trx" \
+            --results-directory "$results_dir"
+          python - "$results_dir/temp003-migration.trx" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          namespace = {"trx": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+          root = ET.parse(sys.argv[1]).getroot()
+          results = root.findall(".//trx:Results/trx:UnitTestResult", namespace)
+          outcomes = [result.attrib.get("outcome") for result in results]
+          if len(outcomes) != 2 or outcomes.count("Passed") != 2:
+              raise SystemExit(
+                  f"Expected exactly 2 passing TEMP-003 SQL tests; observed {len(outcomes)} results."
+              )
+          print("TEMP-003 SQL migration integration tests: 2 passed; none skipped.")
+          PY
 
       - name: Install dotnet-ef 10.0.12
         run: |

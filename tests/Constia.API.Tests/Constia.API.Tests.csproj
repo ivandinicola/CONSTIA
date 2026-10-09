@@ -24,6 +24,7 @@
     <ProjectReference Include="..\..\src\Constia.API\Constia.API.csproj" />
     <ProjectReference Include="..\..\src\Constia.Application\Constia.Application.csproj" />
     <ProjectReference Include="..\..\src\Constia.Domain\Constia.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Constia.Infrastructure\Constia.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
