@@ -24,8 +24,11 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
     public ConcurrentDictionary<Guid, Usuario> UsuariosPersistidos { get; } = new();
 
     private int _cantidadDeCambiosGuardados;
+    private int _cantidadDeHabitosGuardados;
 
     public int CantidadDeCambiosGuardados => Volatile.Read(ref _cantidadDeCambiosGuardados);
+
+    public int CantidadDeHabitosGuardados => Volatile.Read(ref _cantidadDeHabitosGuardados);
 
     public ConcurrentQueue<Habito> HabitosPersistidos { get; } = new();
 
@@ -62,13 +65,20 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<IUsuarioPasswordHasher>();
             services.AddScoped<IUsuarioPasswordHasher, FakeUsuarioPasswordHasher>();
             services.RemoveAll<IHabitoRepository>();
-            services.AddScoped<IHabitoRepository>(_ => new FakeHabitoRepository(HabitosPersistidos));
+            services.AddScoped<IHabitoRepository>(_ => new FakeHabitoRepository(
+                HabitosPersistidos,
+                RegistrarHabitoGuardado));
         });
     }
 
     private void RegistrarCambioGuardado()
     {
         Interlocked.Increment(ref _cantidadDeCambiosGuardados);
+    }
+
+    private void RegistrarHabitoGuardado()
+    {
+        Interlocked.Increment(ref _cantidadDeHabitosGuardados);
     }
 
     private sealed class FakeUsuarioRepository(
@@ -121,7 +131,9 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
         }
     }
 
-    private sealed class FakeHabitoRepository(ConcurrentQueue<Habito> habitos) : IHabitoRepository
+    private sealed class FakeHabitoRepository(
+        ConcurrentQueue<Habito> habitos,
+        Action registrarGuardado) : IHabitoRepository
     {
         public Task AgregarAsync(Habito habito, CancellationToken cancellationToken)
         {
@@ -181,6 +193,10 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
             return Task.FromResult(resultado);
         }
 
-        public Task GuardarCambiosAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task GuardarCambiosAsync(CancellationToken cancellationToken)
+        {
+            registrarGuardado();
+            return Task.CompletedTask;
+        }
     }
 }

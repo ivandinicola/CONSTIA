@@ -4,6 +4,7 @@ using Constia.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Constia.Infrastructure.Migrations
 {
     [DbContext(typeof(ConstiaDbContext))]
-    partial class ConstiaDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261009004634_VersionarProgramacionHabitos")]
+    partial class VersionarProgramacionHabitos
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

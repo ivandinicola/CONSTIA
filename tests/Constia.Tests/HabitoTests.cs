@@ -29,6 +29,12 @@ public class HabitoTests
         Assert.Equal(new DateOnly(2026, 10, 5), habito.FechaInicio);
         Assert.Equal(EstadoHabito.Activo, habito.Estado);
         Assert.Equal([DayOfWeek.Monday, DayOfWeek.Wednesday], habito.DiasProgramados.Select(dia => dia.Dia));
+        var programacionInicial = Assert.Single(habito.Programaciones);
+        Assert.Equal(habito.FechaInicio, programacionInicial.VigenteDesde);
+        Assert.Null(programacionInicial.VigenteHasta);
+        Assert.All(
+            programacionInicial.DiasProgramados,
+            dia => Assert.Contains(habito.DiasProgramados, actual => ReferenceEquals(dia, actual)));
         Assert.Null(otroHabito.Descripcion);
     }
 
@@ -120,7 +126,7 @@ public class HabitoTests
     }
 
     [Fact]
-    public void ActualizarConfiguracion_ActualizaCamposEditablesYSincronizaDiasSinCambiarIdentidadEstadoNiFechas()
+    public void ActualizarConfiguracion_ActualizaCamposEditablesYSinCambiarProgramacion()
     {
         var usuario = CrearUsuario();
         var habito = new Habito(
@@ -132,12 +138,12 @@ public class HabitoTests
         var createdAt = habito.FechaCreacion;
         var startDate = habito.FechaInicio;
         var id = habito.Id;
-        var diaConservado = habito.DiasProgramados.Single(dia => dia.Dia == DayOfWeek.Wednesday);
+        var programacionInicial = Assert.Single(habito.Programaciones);
 
         habito.ActualizarConfiguracion(
             "Caminar",
             "Descripción nueva",
-            [DayOfWeek.Wednesday, DayOfWeek.Friday]);
+            [DayOfWeek.Monday, DayOfWeek.Wednesday]);
 
         Assert.Equal(id, habito.Id);
         Assert.Same(usuario, habito.Usuario);
@@ -146,8 +152,8 @@ public class HabitoTests
         Assert.Equal(createdAt, habito.FechaCreacion);
         Assert.Equal(startDate, habito.FechaInicio);
         Assert.Equal(EstadoHabito.Activo, habito.Estado);
-        Assert.Equal([DayOfWeek.Wednesday, DayOfWeek.Friday], habito.DiasProgramados.Select(dia => dia.Dia));
-        Assert.Same(diaConservado, habito.DiasProgramados.Single(dia => dia.Dia == DayOfWeek.Wednesday));
+        Assert.Equal([DayOfWeek.Monday, DayOfWeek.Wednesday], habito.DiasProgramados.Select(dia => dia.Dia));
+        Assert.Same(programacionInicial, Assert.Single(habito.Programaciones));
     }
 
     [Fact]
@@ -192,6 +198,65 @@ public class HabitoTests
     }
 
     [Fact]
+    public void ActualizarConfiguracion_ConDiasDiferentes_LanzaYPreservaProgramacion()
+    {
+        var habito = CrearHabitoParaActualizacion();
+        var estadoAnterior = CapturarEstado(habito);
+
+        Assert.Throws<ArgumentException>(() =>
+            habito.ActualizarConfiguracion("Nombre nuevo", "Descripción nueva", [DayOfWeek.Friday]));
+
+        AssertEstadoIgual(estadoAnterior, habito);
+        Assert.Single(habito.Programaciones);
+    }
+
+    [Fact]
+    public void ObtenerProgramacionPara_EnFechaInicioYDespues_DevuelveLaVersionInicial()
+    {
+        var habito = CrearHabitoParaActualizacion();
+
+        var enFechaInicio = habito.ObtenerProgramacionPara(habito.FechaInicio);
+        var despuesDeFechaInicio = habito.ObtenerProgramacionPara(habito.FechaInicio.AddDays(10));
+
+        Assert.Same(Assert.Single(habito.Programaciones), enFechaInicio);
+        Assert.Same(enFechaInicio, despuesDeFechaInicio);
+    }
+
+    [Fact]
+    public void ObtenerProgramacionPara_AntesDeFechaInicio_DevuelveNull()
+    {
+        var habito = CrearHabitoParaActualizacion();
+
+        var programacion = habito.ObtenerProgramacionPara(habito.FechaInicio.AddDays(-1));
+
+        Assert.Null(programacion);
+    }
+
+    [Fact]
+    public void ProgramacionHabito_AplicaIntervaloSemiabierto()
+    {
+        var vigenteDesde = new DateOnly(2026, 10, 5);
+        var vigenteHasta = new DateOnly(2026, 10, 10);
+        var programacion = new ProgramacionHabito(vigenteDesde, vigenteHasta, [DayOfWeek.Monday]);
+
+        Assert.False(programacion.AplicaA(vigenteDesde.AddDays(-1)));
+        Assert.True(programacion.AplicaA(vigenteDesde));
+        Assert.True(programacion.AplicaA(vigenteHasta.AddDays(-1)));
+        Assert.False(programacion.AplicaA(vigenteHasta));
+    }
+
+    [Fact]
+    public void ProgramacionHabito_ConFinAnteriorOIgualAlInicio_LanzaArgumentException()
+    {
+        var inicio = new DateOnly(2026, 10, 5);
+
+        Assert.Throws<ArgumentException>(() =>
+            new ProgramacionHabito(inicio, inicio, [DayOfWeek.Monday]));
+        Assert.Throws<ArgumentException>(() =>
+            new ProgramacionHabito(inicio, inicio.AddDays(-1), [DayOfWeek.Monday]));
+    }
+
+    [Fact]
     public void ActualizarConfiguracion_SinDias_LanzaArgumentException()
     {
         var habito = CrearHabitoParaActualizacion();
@@ -201,13 +266,18 @@ public class HabitoTests
     }
 
     [Fact]
-    public void ActualizarConfiguracion_ConDiasRepetidos_ConservaCadaDiaUnaSolaVez()
+    public void ActualizarConfiguracion_ConMismosDiasRepetidosYEnOtroOrden_ActualizaDatosSinDuplicarDias()
     {
         var habito = CrearHabitoParaActualizacion();
 
-        habito.ActualizarConfiguracion("Leer", null, [DayOfWeek.Friday, DayOfWeek.Friday]);
+        habito.ActualizarConfiguracion(
+            "Nombre editado",
+            "Descripción editada",
+            [DayOfWeek.Wednesday, DayOfWeek.Monday, DayOfWeek.Monday]);
 
-        Assert.Equal([DayOfWeek.Friday], habito.DiasProgramados.Select(dia => dia.Dia));
+        Assert.Equal("Nombre editado", habito.Nombre);
+        Assert.Equal("Descripción editada", habito.Descripcion);
+        Assert.Equal([DayOfWeek.Monday, DayOfWeek.Wednesday], habito.DiasProgramados.Select(dia => dia.Dia));
     }
 
     [Fact]
@@ -216,7 +286,7 @@ public class HabitoTests
         var habito = CrearHabitoParaActualizacion();
         habito.Desactivar();
 
-        habito.ActualizarConfiguracion("Nombre editado", "Descripción", [DayOfWeek.Friday]);
+        habito.ActualizarConfiguracion("Nombre editado", "Descripción", [DayOfWeek.Monday, DayOfWeek.Wednesday]);
 
         Assert.Equal("Nombre editado", habito.Nombre);
         Assert.Equal(EstadoHabito.Inactivo, habito.Estado);

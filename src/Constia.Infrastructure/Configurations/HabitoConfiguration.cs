@@ -31,17 +31,15 @@ public class HabitoConfiguration : IEntityTypeConfiguration<Habito>
             .HasForeignKey("UsuarioId")
             .IsRequired();
 
-        builder.OwnsMany(habito => habito.DiasProgramados, dias =>
-        {
-            dias.ToTable("HabitoDiaProgramado");
-            dias.WithOwner().HasForeignKey("HabitoId");
-            dias.Property(dia => dia.Dia)
-                .HasConversion<int>()
-                .IsRequired();
-            dias.HasKey("HabitoId", nameof(DiaProgramado.Dia));
-        });
+        builder.HasMany(habito => habito.Programaciones)
+            .WithOne()
+            .HasForeignKey("HabitoId")
+            .IsRequired()
+            .OnDelete(DeleteBehavior.Restrict);
 
-        builder.Navigation(habito => habito.DiasProgramados)
+        builder.Navigation(habito => habito.Programaciones)
             .UsePropertyAccessMode(PropertyAccessMode.Field);
+
+        builder.Ignore(habito => habito.DiasProgramados);
     }
 }

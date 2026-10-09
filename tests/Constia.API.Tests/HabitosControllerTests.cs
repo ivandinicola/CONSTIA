@@ -123,14 +123,14 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
 
         var response = await client.PutAsJsonAsync(
             $"/api/habitos/{habit.Id:D}",
-            CrearRequestEdicion("Caminar", "Nueva descripción", [DayOfWeek.Wednesday, DayOfWeek.Friday]));
+            CrearRequestEdicion("Caminar", "Nueva descripción", [DayOfWeek.Monday, DayOfWeek.Monday]));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<HabitoResponse>();
         Assert.NotNull(body);
         Assert.Equal("Caminar", body.Nombre);
         Assert.Equal("Nueva descripción", body.Descripcion);
-        Assert.Equal([DayOfWeek.Wednesday, DayOfWeek.Friday], body.DiasProgramados);
+        Assert.Equal([DayOfWeek.Monday], body.DiasProgramados);
         Assert.DoesNotContain("usuarioId", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
         Assert.Equal("Caminar", habit.Nombre);
     }
@@ -179,6 +179,25 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     }
 
     [Fact]
+    public async Task EditarHabito_ConDiasDiferentes_Devuelve400YSinPersistirCambios()
+    {
+        var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+        var guardadosAntes = factory.CantidadDeHabitosGuardados;
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/habitos/{habit.Id:D}",
+            CrearRequestEdicion("Caminar", "Descripción nueva", [DayOfWeek.Friday]));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("Leer", habit.Nombre);
+        Assert.Null(habit.Descripcion);
+        Assert.Equal([DayOfWeek.Monday], habit.DiasProgramados.Select(dia => dia.Dia));
+        Assert.Equal(guardadosAntes, factory.CantidadDeHabitosGuardados);
+    }
+
+    [Fact]
     public async Task EditarHabito_InactivoPermiteEdicionSinCambiarPropietarioEstadoNiFechas()
     {
         var originalCreatedAt = new DateTimeOffset(2026, 3, 4, 5, 6, 7, TimeSpan.Zero);
@@ -191,7 +210,7 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
         {
             nombre = "Caminar",
             descripcion = "Actualizada",
-            diasProgramados = new[] { (int)DayOfWeek.Friday },
+            diasProgramados = new[] { (int)DayOfWeek.Monday },
             usuarioId = Guid.NewGuid(),
             estado = (int)EstadoHabito.Activo,
             fechaInicio = "2035-12-31",
