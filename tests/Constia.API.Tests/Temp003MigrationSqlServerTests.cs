@@ -13,7 +13,6 @@ public sealed class Temp003MigrationSqlServerTests
     private const string TargetMigration = "20261009004634_VersionarProgramacionHabitos";
     private const string ConnectionEnvironmentVariable = "CONSTIA_TEMP003_SQLSERVER_CONNECTION";
     private const string IntegrationEnabledEnvironmentVariable = "CONSTIA_TEMP003_SQLSERVER_TESTS";
-    private const string ExpectedWorkflow = "TEMP-003 validation";
 
     [SqlServerIntegrationFact]
     public async Task Up_PreservaProgramacionesYCumplimientosDeHabitosExistentes()
@@ -371,8 +370,7 @@ public sealed class Temp003MigrationSqlServerTests
     private static string GetDisposableRunnerConnectionString()
     {
         var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString) ||
-            !string.Equals(Environment.GetEnvironmentVariable("GITHUB_WORKFLOW"), ExpectedWorkflow, StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(connectionString))
         {
             throw new InvalidOperationException("The disposable TEMP-003 SQL Server workflow connection is not configured.");
         }
@@ -430,7 +428,6 @@ public sealed class Temp003MigrationSqlServerTests
         public SqlServerIntegrationFactAttribute()
         {
             if (!string.Equals(Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(Environment.GetEnvironmentVariable("GITHUB_WORKFLOW"), ExpectedWorkflow, StringComparison.Ordinal) ||
                 !string.Equals(Environment.GetEnvironmentVariable(IntegrationEnabledEnvironmentVariable), "true", StringComparison.OrdinalIgnoreCase) ||
                 string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable)))
             {
