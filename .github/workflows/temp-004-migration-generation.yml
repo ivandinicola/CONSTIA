@@ -136,11 +136,47 @@ jobs:
           property_pattern = re.compile(
               r'(?m)^[ \t]*b\.Property<long>\("ConcurrencyVersion"\)\r?\n'
               r'(?:[ \t]*\.[^\r\n]+\r?\n)+'
+              r'(?:[ \t]*\r?\n)?'
           )
+
+          def remove_concurrency_property(snapshot):
+              if len(property_pattern.findall(snapshot)) != 1:
+                  raise ValueError("expected exactly one ConcurrencyVersion property block")
+              return property_pattern.sub("", snapshot, count=1).replace("\r\n", "\n")
+
+          def snapshot_has_only_concurrency_change(baseline, generated):
+              try:
+                  return remove_concurrency_property(generated) == baseline.replace("\r\n", "\n")
+              except ValueError:
+                  return False
+
+          fake_baseline = (
+              'b.Property<Guid>("Id")\n'
+              '    .HasColumnType("uniqueidentifier");\n\n'
+              'b.Property<string>("Descripcion")\n'
+              '    .HasColumnType("nvarchar(max)");\n'
+          )
+          fake_with_concurrency = fake_baseline.replace(
+              'b.Property<string>("Descripcion")',
+              'b.Property<long>("ConcurrencyVersion")\n'
+              '    .IsConcurrencyToken()\n'
+              '    .HasColumnType("bigint");\n\n'
+              'b.Property<string>("Descripcion")',
+          )
+          if not snapshot_has_only_concurrency_change(fake_baseline, fake_with_concurrency):
+              reject("fictitious snapshot test failed: concurrency-only change was rejected.", up_operations, down_operations)
+          fake_with_other_change = fake_with_concurrency.replace(
+              '.HasColumnType("nvarchar(max)")',
+              '.HasColumnType("nvarchar(100)")',
+          )
+          if snapshot_has_only_concurrency_change(fake_baseline, fake_with_other_change):
+              reject("fictitious snapshot test failed: unrelated property change was accepted.", up_operations, down_operations)
+          print("Snapshot validator fixture checks passed: expected property accepted; unrelated change rejected.")
+
+          baseline_snapshot = before.replace("\r\n", "\n")
           if len(property_pattern.findall(after)) != 1:
               reject("snapshot must contain exactly one ConcurrencyVersion property.", up_operations, down_operations)
-          snapshot_without_token = property_pattern.sub("", after).replace("\r\n", "\n")
-          baseline_snapshot = before.replace("\r\n", "\n")
+          snapshot_without_token = remove_concurrency_property(after)
           if snapshot_without_token != baseline_snapshot:
               print("Snapshot differences after removing ConcurrencyVersion:", file=sys.stderr)
               difference = difflib.unified_diff(
