@@ -292,6 +292,305 @@ public class HabitoTests
         Assert.Equal(EstadoHabito.Inactivo, habito.Estado);
     }
 
+    [Fact]
+    public void ActualizarConfiguracionVersionada_AntesDeFechaInicio_ActualizaVersionInicial()
+    {
+        var habito = CrearHabitoParaActualizacion();
+        var versionInicial = Assert.Single(habito.Programaciones);
+
+        habito.ActualizarConfiguracionVersionada(
+            habito.Nombre,
+            habito.Descripcion,
+            [DayOfWeek.Friday],
+            habito.FechaInicio.AddDays(-1));
+
+        Assert.Same(versionInicial, Assert.Single(habito.Programaciones));
+        Assert.Equal(habito.FechaInicio, versionInicial.VigenteDesde);
+        Assert.Null(versionInicial.VigenteHasta);
+        Assert.Equal([DayOfWeek.Friday], habito.DiasProgramados.Select(dia => dia.Dia));
+    }
+
+    [Fact]
+    public void ActualizarConfiguracionVersionada_EnFechaInicio_ActualizaVersionInicial()
+    {
+        var habito = CrearHabitoParaActualizacion();
+        var versionInicial = Assert.Single(habito.Programaciones);
+
+        habito.ActualizarConfiguracionVersionada(
+            habito.Nombre,
+            habito.Descripcion,
+            [DayOfWeek.Friday],
+            habito.FechaInicio);
+
+        Assert.Same(versionInicial, Assert.Single(habito.Programaciones));
+        Assert.Equal(habito.FechaInicio, versionInicial.VigenteDesde);
+        Assert.Null(versionInicial.VigenteHasta);
+        Assert.Equal([DayOfWeek.Friday], habito.DiasProgramados.Select(dia => dia.Dia));
+    }
+
+    [Fact]
+    public void ActualizarConfiguracionVersionada_DespuesDeFechaInicio_CreaVersionConIntervaloSemiabierto()
+    {
+        var habito = CrearHabitoParaActualizacion();
+        var versionInicial = Assert.Single(habito.Programaciones);
+        var fechaCambio = habito.FechaInicio.AddDays(5);
+
+        habito.ActualizarConfiguracionVersionada(
+            habito.Nombre,
+            habito.Descripcion,
+            [DayOfWeek.Friday],
+            fechaCambio);
+
+        var versiones = habito.Programaciones.OrderBy(version => version.VigenteDesde).ToArray();
+        Assert.Equal(2, versiones.Length);
+        Assert.Same(versionInicial, versiones[0]);
+        Assert.Equal(fechaCambio, versiones[0].VigenteHasta);
+        Assert.Equal(fechaCambio, versiones[1].VigenteDesde);
+        Assert.Null(versiones[1].VigenteHasta);
+        Assert.Same(versiones[0], habito.ObtenerProgramacionPara(fechaCambio.AddDays(-1)));
+        Assert.Same(versiones[1], habito.ObtenerProgramacionPara(fechaCambio));
+        Assert.Equal([DayOfWeek.Monday, DayOfWeek.Wednesday], versiones[0].DiasProgramados.Select(dia => dia.Dia));
+        Assert.Equal([DayOfWeek.Friday], habito.DiasProgramados.Select(dia => dia.Dia));
+    }
+
+    [Fact]
+    public void ActualizarConfiguracionVersionada_VariasVecesElMismoDia_ConsolidaLaUltimaProgramacion()
+    {
+        var habito = CrearHabitoParaActualizacion();
+        var fechaCambio = habito.FechaInicio.AddDays(5);
+
+        habito.ActualizarConfiguracionVersionada(
+            habito.Nombre, habito.Descripcion, [DayOfWeek.Friday], fechaCambio);
+        var versionDelDia = habito.ObtenerProgramacionPara(fechaCambio);
+        habito.ActualizarConfiguracionVersionada(
+            habito.Nombre, habito.Descripcion, [DayOfWeek.Sunday], fechaCambio);
+
+        Assert.Equal(2, habito.Programaciones.Count);
+        Assert.Same(versionDelDia, habito.ObtenerProgramacionPara(fechaCambio));
+        Assert.Equal([DayOfWeek.Sunday], habito.DiasProgramados.Select(dia => dia.Dia));
+        Assert.Equal(fechaCambio, habito.Programaciones.Single(version => version.VigenteHasta is not null).VigenteHasta);
+    }
+
+    [Fact]
+    public void ActualizarConfiguracionVersionada_EnFechasPosteriores_MantieneHistorialContinuo()
+    {
+        var habito = CrearHabitoParaActualizacion();
+        var primeraFecha = habito.FechaInicio.AddDays(5);
+        var segundaFecha = primeraFecha.AddDays(4);
+        var terceraFecha = segundaFecha.AddDays(1);
+
+        habito.ActualizarConfiguracionVersionada(
+            habito.Nombre, habito.Descripcion, [DayOfWeek.Friday], primeraFecha);
+        habito.ActualizarConfiguracionVersionada(
+            habito.Nombre, habito.Descripcion, [DayOfWeek.Sunday], segundaFecha);
+        habito.ActualizarConfiguracionVersionada(
+            habito.Nombre, habito.Descripcion, [DayOfWeek.Tuesday], terceraFecha);
+
+        var versiones = habito.Programaciones.OrderBy(version => version.VigenteDesde).ToArray();
+        Assert.Equal(4, versiones.Length);
+        Assert.Equal(habito.FechaInicio, versiones[0].VigenteDesde);
+        Assert.Equal(primeraFecha, versiones[0].VigenteHasta);
+        Assert.Equal(primeraFecha, versiones[1].VigenteDesde);
+        Assert.Equal(segundaFecha, versiones[1].VigenteHasta);
+        Assert.Equal(segundaFecha, versiones[2].VigenteDesde);
+        Assert.Equal(terceraFecha, versiones[2].VigenteHasta);
+        Assert.Equal(terceraFecha, versiones[3].VigenteDesde);
+        Assert.Null(versiones[3].VigenteHasta);
+
+        for (var index = 0; index < versiones.Length - 1; index++)
+        {
+            Assert.Equal(versiones[index].VigenteHasta, versiones[index + 1].VigenteDesde);
+        }
+
+        Assert.Single(versiones, version => version.VigenteHasta is null);
+        Assert.Equal([DayOfWeek.Monday, DayOfWeek.Wednesday], versiones[0].DiasProgramados.Select(dia => dia.Dia));
+        Assert.Equal([DayOfWeek.Friday], versiones[1].DiasProgramados.Select(dia => dia.Dia));
+        Assert.Equal([DayOfWeek.Sunday], versiones[2].DiasProgramados.Select(dia => dia.Dia));
+        Assert.Equal([DayOfWeek.Tuesday], versiones[3].DiasProgramados.Select(dia => dia.Dia));
+    }
+
+    [Fact]
+    public void ActualizarConfiguracionVersionada_MismosDiasEnOtroOrdenYRepetidos_NoCreaVersion()
+    {
+        var habito = CrearHabitoParaActualizacion();
+        var estadoAntes = CapturarProgramaciones(habito);
+
+        habito.ActualizarConfiguracionVersionada(
+            "Nombre editado",
+            "Descripción editada",
+            [DayOfWeek.Wednesday, DayOfWeek.Monday, DayOfWeek.Monday],
+            habito.FechaInicio.AddDays(3));
+
+        AssertProgramacionesIguales(estadoAntes, CapturarProgramaciones(habito));
+        Assert.Equal("Nombre editado", habito.Nombre);
+        Assert.Equal("Descripción editada", habito.Descripcion);
+    }
+
+    [Fact]
+    public void ActualizarConfiguracionVersionada_SinCambioEfectivo_NoCreaNiCierraVersion()
+    {
+        var habito = CrearHabitoParaActualizacion();
+        var versionInicial = Assert.Single(habito.Programaciones);
+
+        habito.ActualizarConfiguracionVersionada(
+            habito.Nombre,
+            habito.Descripcion,
+            [DayOfWeek.Monday, DayOfWeek.Wednesday],
+            habito.FechaInicio.AddDays(10));
+
+        Assert.Same(versionInicial, Assert.Single(habito.Programaciones));
+        Assert.Null(versionInicial.VigenteHasta);
+    }
+
+    [Fact]
+    public void ActualizarConfiguracionVersionada_FechaAnteriorConMismosDias_ActualizaMetadatosYConservaTracking()
+    {
+        var habito = CrearHabitoParaActualizacion();
+        var inicioVersionAbierta = habito.FechaInicio.AddDays(10);
+        habito.ActualizarConfiguracionVersionada(
+            habito.Nombre, habito.Descripcion, [DayOfWeek.Friday], inicioVersionAbierta);
+
+        var versionesAntes = habito.Programaciones.OrderBy(version => version.VigenteDesde).ToArray();
+        var versionAbierta = habito.ObtenerProgramacionPara(inicioVersionAbierta)!;
+        var diasAntes = versionAbierta.DiasProgramados.ToDictionary(dia => dia.Dia);
+
+        // No hay cambio de programación que aplicar; el request solo edita metadatos.
+        habito.ActualizarConfiguracionVersionada(
+            "Nombre editado",
+            "Descripción editada",
+            [DayOfWeek.Friday, DayOfWeek.Friday],
+            inicioVersionAbierta.AddDays(-1));
+
+        var versionesDespues = habito.Programaciones.OrderBy(version => version.VigenteDesde).ToArray();
+        Assert.Equal("Nombre editado", habito.Nombre);
+        Assert.Equal("Descripción editada", habito.Descripcion);
+        Assert.Equal(versionesAntes.Length, versionesDespues.Length);
+        for (var index = 0; index < versionesAntes.Length; index++)
+        {
+            Assert.Same(versionesAntes[index], versionesDespues[index]);
+        }
+
+        Assert.Same(versionAbierta, habito.ObtenerProgramacionPara(inicioVersionAbierta));
+        Assert.Equal(inicioVersionAbierta, versionesDespues[0].VigenteHasta);
+        Assert.Null(versionAbierta.VigenteHasta);
+        Assert.Same(diasAntes[DayOfWeek.Friday], Assert.Single(versionAbierta.DiasProgramados));
+    }
+
+    [Theory]
+    [MemberData(nameof(ProgramacionesInvalidas))]
+    public void ActualizarConfiguracionVersionada_ConDiasInvalidos_NoMutaElAgregado(DayOfWeek[] dias)
+    {
+        var habito = CrearHabitoParaActualizacion();
+        var estadoAntes = CapturarEstadoCompleto(habito);
+
+        Assert.Throws<ArgumentException>(() => habito.ActualizarConfiguracionVersionada(
+            "Nombre nuevo",
+            "Descripción nueva",
+            dias,
+            habito.FechaInicio.AddDays(5)));
+
+        AssertEstadoCompletoIgual(estadoAntes, CapturarEstadoCompleto(habito));
+    }
+
+    public static TheoryData<DayOfWeek[]> ProgramacionesInvalidas => new()
+    {
+        Array.Empty<DayOfWeek>(),
+        new[] { (DayOfWeek)7 }
+    };
+
+    [Fact]
+    public void ActualizarConfiguracionVersionada_FechaRetroactivaPorCambioDeZona_LanzaConflictoSinMutar()
+    {
+        var habito = CrearHabitoParaActualizacion();
+        var inicioVersionAbierta = habito.FechaInicio.AddDays(10);
+        habito.ActualizarConfiguracionVersionada(
+            habito.Nombre, habito.Descripcion, [DayOfWeek.Friday], inicioVersionAbierta);
+        var estadoAntes = CapturarEstadoCompleto(habito);
+
+        Assert.Throws<ConflictoVigenciaProgramacionException>(() => habito.ActualizarConfiguracionVersionada(
+            "Nombre no aplicado",
+            "Descripción no aplicada",
+            [DayOfWeek.Sunday],
+            inicioVersionAbierta.AddDays(-1)));
+
+        AssertEstadoCompletoIgual(estadoAntes, CapturarEstadoCompleto(habito));
+    }
+
+    [Fact]
+    public void ActualizarConfiguracionVersionada_RetrocedeAntesDeFechaInicioConVersionInicialCerrada_LanzaConflictoSinMutar()
+    {
+        var fechaInicio = new DateOnly(2026, 10, 10);
+        var habito = new Habito(CrearUsuario(), "Leer", null, fechaInicio, [DayOfWeek.Monday]);
+        habito.ActualizarConfiguracionVersionada(
+            habito.Nombre, habito.Descripcion, [DayOfWeek.Friday], fechaInicio.AddDays(2));
+        var estadoAntes = CapturarEstadoCompleto(habito);
+
+        Assert.Throws<ConflictoVigenciaProgramacionException>(() => habito.ActualizarConfiguracionVersionada(
+            habito.Nombre,
+            habito.Descripcion,
+            [DayOfWeek.Sunday],
+            fechaInicio.AddDays(-1)));
+
+        AssertEstadoCompletoIgual(estadoAntes, CapturarEstadoCompleto(habito));
+    }
+
+    [Fact]
+    public void ActualizarConfiguracionVersionada_EnHabitoInactivo_PermiteCambiarDiasYSigueInactivo()
+    {
+        var habito = CrearHabitoParaActualizacion();
+        habito.Desactivar();
+
+        habito.ActualizarConfiguracionVersionada(
+            habito.Nombre,
+            habito.Descripcion,
+            [DayOfWeek.Friday],
+            habito.FechaInicio.AddDays(5));
+
+        Assert.Equal(EstadoHabito.Inactivo, habito.Estado);
+        Assert.Equal([DayOfWeek.Friday], habito.DiasProgramados.Select(dia => dia.Dia));
+        Assert.Equal(2, habito.Programaciones.Count);
+    }
+
+    [Fact]
+    public void ActualizarConfiguracionVersionada_ConservaCumplimientosYVersionesCerradas()
+    {
+        var habito = CrearHabitoParaActualizacion();
+        var cumplimiento = new Cumplimiento(habito, habito.FechaInicio.AddDays(1));
+        var primeraFecha = habito.FechaInicio.AddDays(5);
+        var segundaFecha = primeraFecha.AddDays(3);
+        var versionInicial = Assert.Single(habito.Programaciones);
+
+        habito.ActualizarConfiguracionVersionada(
+            habito.Nombre, habito.Descripcion, [DayOfWeek.Friday], primeraFecha);
+        var primeraVersionPosterior = habito.ObtenerProgramacionPara(primeraFecha)!;
+        var diasVersionIniciales = versionInicial.DiasProgramados.Select(dia => dia.Dia).ToArray();
+        var primeraFechaFin = versionInicial.VigenteHasta;
+        habito.ActualizarConfiguracionVersionada(
+            habito.Nombre, habito.Descripcion, [DayOfWeek.Sunday], segundaFecha);
+
+        Assert.Equal(diasVersionIniciales, versionInicial.DiasProgramados.Select(dia => dia.Dia));
+        Assert.Equal(primeraFechaFin, versionInicial.VigenteHasta);
+        Assert.Equal([DayOfWeek.Friday], primeraVersionPosterior.DiasProgramados.Select(dia => dia.Dia));
+        Assert.Equal(segundaFecha, primeraVersionPosterior.VigenteHasta);
+        Assert.Same(habito, cumplimiento.Habito);
+        Assert.Equal(habito.FechaInicio.AddDays(1), cumplimiento.Fecha);
+    }
+
+    [Fact]
+    public void ActualizarConfiguracionVersionada_ValidaNombreAntesDeCambiarProgramacion()
+    {
+        var habito = CrearHabitoParaActualizacion();
+        var estadoAntes = CapturarEstadoCompleto(habito);
+
+        Assert.Throws<ArgumentException>(() => habito.ActualizarConfiguracionVersionada(
+            " ",
+            "Descripción nueva",
+            [DayOfWeek.Friday],
+            habito.FechaInicio.AddDays(5)));
+
+        AssertEstadoCompletoIgual(estadoAntes, CapturarEstadoCompleto(habito));
+    }
+
     private static Usuario CrearUsuario() => new("Ana", "ana@example.com", "hashed-value", "Etc/UTC");
 
     private static Habito CrearHabitoParaActualizacion() => new(
@@ -305,6 +604,49 @@ public class HabitoTests
         DateOnly StartDate, EstadoHabito Estado, DayOfWeek[] Dias) CapturarEstado(Habito habito) =>
         (habito.Id, habito.Usuario, habito.Nombre, habito.Descripcion, habito.FechaCreacion,
             habito.FechaInicio, habito.Estado, habito.DiasProgramados.Select(dia => dia.Dia).ToArray());
+
+    private static ProgramacionCapturada[] CapturarProgramaciones(Habito habito) => habito.Programaciones
+        .OrderBy(programacion => programacion.VigenteDesde)
+        .Select(programacion => new ProgramacionCapturada(
+            programacion.VigenteDesde,
+            programacion.VigenteHasta,
+            programacion.DiasProgramados.Select(dia => dia.Dia).ToArray()))
+        .ToArray();
+
+    private static EstadoHabitoCapturado CapturarEstadoCompleto(Habito habito) => new(
+        habito.Id,
+        habito.Usuario,
+        habito.Nombre,
+        habito.Descripcion,
+        habito.FechaCreacion,
+        habito.FechaInicio,
+        habito.Estado,
+        CapturarProgramaciones(habito));
+
+    private static void AssertProgramacionesIguales(
+        IReadOnlyList<ProgramacionCapturada> esperado,
+        IReadOnlyList<ProgramacionCapturada> actual)
+    {
+        Assert.Equal(esperado.Count, actual.Count);
+        for (var index = 0; index < esperado.Count; index++)
+        {
+            Assert.Equal(esperado[index].VigenteDesde, actual[index].VigenteDesde);
+            Assert.Equal(esperado[index].VigenteHasta, actual[index].VigenteHasta);
+            Assert.Equal(esperado[index].Dias, actual[index].Dias);
+        }
+    }
+
+    private static void AssertEstadoCompletoIgual(EstadoHabitoCapturado esperado, EstadoHabitoCapturado actual)
+    {
+        Assert.Equal(esperado.Id, actual.Id);
+        Assert.Same(esperado.Usuario, actual.Usuario);
+        Assert.Equal(esperado.Nombre, actual.Nombre);
+        Assert.Equal(esperado.Descripcion, actual.Descripcion);
+        Assert.Equal(esperado.CreatedAt, actual.CreatedAt);
+        Assert.Equal(esperado.StartDate, actual.StartDate);
+        Assert.Equal(esperado.Estado, actual.Estado);
+        AssertProgramacionesIguales(esperado.Programaciones, actual.Programaciones);
+    }
 
     private static void AssertEstadoIgual(
         (Guid Id, Usuario Usuario, string Nombre, string? Descripcion, DateTimeOffset CreatedAt,
@@ -320,4 +662,19 @@ public class HabitoTests
         Assert.Equal(esperado.Estado, habito.Estado);
         Assert.Equal(esperado.Dias, habito.DiasProgramados.Select(dia => dia.Dia));
     }
+
+    private sealed record ProgramacionCapturada(
+        DateOnly VigenteDesde,
+        DateOnly? VigenteHasta,
+        DayOfWeek[] Dias);
+
+    private sealed record EstadoHabitoCapturado(
+        Guid Id,
+        Usuario Usuario,
+        string Nombre,
+        string? Descripcion,
+        DateTimeOffset CreatedAt,
+        DateOnly StartDate,
+        EstadoHabito Estado,
+        ProgramacionCapturada[] Programaciones);
 }

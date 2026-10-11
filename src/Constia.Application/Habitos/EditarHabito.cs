@@ -1,6 +1,12 @@
+using Constia.Application.Temporal;
+using Constia.Application.Usuarios;
+
 namespace Constia.Application.Habitos;
 
-public sealed class EditarHabito(IHabitoRepository habitos)
+public sealed class EditarHabito(
+    IHabitoRepository habitos,
+    IUsuarioRepository usuarios,
+    IFechaLocalUsuario fechaLocalUsuario)
 {
     public async Task<HabitoListado?> EjecutarAsync(
         Guid habitId,
@@ -19,8 +25,19 @@ public sealed class EditarHabito(IHabitoRepository habitos)
             return null;
         }
 
-        habito.ActualizarConfiguracion(request.Nombre, request.Descripcion, request.DiasProgramados);
-        await habitos.GuardarCambiosAsync(cancellationToken);
+        var usuario = await usuarios.BuscarPorIdAsync(usuarioId, cancellationToken);
+        if (usuario is null)
+        {
+            return null;
+        }
+
+        var fechaEfectiva = fechaLocalUsuario.ObtenerHoy(usuario.TimeZoneId);
+        habito.ActualizarConfiguracionVersionada(
+            request.Nombre,
+            request.Descripcion,
+            request.DiasProgramados,
+            fechaEfectiva);
+        await habitos.GuardarCambiosAsync(habito, cancellationToken);
 
         return new HabitoListado(
             habito.Id,

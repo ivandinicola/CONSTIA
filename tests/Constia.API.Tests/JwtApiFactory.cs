@@ -68,6 +68,9 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
             services.AddScoped<IHabitoRepository>(_ => new FakeHabitoRepository(
                 HabitosPersistidos,
                 RegistrarHabitoGuardado));
+            services.RemoveAll<TimeProvider>();
+            services.AddSingleton<TimeProvider>(new TimeProviderFijo(
+                DateTimeOffset.Parse("2026-10-10T02:30:00+00:00")));
         });
     }
 
@@ -193,10 +196,20 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
             return Task.FromResult(resultado);
         }
 
-        public Task GuardarCambiosAsync(CancellationToken cancellationToken)
+        public Task GuardarCambiosAsync(Habito habito, CancellationToken cancellationToken)
         {
+            if (!habitos.Contains(habito))
+            {
+                throw new InvalidOperationException("The habit must be part of the fake repository.");
+            }
+
             registrarGuardado();
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class TimeProviderFijo(DateTimeOffset instanteUtc) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => instanteUtc;
     }
 }

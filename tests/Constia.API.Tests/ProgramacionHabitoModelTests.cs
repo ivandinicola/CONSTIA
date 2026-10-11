@@ -19,6 +19,11 @@ public sealed class ProgramacionHabitoModelTests
 
         Assert.NotNull(habito);
         Assert.NotNull(programacion);
+        var concurrencyVersion = habito.FindProperty("ConcurrencyVersion")!;
+        Assert.Equal(typeof(long), concurrencyVersion.ClrType);
+        Assert.True(concurrencyVersion.IsConcurrencyToken);
+        Assert.Equal(ValueGenerated.Never, concurrencyVersion.ValueGenerated);
+        Assert.False(concurrencyVersion.IsNullable);
         Assert.Null(habito.FindNavigation(nameof(Habito.DiasProgramados)));
         Assert.Equal("ProgramacionHabito", programacion.GetTableName());
         Assert.Equal(

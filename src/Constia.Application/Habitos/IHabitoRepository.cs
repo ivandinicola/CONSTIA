@@ -24,5 +24,5 @@ public interface IHabitoRepository
         Guid usuarioId,
         CancellationToken cancellationToken);
 
-    Task GuardarCambiosAsync(CancellationToken cancellationToken);
+    Task GuardarCambiosAsync(Habito habito, CancellationToken cancellationToken);
 }

@@ -1,0 +1,142 @@
+name: TEMP-004 Migration Generation
+
+on:
+  push:
+    branches:
+      - feature/TEMP-004
+
+permissions:
+  contents: read
+
+jobs:
+  generate-migration:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up .NET 10 SDK
+        uses: actions/setup-dotnet@v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build Release
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Install dotnet-ef
+        run: |
+          dotnet tool install --tool-path "$RUNNER_TEMP/dotnet-tools" dotnet-ef --version 10.0.12
+          echo "$RUNNER_TEMP/dotnet-tools" >> "$GITHUB_PATH"
+
+      - name: Save baseline model snapshot
+        run: cp src/Constia.Infrastructure/Migrations/ConstiaDbContextModelSnapshot.cs "$RUNNER_TEMP/ConstiaDbContextModelSnapshot.before.cs"
+
+      - name: Generate and validate migration
+        env:
+          ASPNETCORE_ENVIRONMENT: Production
+          ConnectionStrings__DefaultConnection: "Server=127.0.0.1,1;Initial Catalog=ConstiaDesignOnly;User ID=ef-fake;Password=Fake-only-not-a-credential-2026!;TrustServerCertificate=True;Connect Timeout=1"
+          JwtSettings__SigningKey: "CONSTIA_DESIGN_ONLY_FAKE_SIGNING_KEY_2026_NOT_A_SECRET"
+          JwtSettings__Issuer: "constia-design-only"
+          JwtSettings__Audience: "constia-design-only"
+          JwtSettings__ExpirationMinutes: "5"
+        run: |
+          set -euo pipefail
+          dotnet ef migrations add AddHabitoConcurrencyVersion \
+            --project src/Constia.Infrastructure/Constia.Infrastructure.csproj \
+            --startup-project src/Constia.API/Constia.API.csproj \
+            --configuration Release \
+            --no-build \
+            --output-dir Migrations
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+          import shutil
+
+          migrations_dir = Path("src/Constia.Infrastructure/Migrations")
+          migration_files = list(migrations_dir.glob("*_AddHabitoConcurrencyVersion.cs"))
+          designer_files = list(migrations_dir.glob("*_AddHabitoConcurrencyVersion.Designer.cs"))
+          if len(migration_files) != 1 or len(designer_files) != 1:
+              raise SystemExit("Expected exactly one migration and one designer file.")
+
+          migration_file = migration_files[0]
+          source = migration_file.read_text(encoding="utf-8")
+
+          def method_body(method_name):
+              match = re.search(rf"\b{method_name}\s*\([^)]*\)\s*\{{", source)
+              if not match:
+                  raise SystemExit(f"Could not locate {method_name} method.")
+              opening = source.find("{", match.start())
+              depth = 0
+              for index in range(opening, len(source)):
+                  if source[index] == "{":
+                      depth += 1
+                  elif source[index] == "}":
+                      depth -= 1
+                      if depth == 0:
+                          return source[opening + 1:index]
+              raise SystemExit(f"Could not parse {method_name} method body.")
+
+          up = method_body("Up")
+          down = method_body("Down")
+          up_operations = re.findall(r"migrationBuilder\.(\w+)\s*\(", up)
+          down_operations = re.findall(r"migrationBuilder\.(\w+)\s*\(", down)
+          if up_operations != ["AddColumn"]:
+              raise SystemExit("Up() must add only the Habito concurrency column.")
+          if down_operations != ["DropColumn"]:
+              raise SystemExit("Down() must drop only the Habito concurrency column.")
+          required_up_fragments = [
+              'name: "ConcurrencyVersion"',
+              'table: "Habito"',
+              'type: "bigint"',
+              "nullable: false",
+          ]
+          if not all(fragment in up for fragment in required_up_fragments):
+              raise SystemExit("Generated column differs from expectations.")
+          default_match = re.search(r"\bdefaultValue:\s*(-?\d+)L", up)
+          if not default_match:
+              raise SystemExit("Expected EF scaffolding to include a temporary numeric backfill value.")
+          scaffold_default = default_match.group(1)
+          if 'name: "ConcurrencyVersion"' not in down or 'table: "Habito"' not in down:
+              raise SystemExit("Down() does not remove only the expected column.")
+          if "defaultValueSql:" in source or "Sql(" in source:
+              raise SystemExit("Unexpected SQL default or raw SQL in generated migration.")
+
+          before = (Path(os.environ["RUNNER_TEMP"]) / "ConstiaDbContextModelSnapshot.before.cs").read_text(encoding="utf-8")
+          after = (migrations_dir / "ConstiaDbContextModelSnapshot.cs").read_text(encoding="utf-8")
+          property_pattern = re.compile(
+              r'(?m)^[ \t]*b\.Property<long>\("ConcurrencyVersion"\)\r?\n'
+              r'(?:[ \t]*\.[^\r\n]+\r?\n)+'
+          )
+          if len(property_pattern.findall(after)) != 1:
+              raise SystemExit("Snapshot must contain exactly one ConcurrencyVersion property.")
+          if property_pattern.sub("", after).replace("\r\n", "\n") != before.replace("\r\n", "\n"):
+              raise SystemExit("Snapshot contains model changes beyond ConcurrencyVersion.")
+
+          artifact_root = Path(os.environ["RUNNER_TEMP"]) / "temp-004-migration-artifact"
+          artifact_migrations = artifact_root / "src/Constia.Infrastructure/Migrations"
+          artifact_migrations.mkdir(parents=True, exist_ok=True)
+          for path in (migration_file, designer_files[0], migrations_dir / "ConstiaDbContextModelSnapshot.cs"):
+              shutil.copy2(path, artifact_migrations / path.name)
+
+          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          with summary.open("a", encoding="utf-8") as output:
+              output.write("### TEMP-004 migration generation\n")
+              output.write("- Generated one migration, its designer, and the updated model snapshot.\n")
+              output.write(f"- EF scaffolding emitted temporary `defaultValue: {scaffold_default}L`; this is not the approved backfill. Before applying, change the migration to backfill existing habits with `1` and remove any permanent SQL default.\n")
+              output.write("- No database service, User Secrets, real credentials, or database update command was used.\n")
+          print("Migration scope validated; manual backfill/default review is required before application.")
+          PY
+
+      - name: Upload migration files
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: temp-004-add-habit-concurrency-version
+          path: ${{ runner.temp }}/temp-004-migration-artifact/
+          if-no-files-found: error
+          retention-days: 7

@@ -6,6 +6,8 @@ using System.Security.Claims;
 using System.Text;
 using Constia.API.Contracts;
 using Constia.Domain;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 
@@ -123,14 +125,14 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
 
         var response = await client.PutAsJsonAsync(
             $"/api/habitos/{habit.Id:D}",
-            CrearRequestEdicion("Caminar", "Nueva descripción", [DayOfWeek.Monday, DayOfWeek.Monday]));
+            CrearRequestEdicion("Caminar", "Nueva descripción", [DayOfWeek.Friday, DayOfWeek.Friday]));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<HabitoResponse>();
         Assert.NotNull(body);
         Assert.Equal("Caminar", body.Nombre);
         Assert.Equal("Nueva descripción", body.Descripcion);
-        Assert.Equal([DayOfWeek.Monday], body.DiasProgramados);
+        Assert.Equal([DayOfWeek.Friday], body.DiasProgramados);
         Assert.DoesNotContain("usuarioId", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
         Assert.Equal("Caminar", habit.Nombre);
     }
@@ -179,18 +181,67 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     }
 
     [Fact]
-    public async Task EditarHabito_ConDiasDiferentes_Devuelve400YSinPersistirCambios()
+    public async Task EditarHabito_ConFechaRetroactivaYCambioDeDias_Devuelve409YSinPersistirCambios()
     {
-        var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow);
+        var usuario = new Usuario("Zona argentina", $"{Guid.NewGuid()}@example.invalid", "fake-hash",
+            "America/Argentina/Buenos_Aires");
+        factory.UsuariosPersistidos[usuario.Id] = usuario;
+        var habit = CrearHabitoConIdYFecha(usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow);
+        habit.ActualizarConfiguracionVersionada("Leer", null, [DayOfWeek.Friday], new DateOnly(2026, 10, 10));
         factory.ReemplazarHabitos([habit]);
-        using var client = ClienteAutenticado(factory.Usuario.Id);
+        using var client = ClienteAutenticado(usuario.Id);
         var guardadosAntes = factory.CantidadDeHabitosGuardados;
 
         var response = await client.PutAsJsonAsync(
             $"/api/habitos/{habit.Id:D}",
-            CrearRequestEdicion("Caminar", "Descripción nueva", [DayOfWeek.Friday]));
+            CrearRequestEdicion("Caminar", "Descripción nueva", [DayOfWeek.Saturday]));
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal(StatusCodes.Status409Conflict,
+            (await response.Content.ReadFromJsonAsync<ProblemDetails>())?.Status);
+        Assert.Equal("Leer", habit.Nombre);
+        Assert.Null(habit.Descripcion);
+        Assert.Equal([DayOfWeek.Friday], habit.DiasProgramados.Select(dia => dia.Dia));
+        Assert.Equal(guardadosAntes, factory.CantidadDeHabitosGuardados);
+    }
+
+    [Fact]
+    public async Task EditarHabito_UsaFechaLocalDelPropietarioCruzandoMedianocheUtc()
+    {
+        var usuario = new Usuario("Zona argentina", $"{Guid.NewGuid()}@example.invalid", "fake-hash",
+            "America/Argentina/Buenos_Aires");
+        factory.UsuariosPersistidos[usuario.Id] = usuario;
+        var habit = CrearHabitoConIdYFecha(usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticado(usuario.Id);
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/habitos/{habit.Id:D}",
+            CrearRequestEdicion("Leer", null, [DayOfWeek.Friday]));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var version = Assert.Single(habit.Programaciones, programacion => programacion.VigenteHasta is null);
+        Assert.Equal(new DateOnly(2026, 10, 9), version.VigenteDesde);
+        Assert.Equal([DayOfWeek.Friday], version.DiasProgramados.Select(dia => dia.Dia));
+    }
+
+    [Fact]
+    public async Task EditarHabito_ConZonaPersistidaInvalida_DevuelveErrorIdentificableYSinGuardar()
+    {
+        var usuario = new Usuario("Zona inválida", $"{Guid.NewGuid()}@example.invalid", "fake-hash", "Invalid/Unknown");
+        factory.UsuariosPersistidos[usuario.Id] = usuario;
+        var habit = CrearHabitoConIdYFecha(usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticado(usuario.Id);
+        var guardadosAntes = factory.CantidadDeHabitosGuardados;
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/habitos/{habit.Id:D}",
+            CrearRequestEdicion("Caminar", "Nueva", [DayOfWeek.Friday]));
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.Equal("No se pudo determinar la fecha local del usuario.", body?.Title);
         Assert.Equal("Leer", habit.Nombre);
         Assert.Null(habit.Descripcion);
         Assert.Equal([DayOfWeek.Monday], habit.DiasProgramados.Select(dia => dia.Dia));

@@ -1,6 +1,8 @@
 using Constia.API.Authentication;
 using Constia.API.Contracts;
 using Constia.Application.Habitos;
+using Constia.Application.Temporal;
+using Constia.Domain;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -72,6 +74,8 @@ public sealed class HabitosController(
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<HabitoResponse>> Editar(
         Guid id,
         EditarHabitoHttpRequest request,
@@ -110,6 +114,30 @@ public sealed class HabitosController(
                 editado.FechaInicio,
                 editado.Estado,
                 editado.DiasProgramados));
+        }
+        catch (ConflictoVigenciaProgramacionException)
+        {
+            return Conflict(new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "No se pudo actualizar la programación del hábito.",
+                Detail = "La fecha efectiva entra en conflicto con la programación existente."
+            });
+        }
+        catch (ConflictoEdicionConcurrenteException)
+        {
+            return Conflict(new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "No se pudo actualizar el hábito.",
+                Detail = "El hábito cambió durante la operación. Volvé a intentarlo."
+            });
+        }
+        catch (ZonaHorariaPersistidaInvalidaException)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "No se pudo determinar la fecha local del usuario.");
         }
         catch (ArgumentException exception)
         {
