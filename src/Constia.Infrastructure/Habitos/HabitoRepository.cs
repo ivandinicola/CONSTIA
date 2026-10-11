@@ -9,6 +9,7 @@ public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoReposi
     public async Task AgregarAsync(Habito habito, CancellationToken cancellationToken)
     {
         dbContext.Set<Habito>().Add(habito);
+        dbContext.Entry(habito).Property<long>("ConcurrencyVersion").CurrentValue = 1;
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -66,9 +67,31 @@ public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoReposi
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-    public async Task GuardarCambiosAsync(CancellationToken cancellationToken)
+    public async Task GuardarCambiosAsync(Habito habito, CancellationToken cancellationToken)
     {
-        await dbContext.SaveChangesAsync(cancellationToken);
+        ArgumentNullException.ThrowIfNull(habito);
+
+        var entry = dbContext.Entry(habito);
+        if (entry.State is EntityState.Detached or EntityState.Added or EntityState.Deleted)
+        {
+            throw new InvalidOperationException("El hábito debe estar cargado y rastreado para guardar cambios.");
+        }
+
+        var version = entry.Property<long>("ConcurrencyVersion");
+        version.CurrentValue = checked(version.OriginalValue + 1);
+        version.IsModified = true;
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException exception) when (
+            exception.Entries.Any(entry => entry.Entity is Habito entity && entity.Id == habito.Id))
+        {
+            throw new ConflictoEdicionConcurrenteException(
+                "The habit was changed by another operation.",
+                exception);
+        }
     }
 
     private IQueryable<Habito> HabitosConProgramaciones() => dbContext.Set<Habito>()

@@ -17,7 +17,7 @@ public sealed class DesactivarHabito(IHabitoRepository habitos)
         }
 
         habito.Desactivar();
-        await habitos.GuardarCambiosAsync(cancellationToken);
+        await habitos.GuardarCambiosAsync(habito, cancellationToken);
         return true;
     }
 }

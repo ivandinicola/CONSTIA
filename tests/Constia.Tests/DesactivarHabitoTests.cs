@@ -107,8 +107,9 @@ public sealed class DesactivarHabitoTests
                 habit.Id == habitId && habit.Usuario.Id == usuarioId ? habit : null);
         }
 
-        public Task GuardarCambiosAsync(CancellationToken cancellationToken)
+        public Task GuardarCambiosAsync(Habito habito, CancellationToken cancellationToken)
         {
+            Assert.Same(habit, habito);
             CantidadDeGuardados++;
             CancellationTokenGuardado = cancellationToken;
             return Task.CompletedTask;

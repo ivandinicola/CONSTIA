@@ -89,6 +89,63 @@ public class Habito
         Descripcion = descripcion;
     }
 
+    public void ActualizarConfiguracionVersionada(
+        string nombre,
+        string? descripcion,
+        IEnumerable<DayOfWeek> diasProgramados,
+        DateOnly fechaEfectiva)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(nombre);
+        var dias = ProgramacionHabito.NormalizarDias(diasProgramados);
+        var programacionAbierta = ObtenerProgramacionAbiertaValidada();
+
+        ProgramacionHabito? programacionAActualizar = null;
+        ProgramacionHabito? nuevaProgramacion = null;
+
+        if (!programacionAbierta.TieneDias(dias))
+        {
+            if (fechaEfectiva < FechaInicio)
+            {
+                var inicial = _programaciones.Single(programacion => programacion.VigenteDesde == FechaInicio);
+                if (inicial.VigenteHasta is not null)
+                {
+                    throw new ConflictoVigenciaProgramacionException(
+                        "La fecha efectiva retrocede antes de una programación histórica ya cerrada.");
+                }
+
+                programacionAActualizar = inicial;
+            }
+            else if (fechaEfectiva < programacionAbierta.VigenteDesde)
+            {
+                throw new ConflictoVigenciaProgramacionException(
+                    "La fecha efectiva es anterior al inicio de la programación vigente.");
+            }
+            else if (fechaEfectiva == programacionAbierta.VigenteDesde)
+            {
+                programacionAActualizar = programacionAbierta;
+            }
+            else
+            {
+                // Construir la versión nueva antes de cerrar la abierta evita mutaciones parciales
+                // ante una entrada inválida.
+                nuevaProgramacion = new ProgramacionHabito(fechaEfectiva, null, dias);
+            }
+        }
+
+        if (programacionAActualizar is not null)
+        {
+            programacionAActualizar.ReemplazarDias(dias);
+        }
+        else if (nuevaProgramacion is not null)
+        {
+            programacionAbierta.CerrarEn(fechaEfectiva);
+            _programaciones.Add(nuevaProgramacion);
+        }
+
+        Nombre = nombre;
+        Descripcion = descripcion;
+    }
+
     public ProgramacionHabito? ObtenerProgramacionPara(DateOnly fecha)
     {
         if (fecha < FechaInicio)
@@ -108,5 +165,53 @@ public class Habito
         }
 
         return programacionesAplicables[0];
+    }
+
+    private ProgramacionHabito ObtenerProgramacionAbiertaValidada()
+    {
+        if (_programaciones.Count == 0)
+        {
+            throw new InvalidOperationException("El hábito debe tener al menos una programación.");
+        }
+
+        var ordenadas = _programaciones.OrderBy(programacion => programacion.VigenteDesde).ToArray();
+        if (ordenadas[0].VigenteDesde != FechaInicio)
+        {
+            throw new InvalidOperationException(
+                "La programación inicial debe comenzar en la fecha de inicio del hábito.");
+        }
+
+        foreach (var programacion in ordenadas)
+        {
+            var dias = programacion.DiasProgramados.Select(dia => dia.Dia).ToArray();
+            if (dias.Length == 0 || dias.Any(dia => !Enum.IsDefined(dia)) || dias.Distinct().Count() != dias.Length)
+            {
+                throw new InvalidOperationException(
+                    "Cada versión debe contener un conjunto válido y no vacío de días programados.");
+            }
+
+            if (programacion.VigenteHasta is DateOnly fin && fin <= programacion.VigenteDesde)
+            {
+                throw new InvalidOperationException("Una versión contiene un intervalo de vigencia inválido.");
+            }
+        }
+
+        for (var index = 0; index < ordenadas.Length - 1; index++)
+        {
+            if (ordenadas[index].VigenteHasta != ordenadas[index + 1].VigenteDesde)
+            {
+                throw new InvalidOperationException(
+                    "Las versiones de programación deben ser continuas y no superponerse.");
+            }
+        }
+
+        var abiertas = ordenadas.Where(programacion => programacion.VigenteHasta is null).ToArray();
+        if (abiertas.Length != 1 || !ReferenceEquals(abiertas[0], ordenadas[^1]))
+        {
+            throw new InvalidOperationException(
+                "El hábito debe tener una única programación abierta al final del historial.");
+        }
+
+        return abiertas[0];
     }
 }

@@ -181,6 +181,7 @@ public class CrearHabitoTests
             Guid usuarioId,
             CancellationToken cancellationToken) => throw new NotSupportedException();
 
-        public Task GuardarCambiosAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task GuardarCambiosAsync(Habito habito, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 }
