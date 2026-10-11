@@ -63,8 +63,10 @@ jobs:
           migrations_dir = Path("src/Constia.Infrastructure/Migrations")
           migration_files = list(migrations_dir.glob("*_AddHabitoConcurrencyVersion.cs"))
           designer_files = list(migrations_dir.glob("*_AddHabitoConcurrencyVersion.Designer.cs"))
+          repository_root = Path.cwd().resolve()
           generated_files = sorted(
-              [path.relative_to(Path.cwd()).as_posix() for path in migration_files + designer_files]
+              [path.resolve().relative_to(repository_root).as_posix()
+               for path in migration_files + designer_files]
               + (["src/Constia.Infrastructure/Migrations/ConstiaDbContextModelSnapshot.cs"]
                  if (migrations_dir / "ConstiaDbContextModelSnapshot.cs").exists() else [])
           )
