@@ -1,0 +1,114 @@
+name: TEMP-004 SQL Server validation
+
+on:
+  push:
+    branches:
+      - feature/TEMP-004
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-sqlserver-tests:
+    runs-on: ubuntu-latest
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: "Constia_TEMP004_CI_Only!2026"
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/bin/bash -c '</dev/tcp/127.0.0.1/1433'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 18
+          --health-start-period 30s
+
+    steps:
+      - name: Mask disposable SQL Server password
+        env:
+          TEMP004_SQLSERVER_PASSWORD: "Constia_TEMP004_CI_Only!2026"
+        run: echo "::add-mask::$TEMP004_SQLSERVER_PASSWORD"
+
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up .NET 10 SDK
+        uses: actions/setup-dotnet@v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build Release
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Run non-SQL test suites
+        run: >-
+          dotnet test --no-build --configuration Release
+          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests"
+
+      - name: Run TEMP-003 migration integration tests
+        env:
+          CONSTIA_TEMP003_SQLSERVER_TESTS: "true"
+          CONSTIA_TEMP003_SQLSERVER_CONNECTION: "Server=127.0.0.1,1433;Initial Catalog=master;User Id=sa;Password=Constia_TEMP004_CI_Only!2026;Encrypt=False;TrustServerCertificate=True;Connect Timeout=5"
+        run: |
+          set -euo pipefail
+          results_dir="$RUNNER_TEMP/temp003-results"
+          mkdir -p "$results_dir"
+          dotnet test tests/Constia.API.Tests/Constia.API.Tests.csproj \
+            --no-build --configuration Release \
+            --filter FullyQualifiedName~Temp003MigrationSqlServerTests \
+            --logger "trx;LogFileName=temp003-migration.trx" \
+            --results-directory "$results_dir"
+          python3 - "$results_dir/temp003-migration.trx" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          namespace = {"trx": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+          root = ET.parse(sys.argv[1]).getroot()
+          outcomes = [item.attrib.get("outcome") for item in root.findall(".//trx:Results/trx:UnitTestResult", namespace)]
+          if len(outcomes) != 2 or outcomes.count("Passed") != 2:
+              raise SystemExit(f"Expected 2 passing TEMP-003 SQL tests; got {len(outcomes)} results.")
+          print("TEMP-003 SQL integration tests: 2 passed; none skipped.")
+          PY
+
+      - name: Run TEMP-004 migration and concurrency SQL tests
+        env:
+          CONSTIA_TEMP004_SQLSERVER_TESTS: "true"
+          CONSTIA_TEMP004_SQLSERVER_CONNECTION: "Server=127.0.0.1,1433;Initial Catalog=master;User Id=sa;Password=Constia_TEMP004_CI_Only!2026;Encrypt=False;TrustServerCertificate=True;Connect Timeout=5"
+        run: |
+          set -euo pipefail
+          results_dir="$RUNNER_TEMP/temp004-results"
+          mkdir -p "$results_dir"
+          dotnet test tests/Constia.API.Tests/Constia.API.Tests.csproj \
+            --no-build --configuration Release \
+            --filter "FullyQualifiedName~HabitoConcurrencySqlServerTests|FullyQualifiedName~Temp004ConcurrencyMigrationSqlServerTests" \
+            --logger "trx;LogFileName=temp004-sqlserver.trx" \
+            --results-directory "$results_dir"
+          python3 - "$results_dir/temp004-sqlserver.trx" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          namespace = {"trx": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+          root = ET.parse(sys.argv[1]).getroot()
+          results = root.findall(".//trx:Results/trx:UnitTestResult", namespace)
+          class_by_id = {
+              unit.attrib["id"]: unit.find("./trx:TestMethod", namespace).attrib["className"]
+              for unit in root.findall(".//trx:TestDefinitions/trx:UnitTest", namespace)
+          }
+          classified = [(class_by_id[result.attrib["testId"]], result.attrib.get("outcome")) for result in results]
+          concurrency = [outcome for class_name, outcome in classified if class_name.endswith("HabitoConcurrencySqlServerTests")]
+          migration = [outcome for class_name, outcome in classified if class_name.endswith("Temp004ConcurrencyMigrationSqlServerTests")]
+          outcomes = [outcome for _, outcome in classified]
+          if len(concurrency) != 3 or concurrency.count("Passed") != 3:
+              raise SystemExit(f"Expected exactly 3 passing concurrency SQL tests; got {concurrency!r}.")
+          if len(migration) != 2 or migration.count("Passed") != 2:
+              raise SystemExit(f"Expected exactly 2 passing TEMP-004 migration SQL tests; got {migration!r}.")
+          if len(results) != 5 or outcomes.count("Passed") != 5:
+              raise SystemExit(f"Expected exactly 5 passing TEMP-004 SQL tests with no skips; got {outcomes!r}.")
+          print("TEMP-004 SQL integration tests: 5 passed; none skipped.")
+          PY

@@ -113,6 +113,10 @@ public sealed class HabitoConcurrencySqlServerTests
             Assert.Equal("Ganador A", persisted.Nombre);
             Assert.Equal(2, persisted.Programaciones.Count);
             Assert.Equal([DayOfWeek.Friday], openVersion.DiasProgramados.Select(day => day.Dia));
+            Assert.Equal(fechaEfectiva, openVersion.VigenteDesde);
+            Assert.Equal(fechaEfectiva, Assert.Single(
+                persisted.Programaciones,
+                programacion => programacion.VigenteHasta == fechaEfectiva).VigenteHasta);
             Assert.Equal(1, await verification.Set<Cumplimiento>().CountAsync(completion => completion.Habito.Id == habito.Id));
             Assert.Equal(2L, await ObtenerVersionAsync(verification, habito.Id));
         }
@@ -196,6 +200,7 @@ public sealed class HabitoConcurrencySqlServerTests
     private static async Task<DisposableDatabase> CrearBaseDescartableAsync()
     {
         var adminConnectionString = GetDisposableRunnerConnectionString();
+        await EsperarSqlServerAsync(adminConnectionString);
         await using var connection = new SqlConnection(adminConnectionString);
         await connection.OpenAsync();
         var databaseName = $"ConstiaTemp004_{Guid.NewGuid():N}";
@@ -206,6 +211,25 @@ public sealed class HabitoConcurrencySqlServerTests
 
         var builder = new SqlConnectionStringBuilder(adminConnectionString) { InitialCatalog = databaseName };
         return new DisposableDatabase(adminConnectionString, builder.ConnectionString, databaseName);
+    }
+
+    private static async Task EsperarSqlServerAsync(string connectionString)
+    {
+        for (var attempt = 0; attempt < 60; attempt++)
+        {
+            try
+            {
+                await using var connection = new SqlConnection(connectionString);
+                await connection.OpenAsync();
+                return;
+            }
+            catch (SqlException) when (attempt < 59)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2));
+            }
+        }
+
+        throw new InvalidOperationException("The disposable TEMP-004 SQL Server service did not become ready.");
     }
 
     private static async Task EliminarBaseDescartableAsync(DisposableDatabase database)

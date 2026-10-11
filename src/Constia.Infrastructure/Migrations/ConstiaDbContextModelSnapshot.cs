@@ -47,6 +47,11 @@ namespace Constia.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<long>("ConcurrencyVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("ConcurrencyVersion");
+
                     b.Property<string>("Descripcion")
                         .HasColumnType("nvarchar(max)");
 

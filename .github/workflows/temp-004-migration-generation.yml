@@ -1,9 +1,7 @@
 name: TEMP-004 Migration Generation
 
 on:
-  push:
-    branches:
-      - feature/TEMP-004
+  workflow_dispatch:
 
 permissions:
   contents: read
