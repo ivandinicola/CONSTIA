@@ -54,15 +54,34 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
+          import difflib
           import os
           import re
           import shutil
+          import sys
 
           migrations_dir = Path("src/Constia.Infrastructure/Migrations")
           migration_files = list(migrations_dir.glob("*_AddHabitoConcurrencyVersion.cs"))
           designer_files = list(migrations_dir.glob("*_AddHabitoConcurrencyVersion.Designer.cs"))
+          generated_files = sorted(
+              [path.relative_to(Path.cwd()).as_posix() for path in migration_files + designer_files]
+              + (["src/Constia.Infrastructure/Migrations/ConstiaDbContextModelSnapshot.cs"]
+                 if (migrations_dir / "ConstiaDbContextModelSnapshot.cs").exists() else [])
+          )
+
+          def reject(message, up_operations=None, down_operations=None):
+              print(f"Migration validation failed: {message}", file=sys.stderr)
+              print("Generated migration files:", file=sys.stderr)
+              for generated_file in generated_files:
+                  print(f"  {generated_file}", file=sys.stderr)
+              if up_operations is not None:
+                  print(f"Up() operations detected: {up_operations!r}", file=sys.stderr)
+              if down_operations is not None:
+                  print(f"Down() operations detected: {down_operations!r}", file=sys.stderr)
+              raise SystemExit(1)
+
           if len(migration_files) != 1 or len(designer_files) != 1:
-              raise SystemExit("Expected exactly one migration and one designer file.")
+              reject("expected exactly one migration and one Designer file.")
 
           migration_file = migration_files[0]
           source = migration_file.read_text(encoding="utf-8")
@@ -70,7 +89,7 @@ jobs:
           def method_body(method_name):
               match = re.search(rf"\b{method_name}\s*\([^)]*\)\s*\{{", source)
               if not match:
-                  raise SystemExit(f"Could not locate {method_name} method.")
+                  reject(f"could not locate {method_name}() in {migration_file.name}.")
               opening = source.find("{", match.start())
               depth = 0
               for index in range(opening, len(source)):
@@ -80,16 +99,19 @@ jobs:
                       depth -= 1
                       if depth == 0:
                           return source[opening + 1:index]
-              raise SystemExit(f"Could not parse {method_name} method body.")
+              reject(f"could not parse {method_name}() in {migration_file.name}.")
 
           up = method_body("Up")
           down = method_body("Down")
-          up_operations = re.findall(r"migrationBuilder\.(\w+)\s*\(", up)
-          down_operations = re.findall(r"migrationBuilder\.(\w+)\s*\(", down)
+          # EF emits generic calls such as AddColumn<long>(...), so allow a generic
+          # argument list between the operation name and its opening parenthesis.
+          operation_pattern = r"migrationBuilder\.(\w+)(?:\s*<[^<>]+>)?\s*\("
+          up_operations = re.findall(operation_pattern, up)
+          down_operations = re.findall(operation_pattern, down)
           if up_operations != ["AddColumn"]:
-              raise SystemExit("Up() must add only the Habito concurrency column.")
+              reject("Up() must contain only AddColumn for Habito.ConcurrencyVersion.", up_operations, down_operations)
           if down_operations != ["DropColumn"]:
-              raise SystemExit("Down() must drop only the Habito concurrency column.")
+              reject("Down() must contain only DropColumn for Habito.ConcurrencyVersion.", up_operations, down_operations)
           required_up_fragments = [
               'name: "ConcurrencyVersion"',
               'table: "Habito"',
@@ -97,15 +119,15 @@ jobs:
               "nullable: false",
           ]
           if not all(fragment in up for fragment in required_up_fragments):
-              raise SystemExit("Generated column differs from expectations.")
+              reject("AddColumn does not match the expected required bigint Habito.ConcurrencyVersion column.", up_operations, down_operations)
           default_match = re.search(r"\bdefaultValue:\s*(-?\d+)L", up)
           if not default_match:
-              raise SystemExit("Expected EF scaffolding to include a temporary numeric backfill value.")
+              reject("EF scaffold did not include the expected numeric temporary backfill value.", up_operations, down_operations)
           scaffold_default = default_match.group(1)
           if 'name: "ConcurrencyVersion"' not in down or 'table: "Habito"' not in down:
-              raise SystemExit("Down() does not remove only the expected column.")
+              reject("Down() does not remove Habito.ConcurrencyVersion.", up_operations, down_operations)
           if "defaultValueSql:" in source or "Sql(" in source:
-              raise SystemExit("Unexpected SQL default or raw SQL in generated migration.")
+              reject("Unexpected SQL default or raw SQL in generated migration.", up_operations, down_operations)
 
           before = (Path(os.environ["RUNNER_TEMP"]) / "ConstiaDbContextModelSnapshot.before.cs").read_text(encoding="utf-8")
           after = (migrations_dir / "ConstiaDbContextModelSnapshot.cs").read_text(encoding="utf-8")
@@ -114,9 +136,24 @@ jobs:
               r'(?:[ \t]*\.[^\r\n]+\r?\n)+'
           )
           if len(property_pattern.findall(after)) != 1:
-              raise SystemExit("Snapshot must contain exactly one ConcurrencyVersion property.")
-          if property_pattern.sub("", after).replace("\r\n", "\n") != before.replace("\r\n", "\n"):
-              raise SystemExit("Snapshot contains model changes beyond ConcurrencyVersion.")
+              reject("snapshot must contain exactly one ConcurrencyVersion property.", up_operations, down_operations)
+          snapshot_without_token = property_pattern.sub("", after).replace("\r\n", "\n")
+          baseline_snapshot = before.replace("\r\n", "\n")
+          if snapshot_without_token != baseline_snapshot:
+              print("Snapshot differences after removing ConcurrencyVersion:", file=sys.stderr)
+              difference = difflib.unified_diff(
+                  baseline_snapshot.splitlines(),
+                  snapshot_without_token.splitlines(),
+                  fromfile="baseline snapshot",
+                  tofile="generated snapshot without expected property",
+                  lineterm="",
+              )
+              for line_number, line in enumerate(difference):
+                  if line_number == 80:
+                      print("  ... additional snapshot differences omitted ...", file=sys.stderr)
+                      break
+                  print(line, file=sys.stderr)
+              reject("snapshot contains model changes beyond ConcurrencyVersion.", up_operations, down_operations)
 
           artifact_root = Path(os.environ["RUNNER_TEMP"]) / "temp-004-migration-artifact"
           artifact_migrations = artifact_root / "src/Constia.Infrastructure/Migrations"
