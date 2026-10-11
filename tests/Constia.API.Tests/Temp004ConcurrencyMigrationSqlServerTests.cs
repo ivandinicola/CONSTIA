@@ -209,7 +209,7 @@ public sealed class Temp004ConcurrencyMigrationSqlServerTests
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new SqlCommand(
-            "SELECT [HabitoId], [VigenteDesde], [VigenteHasta], d.[Dia] FROM [ProgramacionHabito] AS p INNER JOIN [ProgramacionHabitoDia] AS d ON d.[HabitoId] = p.[HabitoId] AND d.[VigenteDesde] = p.[VigenteDesde];",
+            "SELECT p.[HabitoId], p.[VigenteDesde], p.[VigenteHasta], d.[Dia] FROM [ProgramacionHabito] AS p INNER JOIN [ProgramacionHabitoDia] AS d ON d.[HabitoId] = p.[HabitoId] AND d.[VigenteDesde] = p.[VigenteDesde];",
             connection);
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
