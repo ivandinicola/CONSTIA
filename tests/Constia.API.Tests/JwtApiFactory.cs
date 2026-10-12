@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Constia.Application.Cumplimientos;
 using Constia.Application.Habitos;
 using Constia.Application.Usuarios;
 using Constia.Domain;
@@ -25,10 +26,14 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
 
     private int _cantidadDeCambiosGuardados;
     private int _cantidadDeHabitosGuardados;
+    private int _cantidadDeCumplimientosGuardados;
 
     public int CantidadDeCambiosGuardados => Volatile.Read(ref _cantidadDeCambiosGuardados);
 
     public int CantidadDeHabitosGuardados => Volatile.Read(ref _cantidadDeHabitosGuardados);
+    public int CantidadDeCumplimientosGuardados => Volatile.Read(ref _cantidadDeCumplimientosGuardados);
+
+    public ConcurrentDictionary<(Guid HabitId, DateOnly Fecha), Cumplimiento> CumplimientosPersistidos { get; } = new();
 
     public ConcurrentQueue<Habito> HabitosPersistidos { get; } = new();
 
@@ -44,6 +49,12 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
         {
             HabitosPersistidos.Enqueue(habito);
         }
+    }
+
+    public void LimpiarCumplimientosPersistidos()
+    {
+        CumplimientosPersistidos.Clear();
+        Interlocked.Exchange(ref _cantidadDeCumplimientosGuardados, 0);
     }
 
     static JwtApiFactory()
@@ -64,6 +75,10 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
             services.AddScoped<IUsuarioRepository>(_ => new FakeUsuarioRepository(UsuariosPersistidos, RegistrarCambioGuardado));
             services.RemoveAll<IUsuarioPasswordHasher>();
             services.AddScoped<IUsuarioPasswordHasher, FakeUsuarioPasswordHasher>();
+            services.RemoveAll<ICumplimientoRepository>();
+            services.AddScoped<ICumplimientoRepository>(_ => new FakeCumplimientoRepository(
+                CumplimientosPersistidos,
+                RegistrarCumplimientoGuardado));
             services.RemoveAll<IHabitoRepository>();
             services.AddScoped<IHabitoRepository>(_ => new FakeHabitoRepository(
                 HabitosPersistidos,
@@ -84,6 +99,33 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
         Interlocked.Increment(ref _cantidadDeHabitosGuardados);
     }
 
+    private void RegistrarCumplimientoGuardado()
+    {
+        Interlocked.Increment(ref _cantidadDeCumplimientosGuardados);
+    }
+
+    private sealed class FakeCumplimientoRepository(
+        ConcurrentDictionary<(Guid HabitId, DateOnly Fecha), Cumplimiento> cumplimientos,
+        Action registrarGuardado) : ICumplimientoRepository
+    {
+        public Task<bool> ExistePorHabitoYFechaAsync(
+            Guid habitId,
+            DateOnly fecha,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(cumplimientos.ContainsKey((habitId, fecha)));
+
+        public Task AgregarAsync(Cumplimiento cumplimiento, CancellationToken cancellationToken)
+        {
+            var key = (cumplimiento.Habito.Id, cumplimiento.Fecha);
+            if (!cumplimientos.TryAdd(key, cumplimiento))
+            {
+                throw new InvalidOperationException("A completion already exists for the habit and date.");
+            }
+
+            registrarGuardado();
+            return Task.CompletedTask;
+        }
+    }
     private sealed class FakeUsuarioRepository(
         ConcurrentDictionary<Guid, Usuario> usuarios,
         Action registrarCambioGuardado) : IUsuarioRepository

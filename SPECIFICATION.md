@@ -160,7 +160,7 @@ La existencia del registro representa el cumplimiento.
 
 No se almacenará un registro adicional para representar "no realizado".
 
-Se permitirá registrar cumplimientos para la fecha local actual del usuario y para fechas pasadas que correspondieran según la programación histórica. Se rechazarán fechas futuras, fechas anteriores a `FechaInicio`, fechas no programadas según la versión aplicable y nuevos cumplimientos de hábitos actualmente inactivos. La fecha "hoy" se determina con la zona horaria del usuario, no con la del servidor.
+Solo se permitirá registrar cumplimientos para hoy o ayer, entendidos como fechas civiles locales del usuario. Se rechazarán fechas anteriores a ayer, futuras, anteriores a `FechaInicio` o no programadas según la versión histórica aplicable, así como nuevos cumplimientos de hábitos actualmente inactivos. La fecha local se calculará desde un instante UTC y la zona horaria IANA persistida del usuario; nunca se utilizará la zona horaria del servidor.
 
 Un hábito inexistente o perteneciente a otro usuario responderá `404 Not Found`, sin revelar si existe. Sin autenticación válida se responderá `401 Unauthorized`. Un cumplimiento duplicado responderá `409 Conflict`. COMP-004 realizará una comprobación previa de duplicados; COMP-005 agregará la garantía de unicidad ante concurrencia.
 
@@ -364,7 +364,7 @@ Los días sin cumplimiento no requieren un registro persistido de "no realizado"
 * Todo cumplimiento debe pertenecer a un hábito.
 * No puede existir más de un cumplimiento del mismo hábito para una misma fecha.
 * Un cumplimiento solamente debe registrarse para un hábito válido del usuario.
-* Solo se permiten cumplimientos para hoy o fechas pasadas, nunca futuras ni anteriores a `FechaInicio`.
+* Solo se permiten cumplimientos para hoy o ayer según la fecha civil local del usuario; nunca para fechas anteriores a ayer, futuras ni anteriores a `FechaInicio`.
 * La fecha actual se determina según la zona horaria del usuario.
 * Un cumplimiento debe corresponder a un día programado según la versión histórica aplicable.
 * No se admiten nuevos cumplimientos para hábitos actualmente inactivos.

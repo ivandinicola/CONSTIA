@@ -1,5 +1,6 @@
 using Constia.API.Authentication;
 using Constia.API.Contracts;
+using Constia.Application.Cumplimientos;
 using Constia.Application.Habitos;
 using Constia.Application.Temporal;
 using Constia.Domain;
@@ -18,7 +19,8 @@ public sealed class HabitosController(
     ListarHabitosInactivos listarHabitosInactivos,
     ObtenerHabitoPorId obtenerHabitoPorId,
     EditarHabito editarHabito,
-    DesactivarHabito desactivarHabito) : ControllerBase
+    DesactivarHabito desactivarHabito,
+    RegistrarCumplimiento registrarCumplimiento) : ControllerBase
 {
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -211,6 +213,77 @@ public sealed class HabitosController(
         return Ok(response);
     }
 
+    [HttpPost("{id:guid}/cumplimientos")]
+    [ProducesResponseType(typeof(CumplimientoResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<CumplimientoResponse>> RegistrarCumplimiento(
+        Guid id,
+        RegistrarCumplimientoHttpRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (usuarioActual.UsuarioId is not Guid usuarioId)
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "No se pudo identificar al usuario autenticado."
+            });
+        }
+
+        try
+        {
+            var registrado = await registrarCumplimiento.EjecutarAsync(
+                id,
+                usuarioId,
+                request.Fecha!.Value,
+                cancellationToken);
+
+            if (registrado is null)
+            {
+                return NotFound();
+            }
+
+            return StatusCode(StatusCodes.Status201Created, new CumplimientoResponse(
+                registrado.Id,
+                registrado.Fecha));
+        }
+        catch (UsuarioAutenticadoNoEncontradoException)
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "No se pudo identificar al usuario autenticado."
+            });
+        }
+        catch (ConflictoRegistroCumplimientoException)
+        {
+            return Conflict(new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "No se pudo registrar el cumplimiento.",
+                Detail = "El hábito no admite otro cumplimiento para esa fecha."
+            });
+        }
+        catch (ZonaHorariaPersistidaInvalidaException)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "No se pudo determinar la fecha local del usuario.");
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Los datos del cumplimiento no son válidos.",
+                Detail = exception.Message
+            });
+        }
+    }
     [HttpPost]
     [ProducesResponseType(typeof(HabitoResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
