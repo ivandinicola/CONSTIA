@@ -539,6 +539,228 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     }
 
     [Fact]
+    public async Task RegistrarCumplimiento_SinBearer_Devuelve401()
+    {
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/habitos/{Guid.NewGuid():D}/cumplimientos",
+            new { fecha = "2026-10-10" });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task RegistrarCumplimiento_ParaHoyLocal_Devuelve201YSoloExponeContratoDeCumplimiento()
+    {
+        var usuario = new Usuario("Zona argentina", $"{Guid.NewGuid()}@example.invalid", "fake-hash",
+            "America/Argentina/Buenos_Aires");
+        factory.UsuariosPersistidos[usuario.Id] = usuario;
+        var habit = CrearHabitoConIdYFecha(usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow, [DayOfWeek.Friday]);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticadoParaCumplimientos(usuario.Id);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/habitos/{habit.Id:D}/cumplimientos",
+            new { fecha = "2026-10-09", usuarioId = Guid.NewGuid() });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<CumplimientoResponse>();
+        Assert.NotNull(body);
+        Assert.NotEqual(Guid.Empty, body.Id);
+        Assert.Equal(new DateOnly(2026, 10, 9), body.Fecha);
+        var persisted = Assert.Single(factory.CumplimientosPersistidos);
+        Assert.Equal((habit.Id, body.Fecha), persisted.Key);
+        Assert.Same(habit, persisted.Value.Habito);
+        var json = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("usuarioId", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("habitoId", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RegistrarCumplimiento_Ayer_UsaLaVersionHistoricaAplicable()
+    {
+        var usuario = new Usuario("Zona argentina", $"{Guid.NewGuid()}@example.invalid", "fake-hash",
+            "America/Argentina/Buenos_Aires");
+        factory.UsuariosPersistidos[usuario.Id] = usuario;
+        var habit = CrearHabitoConIdYFecha(usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow, [DayOfWeek.Monday]);
+        habit.ActualizarConfiguracionVersionada(
+            habit.Nombre,
+            habit.Descripcion,
+            [DayOfWeek.Thursday],
+            new DateOnly(2026, 10, 8));
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticadoParaCumplimientos(usuario.Id);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/habitos/{habit.Id:D}/cumplimientos",
+            new { fecha = "2026-10-08" });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Contains((habit.Id, new DateOnly(2026, 10, 8)), factory.CumplimientosPersistidos.Keys);
+    }
+
+    [Theory]
+    [InlineData("2026-10-07")]
+    [InlineData("2026-10-10")]
+    public async Task RegistrarCumplimiento_FueraDeHoyYAyer_Devuelve400(string fecha)
+    {
+        var usuario = new Usuario("Zona argentina", $"{Guid.NewGuid()}@example.invalid", "fake-hash",
+            "America/Argentina/Buenos_Aires");
+        factory.UsuariosPersistidos[usuario.Id] = usuario;
+        var habit = CrearHabitoConIdYFecha(
+            usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow, [DayOfWeek.Wednesday, DayOfWeek.Saturday]);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticadoParaCumplimientos(usuario.Id);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/habitos/{habit.Id:D}/cumplimientos",
+            new { fecha });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(factory.CumplimientosPersistidos);
+    }
+
+    [Fact]
+    public async Task RegistrarCumplimiento_FechaAnteriorAFechaInicio_Devuelve400()
+    {
+        var usuario = new Usuario("Zona argentina", $"{Guid.NewGuid()}@example.invalid", "fake-hash",
+            "America/Argentina/Buenos_Aires");
+        factory.UsuariosPersistidos[usuario.Id] = usuario;
+        var habit = new Habito(usuario, "Leer", null, new DateOnly(2026, 10, 9), [DayOfWeek.Thursday]);
+        typeof(Habito).GetProperty(nameof(Habito.Id))!.SetValue(habit, Guid.NewGuid());
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticadoParaCumplimientos(usuario.Id);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/habitos/{habit.Id:D}/cumplimientos",
+            new { fecha = "2026-10-08" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(factory.CumplimientosPersistidos);
+    }
+
+    [Fact]
+    public async Task RegistrarCumplimiento_DiaNoProgramado_Devuelve400()
+    {
+        var usuario = new Usuario("Zona argentina", $"{Guid.NewGuid()}@example.invalid", "fake-hash",
+            "America/Argentina/Buenos_Aires");
+        factory.UsuariosPersistidos[usuario.Id] = usuario;
+        var habit = CrearHabitoConIdYFecha(usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow, [DayOfWeek.Monday]);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticadoParaCumplimientos(usuario.Id);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/habitos/{habit.Id:D}/cumplimientos",
+            new { fecha = "2026-10-09" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(factory.CumplimientosPersistidos);
+    }
+
+    [Fact]
+    public async Task RegistrarCumplimiento_HabitoInactivo_Devuelve409()
+    {
+        var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow, [DayOfWeek.Saturday]);
+        habit.Desactivar();
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticadoParaCumplimientos(factory.Usuario.Id);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/habitos/{habit.Id:D}/cumplimientos",
+            new { fecha = "2026-10-10" });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Empty(factory.CumplimientosPersistidos);
+    }
+
+    [Fact]
+    public async Task RegistrarCumplimiento_HabitoInexistenteODenOtroUsuario_Devuelve404()
+    {
+        var otro = new Usuario("Otro", $"{Guid.NewGuid()}@example.invalid", "fake-hash", "Etc/UTC");
+        var habit = CrearHabitoConIdYFecha(otro, "Privado", Guid.NewGuid(), DateTimeOffset.UtcNow, [DayOfWeek.Saturday]);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticadoParaCumplimientos(factory.Usuario.Id);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/habitos/{habit.Id:D}/cumplimientos",
+            new { fecha = "2026-10-10" });
+        var missingResponse = await client.PostAsJsonAsync(
+            $"/api/habitos/{Guid.NewGuid():D}/cumplimientos",
+            new { fecha = "2026-10-10" });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, missingResponse.StatusCode);
+        Assert.Empty(factory.CumplimientosPersistidos);
+    }
+
+    [Fact]
+    public async Task RegistrarCumplimiento_Duplicado_Devuelve409()
+    {
+        var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow, [DayOfWeek.Saturday]);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticadoParaCumplimientos(factory.Usuario.Id);
+        var request = new { fecha = "2026-10-10" };
+
+        var first = await client.PostAsJsonAsync($"/api/habitos/{habit.Id:D}/cumplimientos", request);
+        var duplicate = await client.PostAsJsonAsync($"/api/habitos/{habit.Id:D}/cumplimientos", request);
+
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
+        Assert.Single(factory.CumplimientosPersistidos);
+        Assert.Equal(1, factory.CantidadDeCumplimientosGuardados);
+    }
+
+    [Fact]
+    public async Task RegistrarCumplimiento_FechaAusenteOInvalida_Devuelve400()
+    {
+        var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow, [DayOfWeek.Saturday]);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticadoParaCumplimientos(factory.Usuario.Id);
+
+        var absent = await client.PostAsJsonAsync($"/api/habitos/{habit.Id:D}/cumplimientos", new { fecha = (string?)null });
+        var invalid = await client.PostAsJsonAsync($"/api/habitos/{habit.Id:D}/cumplimientos", new { fecha = "invalid" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, absent.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        Assert.Empty(factory.CumplimientosPersistidos);
+    }
+
+    [Fact]
+    public async Task RegistrarCumplimiento_UsuarioPersistidoInexistente_Devuelve401()
+    {
+        var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow, [DayOfWeek.Saturday]);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticadoParaCumplimientos(Guid.NewGuid());
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/habitos/{habit.Id:D}/cumplimientos",
+            new { fecha = "2026-10-10" });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Empty(factory.CumplimientosPersistidos);
+    }
+
+    [Fact]
+    public async Task RegistrarCumplimiento_ZonaPersistidaInvalida_Devuelve500SinDetallesInternos()
+    {
+        var usuario = new Usuario("Zona inválida", $"{Guid.NewGuid()}@example.invalid", "fake-hash", "Invalid/Unknown");
+        factory.UsuariosPersistidos[usuario.Id] = usuario;
+        var habit = CrearHabitoConIdYFecha(usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow, [DayOfWeek.Friday]);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticadoParaCumplimientos(usuario.Id);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/habitos/{habit.Id:D}/cumplimientos",
+            new { fecha = "2026-10-09" });
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.Equal("No se pudo determinar la fecha local del usuario.", problem?.Title);
+        Assert.DoesNotContain("Invalid/Unknown", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Empty(factory.CumplimientosPersistidos);
+    }
+    [Fact]
     public async Task CrearHabito_SinBearer_Devuelve401()
     {
         using var client = factory.CreateClient();
@@ -639,6 +861,12 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
         return client;
     }
 
+    private HttpClient ClienteAutenticadoParaCumplimientos(Guid subject)
+    {
+        factory.LimpiarCumplimientosPersistidos();
+        return ClienteAutenticado(subject);
+    }
+
     private string CrearToken(Guid subject)
     {
         var now = DateTimeOffset.UtcNow;
@@ -688,9 +916,10 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
         Usuario propietario,
         string nombre,
         Guid id,
-        DateTimeOffset fechaCreacion)
+        DateTimeOffset fechaCreacion,
+        DayOfWeek[]? diasProgramados = null)
     {
-        var habito = new Habito(propietario, nombre, null, new DateOnly(2026, 1, 1), [DayOfWeek.Monday]);
+        var habito = new Habito(propietario, nombre, null, new DateOnly(2026, 1, 1), diasProgramados ?? [DayOfWeek.Monday]);
         typeof(Habito).GetProperty(nameof(Habito.Id))!.SetValue(habito, id);
         typeof(Habito).GetProperty(nameof(Habito.FechaCreacion))!.SetValue(habito, fechaCreacion);
         return habito;

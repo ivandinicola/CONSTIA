@@ -122,7 +122,7 @@ Solo se almacenarán los cumplimientos realizados.
 
 No se generarán registros separados para representar un hábito no realizado.
 
-Se podrán registrar cumplimientos para hoy y para fechas pasadas que correspondieran según la programación histórica. Se rechazarán fechas futuras, anteriores a `FechaInicio` o no programadas, así como nuevos cumplimientos de hábitos actualmente inactivos, incluso retroactivos. "Hoy" se determina según la zona horaria del usuario. Un hábito ajeno o inexistente responderá `404`; la falta de autenticación válida responderá `401`; un duplicado responderá `409`. COMP-004 realizará una comprobación previa y COMP-005 incorporará la garantía ante concurrencia.
+Solo se podrán registrar cumplimientos para hoy o ayer, entendidos como fechas civiles locales del usuario. Se rechazarán fechas anteriores a ayer, futuras, anteriores a `FechaInicio` o no programadas según la programación histórica, así como nuevos cumplimientos de hábitos actualmente inactivos. La fecha local se calculará desde un instante UTC y la zona horaria IANA persistida del usuario. Un hábito ajeno o inexistente responderá `404`; la falta de autenticación válida responderá `401`; un duplicado responderá `409`. COMP-004 realizará una comprobación previa y COMP-005 incorporará la garantía ante concurrencia.
 
 Si un cumplimiento ya registrado deja de corresponder a un día programado debido a una edición consolidada de esa fecha, permanecerá almacenado como hecho realizado. No se contará como oportunidad programada ni contribuirá a métricas basadas en cumplimientos programados; no se eliminará ni modificará retroactivamente.
 

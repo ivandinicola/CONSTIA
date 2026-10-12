@@ -1,9 +1,11 @@
-using Constia.Application.Usuarios;
-using Constia.Application.Habitos;
-using Constia.Application.Temporal;
 using Constia.API.Authentication;
+using Constia.Application.Cumplimientos;
+using Constia.Application.Habitos;
+using Constia.Application.Usuarios;
+using Constia.Application.Temporal;
 using Constia.Infrastructure;
 using Constia.Infrastructure.Habitos;
+using Constia.Infrastructure.Cumplimientos;
 using Constia.Infrastructure.Security;
 using Constia.Infrastructure.Usuarios;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -35,6 +37,7 @@ builder.Services.AddSingleton<IFechaLocalUsuario, FechaLocalUsuario>();
 
 builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
 builder.Services.AddScoped<IHabitoRepository, HabitoRepository>();
+builder.Services.AddScoped<ICumplimientoRepository, CumplimientoRepository>();
 builder.Services.AddScoped<IUsuarioActual, HttpContextUsuarioActual>();
 builder.Services.AddScoped<IUsuarioPasswordHasher, AspNetCorePasswordHasher>();
 builder.Services.AddScoped<IAccessTokenService, JwtAccessTokenService>();
@@ -47,6 +50,7 @@ builder.Services.AddScoped<ListarHabitosInactivos>();
 builder.Services.AddScoped<ObtenerHabitoPorId>();
 builder.Services.AddScoped<EditarHabito>();
 builder.Services.AddScoped<DesactivarHabito>();
+builder.Services.AddScoped<RegistrarCumplimiento>();
 
 var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SigningKey));
 builder.Services

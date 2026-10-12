@@ -52,7 +52,7 @@ jobs:
       - name: Test
         run: >-
           dotnet test --no-build --configuration Release
-          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests"
+          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests&FullyQualifiedName!~RegistrarCumplimientoSqlServerTests"
 
       - name: Test TEMP-003 migration against disposable SQL Server
         env:
@@ -81,6 +81,30 @@ jobs:
                   f"Expected exactly 2 passing TEMP-003 SQL tests; observed {len(outcomes)} results."
               )
           print("TEMP-003 SQL migration integration tests: 2 passed; none skipped.")
+          PY
+
+      - name: Test COMP-004 completion persistence against disposable SQL Server
+        env:
+          CONSTIA_COMP004_SQLSERVER_TESTS: "true"
+          CONSTIA_COMP004_SQLSERVER_CONNECTION: "Server=127.0.0.1,1433;Initial Catalog=master;User Id=sa;Password=Constia_TEMP003_CI_Only!2026;Encrypt=False;TrustServerCertificate=True;Connect Timeout=5"
+        run: |
+          set -euo pipefail
+          results_dir="$RUNNER_TEMP/comp004-results"
+          mkdir -p "$results_dir"
+          dotnet test tests/Constia.API.Tests/Constia.API.Tests.csproj --no-build --configuration Release --filter FullyQualifiedName~RegistrarCumplimientoSqlServerTests --logger "trx;LogFileName=comp004-persistence.trx" --results-directory "$results_dir"
+          python3 - "$results_dir/comp004-persistence.trx" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          namespace = {"trx": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+          root = ET.parse(sys.argv[1]).getroot()
+          results = root.findall(".//trx:Results/trx:UnitTestResult", namespace)
+          outcomes = [result.attrib.get("outcome") for result in results]
+          if len(outcomes) != 1 or outcomes.count("Passed") != 1:
+              raise SystemExit(
+                  f"Expected exactly 1 passing COMP-004 SQL persistence test; observed {outcomes!r}."
+              )
+          print("COMP-004 SQL persistence integration test: 1 passed; none skipped.")
           PY
 
       - name: Test TEMP-004 migration and concurrency against disposable SQL Server
