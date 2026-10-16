@@ -1,8 +1,12 @@
 using System.Data;
+using Constia.Application.Cumplimientos;
+using Constia.Application.Temporal;
+using Constia.Application.Usuarios;
 using Constia.Domain;
 using Constia.Infrastructure;
 using Constia.Infrastructure.Habitos;
 using Constia.Infrastructure.Cumplimientos;
+using Constia.Infrastructure.Usuarios;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -74,6 +78,8 @@ public sealed class RegistrarCumplimientoSqlServerTests
                     command => command.Parameters.Add("@id", SqlDbType.UniqueIdentifier).Value = completion.Id));
                 Assert.Equal(1, await ScalarIntAsync(database.ConnectionString,
                     "SELECT COUNT(*) FROM sys.foreign_keys AS fk INNER JOIN sys.foreign_key_columns AS fkc ON fkc.[constraint_object_id] = fk.[object_id] INNER JOIN sys.columns AS parentColumn ON parentColumn.[object_id] = fkc.[parent_object_id] AND parentColumn.[column_id] = fkc.[parent_column_id] INNER JOIN sys.columns AS referencedColumn ON referencedColumn.[object_id] = fkc.[referenced_object_id] AND referencedColumn.[column_id] = fkc.[referenced_column_id] WHERE fk.[name] = N'FK_Cumplimiento_Habito_HabitoId' AND fk.[referenced_object_id] = OBJECT_ID(N'[dbo].[Habito]') AND parentColumn.[name] = N'HabitoId' AND referencedColumn.[name] = N'Id';"));
+                Assert.Equal(1, await ScalarIntAsync(database.ConnectionString,
+                    "SELECT COUNT(*) FROM sys.indexes WHERE [object_id] = OBJECT_ID(N'[dbo].[Cumplimiento]') AND [name] = N'UX_Cumplimiento_HabitoId_Fecha' AND [is_unique] = 1;"));
 
                 var invalidHabitId = Guid.NewGuid();
                 var foreignKeyFailure = await Assert.ThrowsAsync<SqlException>(() =>
@@ -94,6 +100,217 @@ public sealed class RegistrarCumplimientoSqlServerTests
         }
     }
 
+    [SqlServerIntegrationFact]
+    public async Task RegistrarCumplimiento_DosSolicitudesSimultaneasParaLaMismaFecha_SoloUnaSeGuarda()
+    {
+        var database = await CreateReadyDatabaseAsync();
+        try
+        {
+            var userId = Guid.NewGuid();
+            var habitId = Guid.NewGuid();
+            var today = new DateOnly(2026, 10, 17);
+            await InsertOwnerAndHabitAsync(database.ConnectionString, userId, habitId, today.AddDays(-1), null);
+
+            var barrier = new TwoPartyInsertBarrier();
+            async Task<bool> TryRegisterAsync()
+            {
+                await using var context = CreateContext(database.ConnectionString);
+                var useCase = new RegistrarCumplimiento(
+                    new UsuarioRepository(context),
+                    new HabitoRepository(context),
+                    new BarrierCumplimientoRepository(new CumplimientoRepository(context), barrier),
+                    new FixedLocalDate(today));
+                try
+                {
+                    return await useCase.EjecutarAsync(habitId, userId, today) is not null;
+                }
+                catch (ConflictoRegistroCumplimientoException)
+                {
+                    return false;
+                }
+            }
+
+            var results = await Task.WhenAll(TryRegisterAsync(), TryRegisterAsync());
+
+            Assert.Single(results, result => result);
+            Assert.Single(results, result => !result);
+            Assert.Equal(1, await ScalarIntAsync(database.ConnectionString,
+                "SELECT COUNT(*) FROM [Cumplimiento] WHERE [HabitoId] = @habitId AND [Fecha] = @fecha;",
+                command =>
+                {
+                    command.Parameters.Add("@habitId", SqlDbType.UniqueIdentifier).Value = habitId;
+                    command.Parameters.Add("@fecha", SqlDbType.Date).Value = today.ToDateTime(TimeOnly.MinValue);
+                }));
+        }
+        finally
+        {
+            await DropDisposableDatabaseAsync(database);
+        }
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task RegistrarCumplimiento_PermiteHabitosYFechasDistintos()
+    {
+        var database = await CreateReadyDatabaseAsync();
+        try
+        {
+            var today = new DateOnly(2026, 10, 17);
+            var userId = Guid.NewGuid();
+            var firstHabitId = Guid.NewGuid();
+            var secondUserId = Guid.NewGuid();
+            var secondHabitId = Guid.NewGuid();
+            await InsertOwnerAndHabitAsync(database.ConnectionString, userId, firstHabitId, today.AddDays(-1), null);
+            await InsertOwnerAndHabitAsync(database.ConnectionString, secondUserId, secondHabitId, today.AddDays(-1), null);
+
+            foreach (var (ownerId, habitId, date) in new[]
+                     {
+                         (userId, firstHabitId, today.AddDays(-1)),
+                         (userId, firstHabitId, today),
+                         (secondUserId, secondHabitId, today)
+                     })
+            {
+                await using var context = CreateContext(database.ConnectionString);
+                var useCase = new RegistrarCumplimiento(
+                    new UsuarioRepository(context),
+                    new HabitoRepository(context),
+                    new CumplimientoRepository(context),
+                    new FixedLocalDate(today));
+
+                Assert.NotNull(await useCase.EjecutarAsync(habitId, ownerId, date));
+            }
+
+            Assert.Equal(3, await ScalarIntAsync(database.ConnectionString,
+                "SELECT COUNT(*) FROM [Cumplimiento];"));
+        }
+        finally
+        {
+            await DropDisposableDatabaseAsync(database);
+        }
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task Repositorio_ErrorDeClavePrimariaNoSeTraduceAConflictoDeDuplicado()
+    {
+        var database = await CreateReadyDatabaseAsync();
+        try
+        {
+            var userId = Guid.NewGuid();
+            var habitId = Guid.NewGuid();
+            var today = new DateOnly(2026, 10, 17);
+            await InsertOwnerAndHabitAsync(database.ConnectionString, userId, habitId, today.AddDays(-1), null);
+            Guid completionId;
+
+            await using (var context = CreateContext(database.ConnectionString))
+            {
+                var habit = await new HabitoRepository(context).BuscarParaModificarPorIdYUsuarioAsync(
+                    habitId,
+                    userId,
+                    CancellationToken.None);
+                Assert.NotNull(habit);
+                var first = new Cumplimiento(habit, today);
+                await new CumplimientoRepository(context).AgregarAsync(first, CancellationToken.None);
+                completionId = first.Id;
+            }
+
+            await using (var context = CreateContext(database.ConnectionString))
+            {
+                var habit = await new HabitoRepository(context).BuscarParaModificarPorIdYUsuarioAsync(
+                    habitId,
+                    userId,
+                    CancellationToken.None);
+                Assert.NotNull(habit);
+                var second = new Cumplimiento(habit, today.AddDays(-1));
+                typeof(Cumplimiento).GetProperty(nameof(Cumplimiento.Id))!.SetValue(second, completionId);
+
+                var failure = await Assert.ThrowsAsync<DbUpdateException>(() =>
+                    new CumplimientoRepository(context).AgregarAsync(second, CancellationToken.None));
+
+                var sqlFailure = Assert.IsType<SqlException>(failure.InnerException);
+                Assert.Equal(2627, sqlFailure.Number);
+                Assert.DoesNotContain("UX_Cumplimiento_HabitoId_Fecha", sqlFailure.Message, StringComparison.OrdinalIgnoreCase);
+            }
+
+            Assert.Equal(1, await ScalarIntAsync(database.ConnectionString,
+                "SELECT COUNT(*) FROM [Cumplimiento] WHERE [HabitoId] = @habitId AND [Fecha] = @fecha;",
+                command =>
+                {
+                    command.Parameters.Add("@habitId", SqlDbType.UniqueIdentifier).Value = habitId;
+                    command.Parameters.Add("@fecha", SqlDbType.Date).Value = today.ToDateTime(TimeOnly.MinValue);
+                }));
+        }
+        finally
+        {
+            await DropDisposableDatabaseAsync(database);
+        }
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task Migracion_ConDuplicadosPreviosFallaSinBorrarRegistros()
+    {
+        var adminConnectionString = GetDisposableRunnerConnectionString();
+        var database = await CreateDisposableDatabaseAsync(adminConnectionString);
+        try
+        {
+            const string lastPreComp005Migration = "20261011023329_AddHabitoConcurrencyVersion";
+            await using (var context = CreateContext(database.ConnectionString))
+            {
+                await context.GetService<IMigrator>().MigrateAsync(lastPreComp005Migration);
+            }
+
+            var userId = Guid.NewGuid();
+            var habitId = Guid.NewGuid();
+            var startDate = new DateOnly(2026, 10, 16);
+            await InsertOwnerAndHabitAsync(database.ConnectionString, userId, habitId, startDate, Guid.NewGuid());
+            await ExecuteAsync(database.ConnectionString,
+                "INSERT INTO [Cumplimiento] ([Id], [Fecha], [HabitoId]) VALUES (@id, @fecha, @habitId);",
+                command =>
+                {
+                    command.Parameters.Add("@id", SqlDbType.UniqueIdentifier).Value = Guid.NewGuid();
+                    command.Parameters.Add("@fecha", SqlDbType.Date).Value = startDate.ToDateTime(TimeOnly.MinValue);
+                    command.Parameters.Add("@habitId", SqlDbType.UniqueIdentifier).Value = habitId;
+                });
+
+            await using (var context = CreateContext(database.ConnectionString))
+            {
+                var migrationFailure = await Assert.ThrowsAsync<SqlException>(
+                    () => context.GetService<IMigrator>().MigrateAsync());
+                Assert.Equal(51005, migrationFailure.Number);
+            }
+
+            Assert.Equal(2, await ScalarIntAsync(database.ConnectionString,
+                "SELECT COUNT(*) FROM [Cumplimiento] WHERE [HabitoId] = @habitId AND [Fecha] = @fecha;",
+                command =>
+                {
+                    command.Parameters.Add("@habitId", SqlDbType.UniqueIdentifier).Value = habitId;
+                    command.Parameters.Add("@fecha", SqlDbType.Date).Value = startDate.ToDateTime(TimeOnly.MinValue);
+                }));
+            Assert.Equal(0, await ScalarIntAsync(database.ConnectionString,
+                "SELECT COUNT(*) FROM [__EFMigrationsHistory] WHERE [MigrationId] = N'20261016172555_AddCumplimientoUniqueHabitDate';"));
+            Assert.Equal(0, await ScalarIntAsync(database.ConnectionString,
+                "SELECT COUNT(*) FROM sys.indexes WHERE [object_id] = OBJECT_ID(N'[dbo].[Cumplimiento]') AND [name] = N'UX_Cumplimiento_HabitoId_Fecha';"));
+        }
+        finally
+        {
+            await DropDisposableDatabaseAsync(database);
+        }
+    }
+
+    private static async Task<DisposableDatabase> CreateReadyDatabaseAsync()
+    {
+        var database = await CreateDisposableDatabaseAsync(GetDisposableRunnerConnectionString());
+        try
+        {
+            await using var context = CreateContext(database.ConnectionString);
+            await context.Database.MigrateAsync();
+            return database;
+        }
+        catch
+        {
+            await DropDisposableDatabaseAsync(database);
+            throw;
+        }
+    }
+
     private static ConstiaDbContext CreateContext(string connectionString)
     {
         var options = new DbContextOptionsBuilder<ConstiaDbContext>()
@@ -107,7 +324,7 @@ public sealed class RegistrarCumplimientoSqlServerTests
         Guid userId,
         Guid habitId,
         DateOnly startDate,
-        Guid existingCompletionId)
+        Guid? existingCompletionId)
     {
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync();
@@ -151,14 +368,17 @@ public sealed class RegistrarCumplimientoSqlServerTests
                 });
         }
 
-        await ExecuteAsync(connection,
-            "INSERT INTO [Cumplimiento] ([Id], [Fecha], [HabitoId]) VALUES (@id, @fecha, @habitId);",
-            command =>
-            {
-                command.Parameters.Add("@id", SqlDbType.UniqueIdentifier).Value = existingCompletionId;
-                command.Parameters.Add("@fecha", SqlDbType.Date).Value = startDate.ToDateTime(TimeOnly.MinValue);
-                command.Parameters.Add("@habitId", SqlDbType.UniqueIdentifier).Value = habitId;
-            });
+        if (existingCompletionId is Guid completionId)
+        {
+            await ExecuteAsync(connection,
+                "INSERT INTO [Cumplimiento] ([Id], [Fecha], [HabitoId]) VALUES (@id, @fecha, @habitId);",
+                command =>
+                {
+                    command.Parameters.Add("@id", SqlDbType.UniqueIdentifier).Value = completionId;
+                    command.Parameters.Add("@fecha", SqlDbType.Date).Value = startDate.ToDateTime(TimeOnly.MinValue);
+                    command.Parameters.Add("@habitId", SqlDbType.UniqueIdentifier).Value = habitId;
+                });
+        }
     }
 
     private static async Task<int> ScalarIntAsync(
@@ -263,6 +483,44 @@ public sealed class RegistrarCumplimientoSqlServerTests
         string AdminConnectionString,
         string ConnectionString,
         string Name);
+
+    private sealed class TwoPartyInsertBarrier
+    {
+        private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _arrived;
+
+        public async Task WaitAsync(CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref _arrived) == 2)
+            {
+                _release.TrySetResult();
+            }
+
+            await _release.Task.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+        }
+    }
+
+    private sealed class BarrierCumplimientoRepository(
+        ICumplimientoRepository inner,
+        TwoPartyInsertBarrier barrier) : ICumplimientoRepository
+    {
+        public Task<bool> ExistePorHabitoYFechaAsync(
+            Guid habitId,
+            DateOnly fecha,
+            CancellationToken cancellationToken) =>
+            inner.ExistePorHabitoYFechaAsync(habitId, fecha, cancellationToken);
+
+        public async Task AgregarAsync(Cumplimiento cumplimiento, CancellationToken cancellationToken)
+        {
+            await barrier.WaitAsync(cancellationToken);
+            await inner.AgregarAsync(cumplimiento, cancellationToken);
+        }
+    }
+
+    private sealed class FixedLocalDate(DateOnly today) : IFechaLocalUsuario
+    {
+        public DateOnly ObtenerHoy(string timeZoneId) => today;
+    }
 
     private sealed class SqlServerIntegrationFactAttribute : FactAttribute
     {
