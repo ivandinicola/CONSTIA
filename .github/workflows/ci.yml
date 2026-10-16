@@ -83,7 +83,7 @@ jobs:
           print("TEMP-003 SQL migration integration tests: 2 passed; none skipped.")
           PY
 
-      - name: Test COMP-004 completion persistence against disposable SQL Server
+      - name: Test completion persistence and uniqueness against disposable SQL Server
         env:
           CONSTIA_COMP004_SQLSERVER_TESTS: "true"
           CONSTIA_COMP004_SQLSERVER_CONNECTION: "Server=127.0.0.1,1433;Initial Catalog=master;User Id=sa;Password=Constia_TEMP003_CI_Only!2026;Encrypt=False;TrustServerCertificate=True;Connect Timeout=5"
@@ -100,11 +100,11 @@ jobs:
           root = ET.parse(sys.argv[1]).getroot()
           results = root.findall(".//trx:Results/trx:UnitTestResult", namespace)
           outcomes = [result.attrib.get("outcome") for result in results]
-          if len(outcomes) != 1 or outcomes.count("Passed") != 1:
+          if len(outcomes) != 5 or outcomes.count("Passed") != 5:
               raise SystemExit(
-                  f"Expected exactly 1 passing COMP-004 SQL persistence test; observed {outcomes!r}."
+                  f"Expected exactly 5 passing completion SQL tests; observed {outcomes!r}."
               )
-          print("COMP-004 SQL persistence integration test: 1 passed; none skipped.")
+          print("Completion SQL integration tests: 5 passed; none skipped.")
           PY
 
       - name: Test TEMP-004 migration and concurrency against disposable SQL Server

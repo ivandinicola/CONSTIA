@@ -36,7 +36,9 @@ namespace Constia.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("HabitoId");
+                    b.HasIndex("HabitoId", "Fecha")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Cumplimiento_HabitoId_Fecha");
 
                     b.ToTable("Cumplimiento");
                 });

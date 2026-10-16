@@ -13,6 +13,10 @@ public class CumplimientoConfiguration : IEntityTypeConfiguration<Cumplimiento>
         builder.Property(cumplimiento => cumplimiento.Fecha)
             .IsRequired();
 
+        builder.HasIndex("HabitoId", nameof(Cumplimiento.Fecha))
+            .IsUnique()
+            .HasDatabaseName("UX_Cumplimiento_HabitoId_Fecha");
+
         builder.HasOne(cumplimiento => cumplimiento.Habito)
             .WithMany()
             .HasForeignKey("HabitoId")
