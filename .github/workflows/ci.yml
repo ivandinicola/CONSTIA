@@ -52,7 +52,7 @@ jobs:
       - name: Test
         run: >-
           dotnet test --no-build --configuration Release
-          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests&FullyQualifiedName!~RegistrarCumplimientoSqlServerTests"
+          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests&FullyQualifiedName!~RegistrarCumplimientoSqlServerTests&FullyQualifiedName!~Temp005StateHistorySqlServerTests"
 
       - name: Test TEMP-003 migration against disposable SQL Server
         env:
@@ -136,11 +136,40 @@ jobs:
           concurrency = [outcome for class_name, outcome in classified if class_name.endswith("HabitoConcurrencySqlServerTests")]
           migration = [outcome for class_name, outcome in classified if class_name.endswith("Temp004ConcurrencyMigrationSqlServerTests")]
           outcomes = [outcome for _, outcome in classified]
-          if len(concurrency) != 3 or concurrency.count("Passed") != 3:
-              raise SystemExit(f"Expected exactly 3 passing concurrency SQL tests; got {concurrency!r}.")
+          if len(concurrency) != 4 or concurrency.count("Passed") != 4:
+              raise SystemExit(f"Expected exactly 4 passing concurrency SQL tests; got {concurrency!r}.")
           if len(migration) != 2 or migration.count("Passed") != 2:
               raise SystemExit(f"Expected exactly 2 passing TEMP-004 migration SQL tests; got {migration!r}.")
-          if len(results) != 5 or outcomes.count("Passed") != 5:
-              raise SystemExit(f"Expected exactly 5 passing TEMP-004 SQL tests with no skips; got {outcomes!r}.")
-          print("TEMP-004 SQL integration tests: 5 passed; none skipped.")
+          if len(results) != 6 or outcomes.count("Passed") != 6:
+              raise SystemExit(f"Expected exactly 6 passing TEMP-004 SQL tests with no skips; got {outcomes!r}.")
+          print("TEMP-004 SQL integration tests: 6 passed; none skipped.")
+          PY
+
+      - name: Test TEMP-005 status history against disposable SQL Server
+        env:
+          CONSTIA_TEMP005_SQLSERVER_TESTS: "true"
+          CONSTIA_TEMP005_SQLSERVER_CONNECTION: "Server=127.0.0.1,1433;Initial Catalog=master;User Id=sa;Password=Constia_TEMP003_CI_Only!2026;Encrypt=False;TrustServerCertificate=True;Connect Timeout=5"
+        run: |
+          set -euo pipefail
+          results_dir="$RUNNER_TEMP/temp005-results"
+          mkdir -p "$results_dir"
+          dotnet test tests/Constia.API.Tests/Constia.API.Tests.csproj \
+            --no-build \
+            --configuration Release \
+            --filter FullyQualifiedName~Temp005StateHistorySqlServerTests \
+            --logger "trx;LogFileName=temp005-state-history.trx" \
+            --results-directory "$results_dir"
+          python3 - "$results_dir/temp005-state-history.trx" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          namespace = {"trx": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+          root = ET.parse(sys.argv[1]).getroot()
+          results = root.findall(".//trx:Results/trx:UnitTestResult", namespace)
+          outcomes = [result.attrib.get("outcome") for result in results]
+          if len(outcomes) != 9 or outcomes.count("Passed") != 9:
+              raise SystemExit(
+                  f"Expected exactly 9 passing TEMP-005 SQL tests; observed {outcomes!r}."
+              )
+          print("TEMP-005 SQL state history tests: 9 passed; none skipped.")
           PY

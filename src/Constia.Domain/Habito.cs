@@ -3,6 +3,7 @@ namespace Constia.Domain;
 public class Habito
 {
     private readonly List<ProgramacionHabito> _programaciones = [];
+    private readonly List<PeriodoEstadoHabito> _periodosEstado = [];
 
     public Guid Id { get; private set; }
 
@@ -19,6 +20,9 @@ public class Habito
     public EstadoHabito Estado { get; private set; }
 
     public IReadOnlyCollection<ProgramacionHabito> Programaciones => _programaciones.AsReadOnly();
+
+    public IReadOnlyCollection<PeriodoEstadoHabito> PeriodosEstado => _periodosEstado.AsReadOnly();
+
 
     public IReadOnlyCollection<DiaProgramado> DiasProgramados => ProgramacionActual.DiasProgramados;
 
@@ -51,11 +55,99 @@ public class Habito
         FechaInicio = fechaInicio;
         Estado = EstadoHabito.Activo;
         _programaciones.Add(new ProgramacionHabito(fechaInicio, null, diasProgramados));
+        var estadoInicial = new PeriodoEstadoHabito(EstadoHabito.Activo, fechaInicio);
+        estadoInicial.AsignarHabito(Id);
+        _periodosEstado.Add(estadoInicial);
     }
 
-    public void Desactivar()
+    public EstadoHabito? ObtenerEstadoPara(DateOnly fecha)
     {
+        var aplicables = _periodosEstado.Where(periodo => periodo.AplicaA(fecha)).Take(2).ToArray();
+        if (aplicables.Length > 1)
+        {
+            throw new InvalidOperationException("Los períodos de estado se superponen.");
+        }
+
+        if (aplicables.Length == 0)
+        {
+            return null;
+        }
+
+        if (!Enum.IsDefined(aplicables[0].Estado))
+        {
+            throw new InvalidOperationException("El historial de estado contiene un valor desconocido.");
+        }
+
+        return aplicables[0].Estado;
+    }
+
+    public bool Desactivar(DateOnly fechaEfectiva)
+    {
+        var abierto = ObtenerPeriodoEstadoAbiertoValidado();
+        if (Estado == EstadoHabito.Inactivo)
+        {
+            if (fechaEfectiva < abierto.VigenteDesde && abierto.VigenteDesde != FechaInicio)
+            {
+                throw new ConflictoVigenciaEstadoHabitoException(
+                    "La fecha efectiva es anterior al inicio del estado inactivo vigente.");
+            }
+
+            return false;
+        }
+
+        if (abierto.Estado != EstadoHabito.Activo)
+        {
+            throw new InvalidOperationException("La proyección actual y el período abierto no coinciden.");
+        }
+
+        if (fechaEfectiva < abierto.VigenteDesde)
+        {
+            if (_periodosEstado.Count != 1 || abierto.VigenteDesde != FechaInicio)
+            {
+                throw new ConflictoVigenciaEstadoHabitoException(
+                    "La fecha efectiva es anterior a un período de estado ya vigente.");
+            }
+
+            // Antes del inicio del hábito no existe una oportunidad activa. Conservamos un único
+            // período inicial, pero hacemos que su estado desde FechaInicio sea el estado final.
+            abierto.ReemplazarEstadoAbierto(EstadoHabito.Inactivo);
+        }
+        else if (fechaEfectiva == abierto.VigenteDesde)
+        {
+            abierto.ReemplazarEstadoAbierto(EstadoHabito.Inactivo);
+        }
+        else
+        {
+            var nuevoPeriodo = new PeriodoEstadoHabito(EstadoHabito.Inactivo, fechaEfectiva);
+            nuevoPeriodo.AsignarHabito(Id);
+            abierto.CerrarEn(fechaEfectiva);
+            _periodosEstado.Add(nuevoPeriodo);
+        }
+
         Estado = EstadoHabito.Inactivo;
+        return true;
+    }
+
+    public void InicializarHistorialEstadoDesdeCorte(DateOnly fechaInicioHistorial, EstadoHabito estadoCapturado)
+    {
+        if (_periodosEstado.Count != 0)
+        {
+            throw new InvalidOperationException("El historial de estado ya contiene períodos.");
+        }
+
+        if (fechaInicioHistorial < FechaInicio)
+        {
+            throw new ArgumentOutOfRangeException(nameof(fechaInicioHistorial));
+        }
+
+        if (!Enum.IsDefined(estadoCapturado) || estadoCapturado != Estado)
+        {
+            throw new InvalidOperationException("El estado capturado no coincide con la proyección actual del hábito.");
+        }
+
+        var period = new PeriodoEstadoHabito(estadoCapturado, fechaInicioHistorial);
+        period.AsignarHabito(Id);
+        _periodosEstado.Add(period);
     }
 
     public void ActualizarConfiguracion(
@@ -213,5 +305,37 @@ public class Habito
         }
 
         return abiertas[0];
+    }
+
+    private PeriodoEstadoHabito ObtenerPeriodoEstadoAbiertoValidado()
+    {
+        if (_periodosEstado.Count == 0)
+        {
+            throw new InvalidOperationException("El historial de estado del hábito no está inicializado.");
+        }
+
+        var ordenados = _periodosEstado.OrderBy(periodo => periodo.VigenteDesde).ToArray();
+        for (var index = 0; index < ordenados.Length; index++)
+        {
+            var periodo = ordenados[index];
+            if (!Enum.IsDefined(periodo.Estado) ||
+                periodo.VigenteHasta is DateOnly fin && fin <= periodo.VigenteDesde)
+            {
+                throw new InvalidOperationException("El historial de estado contiene un período inválido.");
+            }
+
+            if (index > 0 && ordenados[index - 1].VigenteHasta != periodo.VigenteDesde)
+            {
+                throw new InvalidOperationException("Los períodos de estado deben ser contiguos y no superponerse.");
+            }
+        }
+
+        var abiertos = ordenados.Where(periodo => periodo.VigenteHasta is null).ToArray();
+        if (abiertos.Length != 1 || !ReferenceEquals(abiertos[0], ordenados[^1]))
+        {
+            throw new InvalidOperationException("El historial debe tener exactamente un período abierto.");
+        }
+
+        return abiertos[0];
     }
 }

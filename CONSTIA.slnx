@@ -10,4 +10,7 @@
     <Project Path="tests/Constia.Tests/Constia.Tests.csproj" />
     <Project Path="tests/Constia.API.Tests/Constia.API.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Constia.StateHistoryBackfill/Constia.StateHistoryBackfill.csproj" />
+  </Folder>
 </Solution>

@@ -132,7 +132,7 @@ Si un cumplimiento ya registrado deja de corresponder a un día programado debid
 
 El usuario podrá consultar sus hábitos organizados por fecha.
 
-Para cada día se deberán mostrar únicamente los hábitos que estaban activos en esa fecha, cuya `FechaInicio` ya se alcanzó y cuya versión de programación vigente incluía ese día.
+Para cada día se deberán mostrar únicamente los hábitos cuyo estado histórico sea **Activo** en esa fecha, cuya `FechaInicio` ya se alcanzó y cuya versión de programación vigente incluía ese día. Un estado desconocido no se presentará como Inactivo ni como incumplimiento; la interfaz deberá poder diferenciarlo hasta que el historial esté disponible.
 
 La interfaz permitirá registrar cumplimientos desde la vista correspondiente.
 
@@ -159,7 +159,9 @@ Un día sin hábitos programados:
 * No incrementa la racha.
 * No rompe la racha.
 
-Para cada fecha se utilizarán la programación y el estado vigentes en esa fecha. Las rachas individuales y estadísticas interpretarán las versiones históricas de programación, sin cambiar las fórmulas definidas en la especificación. Los cambios de estado anteriores a la incorporación del historial no podrán reconstruirse con certeza. La implementación del historial de estados corresponde a TEMP-005 y debe preceder a las métricas históricas.
+Para cada fecha se utilizarán la programación y el estado vigentes en esa fecha. Los períodos de estado son semiabiertos `[VigenteDesde, VigenteHasta)`. Un hábito nuevo comienza Activo desde `FechaInicio`; al desactivarlo pasa a Inactivo desde la fecha civil local del propietario. V1 no permite reactivarlo y los cumplimientos ya registrados se conservan. Las rachas individuales y estadísticas interpretarán las versiones históricas de programación y estado, sin cambiar las fórmulas definidas en la especificación.
+
+TEMP-005 inicializa hábitos existentes a partir de un único corte UTC persistido y un snapshot inmutable de estado, `FechaInicio`, zona IANA y fecha local del corte. Antes de capturar el snapshot se bloquean altas de hábitos y cambios de zona horaria; hasta verificar el backfill se bloquean desactivaciones y nuevos cumplimientos. Las operaciones independientes pueden continuar cuando no alteren los datos congelados ni dependan del historial. Los cambios de estado previos al corte no podrán reconstruirse con certeza.
 
 ---
 

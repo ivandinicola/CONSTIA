@@ -121,7 +121,7 @@ public sealed class EditarHabitoTests
     {
         var usuario = CrearUsuario();
         var habito = CrearHabito(usuario);
-        habito.Desactivar();
+        habito.Desactivar(habito.FechaInicio);
         var (useCase, _, _) = CrearCaso(habito, usuario, Hoy);
 
         var result = await useCase.EjecutarAsync(

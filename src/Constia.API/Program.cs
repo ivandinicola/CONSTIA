@@ -38,6 +38,7 @@ builder.Services.AddSingleton<IFechaLocalUsuario, FechaLocalUsuario>();
 builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
 builder.Services.AddScoped<IHabitoRepository, HabitoRepository>();
 builder.Services.AddScoped<ICumplimientoRepository, CumplimientoRepository>();
+builder.Services.AddScoped<IEstadoHabitoReadinessRepository, EstadoHabitoReadinessRepository>();
 builder.Services.AddScoped<IUsuarioActual, HttpContextUsuarioActual>();
 builder.Services.AddScoped<IUsuarioPasswordHasher, AspNetCorePasswordHasher>();
 builder.Services.AddScoped<IAccessTokenService, JwtAccessTokenService>();

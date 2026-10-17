@@ -26,6 +26,9 @@ public sealed class HabitosController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> Desactivar(
         Guid id,
         CancellationToken cancellationToken)
@@ -39,8 +42,42 @@ public sealed class HabitosController(
             });
         }
 
-        var desactivado = await desactivarHabito.EjecutarAsync(id, usuarioId, cancellationToken);
-        return desactivado ? NoContent() : NotFound();
+        try
+        {
+            var desactivado = await desactivarHabito.EjecutarAsync(id, usuarioId, cancellationToken);
+            return desactivado ? NoContent() : NotFound();
+        }
+        catch (HistorialEstadoHabitoNoInicializadoException)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new ProblemDetails
+            {
+                Status = StatusCodes.Status503ServiceUnavailable,
+                Title = "El historial de estados todavía no está disponible.",
+                Extensions = { ["code"] = "habit_status_history_not_initialized" }
+            });
+        }
+        catch (ConflictoVigenciaEstadoHabitoException)
+        {
+            return Conflict(new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "No se pudo desactivar el hábito por un conflicto de vigencia."
+            });
+        }
+        catch (ConflictoEdicionConcurrenteException)
+        {
+            return Conflict(new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "El hábito cambió durante la operación. Volvé a intentarlo."
+            });
+        }
+        catch (ZonaHorariaPersistidaInvalidaException)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "No se pudo determinar la fecha local del usuario.");
+        }
     }
 
     [HttpGet("inactivos")]
@@ -219,6 +256,8 @@ public sealed class HabitosController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<CumplimientoResponse>> RegistrarCumplimiento(
         Guid id,
@@ -259,6 +298,24 @@ public sealed class HabitosController(
                 Title = "No se pudo identificar al usuario autenticado."
             });
         }
+        catch (HistorialEstadoHabitoNoInicializadoException)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new ProblemDetails
+            {
+                Status = StatusCodes.Status503ServiceUnavailable,
+                Title = "El historial de estados todavía no está disponible.",
+                Extensions = { ["code"] = "habit_status_history_not_initialized" }
+            });
+        }
+        catch (EstadoHabitoHistoricoDesconocidoException)
+        {
+            return UnprocessableEntity(new ProblemDetails
+            {
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Title = "No se conoce el estado histórico del hábito para esa fecha.",
+                Extensions = { ["code"] = "habit_status_history_unknown" }
+            });
+        }
         catch (ConflictoRegistroCumplimientoException)
         {
             return Conflict(new ProblemDetails
@@ -288,6 +345,7 @@ public sealed class HabitosController(
     [ProducesResponseType(typeof(HabitoResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<HabitoResponse>> Crear(
         CrearHabitoHttpRequest request,
         CancellationToken cancellationToken)
@@ -337,6 +395,15 @@ public sealed class HabitosController(
                 Status = StatusCodes.Status400BadRequest,
                 Title = "Los datos del hábito no son válidos.",
                 Detail = exception.Message
+            });
+        }
+        catch (HistorialEstadoHabitoNoInicializadoException)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new ProblemDetails
+            {
+                Status = StatusCodes.Status503ServiceUnavailable,
+                Title = "El historial de estados todavía no está disponible.",
+                Extensions = { ["code"] = "habit_status_history_not_initialized" }
             });
         }
     }

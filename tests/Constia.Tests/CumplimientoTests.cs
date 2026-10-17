@@ -38,7 +38,7 @@ public sealed class CumplimientoTests
     public void Constructor_PermiteRepresentarCumplimientoDeHabitoInactivo()
     {
         var habito = CrearHabito();
-        habito.Desactivar();
+        habito.Desactivar(habito.FechaInicio);
 
         var cumplimiento = new Cumplimiento(habito, new DateOnly(2026, 10, 7));
 

@@ -12,7 +12,8 @@ public sealed class CambiarZonaHorariaUsuarioTests
         var usuario = new Usuario("Ana", "ana@example.com", "hash", "Etc/UTC");
         var otroUsuario = new Usuario("Bea", "bea@example.com", "hash", "Etc/UTC");
         var repositorio = new FakeUsuarioRepository(usuario);
-        var casoDeUso = new CambiarZonaHorariaUsuario(repositorio, new ZonaHorariaIana());
+        var casoDeUso = new CambiarZonaHorariaUsuario(repositorio, new ZonaHorariaIana(),
+            new EstadoHabitoReadinessRepositoryFalso());
 
         var resultado = await casoDeUso.EjecutarAsync(usuario.Id, "Asia/Tokyo");
 
@@ -27,7 +28,8 @@ public sealed class CambiarZonaHorariaUsuarioTests
     {
         var usuario = new Usuario("Ana", "ana@example.com", "hash", "Etc/UTC");
         var repositorio = new FakeUsuarioRepository(usuario);
-        var casoDeUso = new CambiarZonaHorariaUsuario(repositorio, new ZonaHorariaIana());
+        var casoDeUso = new CambiarZonaHorariaUsuario(repositorio, new ZonaHorariaIana(),
+            new EstadoHabitoReadinessRepositoryFalso());
 
         await Assert.ThrowsAsync<ZonaHorariaIanaInvalidaException>(() =>
             casoDeUso.EjecutarAsync(usuario.Id, "Eastern Standard Time"));
@@ -42,7 +44,8 @@ public sealed class CambiarZonaHorariaUsuarioTests
     {
         var usuario = new Usuario("Ana", "ana@example.com", "hash", "Etc/UTC");
         var repositorio = new FakeUsuarioRepository(usuario);
-        var casoDeUso = new CambiarZonaHorariaUsuario(repositorio, new ZonaHorariaIana());
+        var casoDeUso = new CambiarZonaHorariaUsuario(repositorio, new ZonaHorariaIana(),
+            new EstadoHabitoReadinessRepositoryFalso());
 
         await Assert.ThrowsAsync<ZonaHorariaIanaInvalidaException>(() =>
             casoDeUso.EjecutarAsync(
@@ -58,7 +61,8 @@ public sealed class CambiarZonaHorariaUsuarioTests
     public async Task EjecutarAsync_SiElUsuarioNoExiste_DevuelveFalseYSinGuardar()
     {
         var repositorio = new FakeUsuarioRepository(null);
-        var casoDeUso = new CambiarZonaHorariaUsuario(repositorio, new ZonaHorariaIana());
+        var casoDeUso = new CambiarZonaHorariaUsuario(repositorio, new ZonaHorariaIana(),
+            new EstadoHabitoReadinessRepositoryFalso());
 
         var resultado = await casoDeUso.EjecutarAsync(Guid.NewGuid(), "Asia/Tokyo");
 

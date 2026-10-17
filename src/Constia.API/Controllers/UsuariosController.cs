@@ -1,5 +1,6 @@
 using Constia.API.Contracts;
 using Constia.API.Authentication;
+using Constia.Application.Habitos;
 using Constia.Application.Temporal;
 using Constia.Application.Usuarios;
 using Microsoft.AspNetCore.Authorization;
@@ -41,7 +42,6 @@ public sealed class UsuariosController(
                 Detail = "El identificador de zona horaria IANA no es válido o no está disponible."
             });
         }
-
         if (usuario is null)
         {
             return Conflict(new ProblemDetails
@@ -61,6 +61,7 @@ public sealed class UsuariosController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> CambiarZonaHoraria(
         CambiarZonaHorariaRequest request,
         CancellationToken cancellationToken)
@@ -86,6 +87,15 @@ public sealed class UsuariosController(
                 Status = StatusCodes.Status400BadRequest,
                 Title = "No se pudo cambiar la zona horaria.",
                 Detail = "El identificador de zona horaria IANA no es válido o no está disponible."
+            });
+        }
+        catch (HistorialEstadoHabitoNoInicializadoException)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new ProblemDetails
+            {
+                Status = StatusCodes.Status503ServiceUnavailable,
+                Title = "El historial de estados todavía no está disponible.",
+                Extensions = { ["code"] = "habit_status_history_not_initialized" }
             });
         }
     }

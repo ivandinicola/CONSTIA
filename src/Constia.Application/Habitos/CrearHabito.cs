@@ -5,7 +5,8 @@ namespace Constia.Application.Habitos;
 
 public sealed class CrearHabito(
     IUsuarioRepository usuarios,
-    IHabitoRepository habitos)
+    IHabitoRepository habitos,
+    IEstadoHabitoReadinessRepository readiness)
 {
     /// <summary>
     /// Returns null when the owner does not exist.
@@ -20,6 +21,11 @@ public sealed class CrearHabito(
         if (usuario is null)
         {
             return null;
+        }
+
+        if (!await readiness.SnapshotCapturadoAsync(cancellationToken))
+        {
+            throw new HistorialEstadoHabitoNoInicializadoException();
         }
 
         var habito = new Habito(

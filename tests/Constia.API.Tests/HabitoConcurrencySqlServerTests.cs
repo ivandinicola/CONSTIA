@@ -165,6 +165,67 @@ public sealed class HabitoConcurrencySqlServerTests
         }
     }
 
+    [SqlServerIntegrationFact]
+    public async Task Repository_DesactivacionYEdicionDeProgramacionCompitenConElMismoTokenSinCambiosParciales()
+    {
+        var database = await CrearBaseDescartableAsync();
+        try
+        {
+            await MigrarHastaActualAsync(database.ConnectionString);
+            var (usuario, habito) = CrearAgregado();
+            var completionDate = new DateOnly(2026, 10, 7);
+            await using (var seed = CrearContexto(database.ConnectionString))
+            {
+                var repository = new HabitoRepository(seed);
+                await repository.AgregarAsync(habito, CancellationToken.None);
+                seed.Add(new Cumplimiento(habito, completionDate));
+                await seed.SaveChangesAsync();
+            }
+
+            await using var stateContext = CrearContexto(database.ConnectionString);
+            await using var scheduleContext = CrearContexto(database.ConnectionString);
+            var stateRepository = new HabitoRepository(stateContext);
+            var scheduleRepository = new HabitoRepository(scheduleContext);
+            var stateCopy = await stateRepository.BuscarParaModificarPorIdYUsuarioAsync(
+                habito.Id, usuario.Id, CancellationToken.None);
+            var scheduleCopy = await scheduleRepository.BuscarParaModificarPorIdYUsuarioAsync(
+                habito.Id, usuario.Id, CancellationToken.None);
+            Assert.NotNull(stateCopy);
+            Assert.NotNull(scheduleCopy);
+
+            var effectiveDate = new DateOnly(2026, 10, 10);
+            Assert.True(stateCopy.Desactivar(effectiveDate));
+            scheduleCopy.ActualizarConfiguracionVersionada(
+                scheduleCopy.Nombre, scheduleCopy.Descripcion, [DayOfWeek.Friday], effectiveDate);
+
+            await stateRepository.GuardarCambiosAsync(stateCopy, CancellationToken.None);
+            await Assert.ThrowsAsync<ConflictoEdicionConcurrenteException>(
+                () => scheduleRepository.GuardarCambiosAsync(scheduleCopy, CancellationToken.None));
+
+            await using var verification = CrearContexto(database.ConnectionString);
+            var persisted = await verification.Set<Habito>()
+                .Include(item => item.PeriodosEstado)
+                .Include(item => item.Programaciones)
+                .ThenInclude(program => program.DiasProgramados)
+                .SingleAsync(item => item.Id == habito.Id);
+            var openState = Assert.Single(persisted.PeriodosEstado, period => period.VigenteHasta is null);
+            var openSchedule = Assert.Single(persisted.Programaciones, program => program.VigenteHasta is null);
+
+            Assert.Equal(EstadoHabito.Inactivo, persisted.Estado);
+            Assert.Equal(EstadoHabito.Inactivo, openState.Estado);
+            Assert.Equal(effectiveDate, openState.VigenteDesde);
+            Assert.Single(persisted.Programaciones);
+            Assert.Equal([DayOfWeek.Monday], openSchedule.DiasProgramados.Select(day => day.Dia));
+            Assert.Equal(2L, await ObtenerVersionAsync(verification, habito.Id));
+            Assert.Equal(1, await verification.Set<Cumplimiento>()
+                .CountAsync(item => item.Habito.Id == habito.Id && item.Fecha == completionDate));
+        }
+        finally
+        {
+            await EliminarBaseDescartableAsync(database);
+        }
+    }
+
     private static (Usuario Usuario, Habito Habito) CrearAgregado()
     {
         var usuario = new Usuario("Concurrency test", $"{Guid.NewGuid():N}@example.test", "synthetic-test-hash", "Etc/UTC");
