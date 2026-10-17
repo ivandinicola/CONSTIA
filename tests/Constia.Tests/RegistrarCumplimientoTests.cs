@@ -3,6 +3,7 @@ using Constia.Application.Habitos;
 using Constia.Application.Temporal;
 using Constia.Application.Usuarios;
 using Constia.Domain;
+using System.Reflection;
 
 namespace Constia.Tests;
 
@@ -96,7 +97,7 @@ public sealed class RegistrarCumplimientoTests
     {
         var usuario = CrearUsuario("Etc/UTC");
         var habit = CrearHabito(usuario, [DayOfWeek.Saturday]);
-        habit.Desactivar();
+        habit.Desactivar(habit.FechaInicio);
         var store = CrearCaso(usuario, habit);
 
         await Assert.ThrowsAsync<ConflictoRegistroCumplimientoException>(() =>
@@ -156,7 +157,8 @@ public sealed class RegistrarCumplimientoTests
             new FakeUsuarioRepository(usuario),
             new FakeHabitoRepository(habit),
             new FakeCumplimientoRepository(),
-            fechaLocal);
+            fechaLocal,
+            new EstadoHabitoReadinessRepositoryFalso());
 
         await Assert.ThrowsAsync<ZonaHorariaPersistidaInvalidaException>(() =>
             caso.EjecutarAsync(habit.Id, usuario.Id, new DateOnly(2026, 10, 10)));
@@ -178,8 +180,46 @@ public sealed class RegistrarCumplimientoTests
             new FakeUsuarioRepository(usuario),
             new FakeHabitoRepository(habit),
             cumplimientos,
-            fechaLocal);
+            fechaLocal,
+            new EstadoHabitoReadinessRepositoryFalso());
         return (caso, fechaLocal, cumplimientos);
+    }
+
+    [Fact]
+    public async Task EjecutarAsync_HistorialNoCompleto_BloqueaAntesDeGuardar()
+    {
+        var usuario = CrearUsuario("Etc/UTC");
+        var habit = CrearHabito(usuario, [DayOfWeek.Saturday]);
+        var completions = new FakeCumplimientoRepository();
+        var useCase = new RegistrarCumplimiento(
+            new FakeUsuarioRepository(usuario),
+            new FakeHabitoRepository(habit),
+            completions,
+            new FakeFechaLocalUsuario(new DateOnly(2026, 10, 10)),
+            new EstadoHabitoReadinessRepositoryFalso(historialCompleto: false));
+
+        await Assert.ThrowsAsync<HistorialEstadoHabitoNoInicializadoException>(() =>
+            useCase.EjecutarAsync(habit.Id, usuario.Id, new DateOnly(2026, 10, 10)));
+
+        Assert.Empty(completions.Agregados);
+    }
+
+    [Fact]
+    public async Task EjecutarAsync_HistorialDelDiaDesconocido_NoLoTrataComoInactivoNiPersiste()
+    {
+        var usuario = CrearUsuario("Etc/UTC");
+        var habit = CrearHabito(usuario, [DayOfWeek.Saturday]);
+        var periods = (List<PeriodoEstadoHabito>)typeof(Habito)
+            .GetField("_periodosEstado", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(habit)!;
+        periods.Clear();
+        var store = CrearCaso(usuario, habit);
+
+        await Assert.ThrowsAsync<EstadoHabitoHistoricoDesconocidoException>(() =>
+            store.Caso.EjecutarAsync(habit.Id, usuario.Id, new DateOnly(2026, 10, 10)));
+
+        Assert.Equal(EstadoHabito.Activo, habit.Estado);
+        Assert.Empty(store.Cumplimientos.Agregados);
     }
 
     private sealed class FakeFechaLocalUsuario(DateOnly hoy) : IFechaLocalUsuario

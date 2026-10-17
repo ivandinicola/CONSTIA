@@ -37,6 +37,10 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
 
     public ConcurrentQueue<Habito> HabitosPersistidos { get; } = new();
 
+    public bool SnapshotCapturado { get; set; } = true;
+
+    public bool HistorialCompleto { get; set; } = true;
+
     public JwtApiFactory()
     {
         UsuariosPersistidos[Usuario.Id] = Usuario;
@@ -83,6 +87,8 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
             services.AddScoped<IHabitoRepository>(_ => new FakeHabitoRepository(
                 HabitosPersistidos,
                 RegistrarHabitoGuardado));
+            services.RemoveAll<IEstadoHabitoReadinessRepository>();
+            services.AddScoped<IEstadoHabitoReadinessRepository>(_ => new FakeEstadoHabitoReadinessRepository(this));
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(new TimeProviderFijo(
                 DateTimeOffset.Parse("2026-10-10T02:30:00+00:00")));
@@ -174,6 +180,16 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
         {
             return passwordHash == "not-a-real-password-hash" && password == TestPassword;
         }
+    }
+
+    private sealed class FakeEstadoHabitoReadinessRepository(JwtApiFactory factory)
+        : IEstadoHabitoReadinessRepository
+    {
+        public Task<bool> SnapshotCapturadoAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(factory.SnapshotCapturado);
+
+        public Task<bool> HistorialCompletoAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(factory.HistorialCompleto);
     }
 
     private sealed class FakeHabitoRepository(

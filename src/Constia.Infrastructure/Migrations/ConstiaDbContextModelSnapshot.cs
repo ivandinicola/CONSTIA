@@ -79,7 +79,35 @@ namespace Constia.Infrastructure.Migrations
 
                     b.HasIndex("UsuarioId");
 
-                    b.ToTable("Habito");
+                    b.ToTable("Habito", (string)null);
+                });
+
+            modelBuilder.Entity("Constia.Domain.PeriodoEstadoHabito", b =>
+                {
+                    b.Property<Guid>("HabitoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly>("VigenteDesde")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Estado")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly?>("VigenteHasta")
+                        .HasColumnType("date");
+
+                    b.HasKey("HabitoId", "VigenteDesde");
+
+                    b.HasIndex("HabitoId")
+                        .IsUnique()
+                        .HasFilter("[VigenteHasta] IS NULL");
+
+                    b.ToTable("PeriodoEstadoHabito", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PeriodoEstadoHabito_Estado", "[Estado] IN (0, 1)");
+
+                            t.HasCheckConstraint("CK_PeriodoEstadoHabito_Vigencia", "[VigenteHasta] IS NULL OR [VigenteHasta] > [VigenteDesde]");
+                        });
                 });
 
             modelBuilder.Entity("Constia.Domain.ProgramacionHabito", b =>
@@ -136,6 +164,62 @@ namespace Constia.Infrastructure.Migrations
                     b.ToTable("Usuario");
                 });
 
+            modelBuilder.Entity("Constia.Infrastructure.Habitos.InicializacionEstadoHabito", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("CompletedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("CutoverUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int?>("ExpectedLegacyHabitCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("SnapshotCapturedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("InicializacionEstadoHabito", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_InicializacionEstadoHabito_CompletionRequiresSnapshot", "[CompletedAtUtc] IS NULL OR [SnapshotCapturedAtUtc] IS NOT NULL");
+
+                            t.HasCheckConstraint("CK_InicializacionEstadoHabito_Singleton", "[Id] = 1");
+
+                            t.HasCheckConstraint("CK_InicializacionEstadoHabito_SnapshotCount", "([SnapshotCapturedAtUtc] IS NULL AND [ExpectedLegacyHabitCount] IS NULL) OR ([SnapshotCapturedAtUtc] IS NOT NULL AND [ExpectedLegacyHabitCount] IS NOT NULL AND [ExpectedLegacyHabitCount] >= 0)");
+                        });
+                });
+
+            modelBuilder.Entity("Constia.Infrastructure.Habitos.SnapshotEstadoHabito", b =>
+                {
+                    b.Property<Guid>("HabitoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("EstadoAlCorte")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("FechaCorteLocal")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("FechaInicio")
+                        .HasColumnType("date");
+
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("HabitoId");
+
+                    b.ToTable("SnapshotEstadoHabito", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SnapshotEstadoHabito_Estado", "[EstadoAlCorte] IN (0, 1)");
+                        });
+                });
+
             modelBuilder.Entity("Constia.Domain.Cumplimiento", b =>
                 {
                     b.HasOne("Constia.Domain.Habito", "Habito")
@@ -156,6 +240,15 @@ namespace Constia.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("Constia.Domain.PeriodoEstadoHabito", b =>
+                {
+                    b.HasOne("Constia.Domain.Habito", null)
+                        .WithMany("PeriodosEstado")
+                        .HasForeignKey("HabitoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Constia.Domain.ProgramacionHabito", b =>
@@ -188,8 +281,19 @@ namespace Constia.Infrastructure.Migrations
                     b.Navigation("DiasProgramados");
                 });
 
+            modelBuilder.Entity("Constia.Infrastructure.Habitos.SnapshotEstadoHabito", b =>
+                {
+                    b.HasOne("Constia.Domain.Habito", null)
+                        .WithMany()
+                        .HasForeignKey("HabitoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Constia.Domain.Habito", b =>
                 {
+                    b.Navigation("PeriodosEstado");
+
                     b.Navigation("Programaciones");
                 });
 #pragma warning restore 612, 618

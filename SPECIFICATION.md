@@ -136,7 +136,11 @@ La desactivación no elimina los cumplimientos existentes.
 
 El estado **Activo/Inactivo** de un hábito tendrá interpretación histórica por fecha civil. Para determinar las oportunidades programadas de una fecha se considerarán conjuntamente la programación vigente en esa fecha, el estado vigente en esa fecha y `FechaInicio`. No se utilizará el estado actual para reinterpretar todas las fechas pasadas.
 
-La implementación del historial de estados corresponde a TEMP-005 y deberá completarse antes de implementar las métricas históricas. Los cambios de estado anteriores a la incorporación de ese historial no podrán reconstruirse con certeza si no fueron almacenados.
+Cada período de estado utilizará el intervalo semiabierto `[VigenteDesde, VigenteHasta)`. Un hábito nuevo comienza con un período **Activo** desde `FechaInicio`. Al desactivarlo se cierra el período abierto y comienza uno **Inactivo** en la fecha civil local del propietario; varios intentos de desactivación en el mismo día se consolidan y no crean períodos vacíos. Si se desactiva antes de `FechaInicio`, el único período inicial comienza en `FechaInicio` como **Inactivo**. V1 no permite reactivar hábitos.
+
+Los cumplimientos anteriores se conservan aunque el hábito pase a Inactivo. No se admiten nuevos cumplimientos cuando el hábito está actualmente Inactivo; además, el estado histórico de la fecha solicitada debe ser conocido y **Activo**. Un estado histórico desconocido responde `422 Unprocessable Entity` (`habit_status_history_unknown`) y nunca se interpreta como Inactivo ni como incumplimiento. Mientras la inicialización global del historial no esté completa, las operaciones que dependen de él responden `503 Service Unavailable` (`habit_status_history_not_initialized`).
+
+TEMP-005 inicializará los hábitos existentes desde un corte UTC explícito e inmutable. La captura congela el estado persistido, `FechaInicio`, la zona IANA del propietario y la fecha civil local del corte. Los reintentos deben consumir ese mismo snapshot y no reconstruirlo a partir de valores actuales modificados. Los cambios anteriores a la incorporación del historial que no estén respaldados por datos persistidos no podrán reconstruirse con certeza. El historial debe completarse antes de habilitar desactivaciones y nuevos cumplimientos dependientes del estado, y antes de implementar métricas históricas.
 
 ---
 
@@ -357,7 +361,9 @@ Los días sin cumplimiento no requieren un registro persistido de "no realizado"
 * Las versiones de programación deben tener intervalos semiabiertos sin solapamientos y una única versión aplicable para cada fecha desde `FechaInicio`.
 * Los cambios de programación tienen vigencia desde la fecha local del usuario y no editan versiones históricas anteriores en V1.
 * Las ediciones de programación de un mismo día local se consolidan en una versión; prevalece la última configuración para todo ese día.
-* El estado del hábito se interpreta históricamente por fecha civil. Los cambios anteriores a la implementación de ese historial no se pueden reconstruir con certeza.
+* El estado del hábito se interpreta históricamente por fecha civil en períodos semiabiertos. Los cambios anteriores al corte de inicialización no se pueden reconstruir con certeza.
+* Un estado histórico desconocido no se interpreta como Inactivo ni como falta de cumplimiento; las consultas o escrituras que requieran dicho estado se rechazan con `422`.
+* Las escrituras que dependan del historial permanecen bloqueadas con `503` hasta que la inicialización global se haya verificado.
 
 ## Cumplimientos
 

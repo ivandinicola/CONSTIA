@@ -1,6 +1,9 @@
 namespace Constia.Application.Habitos;
 
-public sealed class DesactivarHabito(IHabitoRepository habitos)
+public sealed class DesactivarHabito(
+    IHabitoRepository habitos,
+    Constia.Application.Temporal.IFechaLocalUsuario fechaLocalUsuario,
+    IEstadoHabitoReadinessRepository readiness)
 {
     public async Task<bool> EjecutarAsync(
         Guid habitId,
@@ -16,7 +19,17 @@ public sealed class DesactivarHabito(IHabitoRepository habitos)
             return false;
         }
 
-        habito.Desactivar();
+        if (!await readiness.HistorialCompletoAsync(cancellationToken))
+        {
+            throw new HistorialEstadoHabitoNoInicializadoException();
+        }
+
+        var fechaEfectiva = fechaLocalUsuario.ObtenerHoy(habito.Usuario.TimeZoneId);
+        if (!habito.Desactivar(fechaEfectiva))
+        {
+            return true;
+        }
+
         await habitos.GuardarCambiosAsync(habito, cancellationToken);
         return true;
     }

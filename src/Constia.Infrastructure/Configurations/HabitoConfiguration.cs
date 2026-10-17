@@ -8,6 +8,7 @@ public class HabitoConfiguration : IEntityTypeConfiguration<Habito>
 {
     public void Configure(EntityTypeBuilder<Habito> builder)
     {
+        builder.ToTable("Habito");
         builder.HasKey(habito => habito.Id);
 
         builder.Property(habito => habito.Nombre)
@@ -44,6 +45,9 @@ public class HabitoConfiguration : IEntityTypeConfiguration<Habito>
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.Navigation(habito => habito.Programaciones)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+
+        builder.Navigation(habito => habito.PeriodosEstado)
             .UsePropertyAccessMode(PropertyAccessMode.Field);
 
         builder.Ignore(habito => habito.DiasProgramados);

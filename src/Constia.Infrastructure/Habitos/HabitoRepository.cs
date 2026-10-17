@@ -46,7 +46,7 @@ public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoReposi
         Guid usuarioId,
         CancellationToken cancellationToken)
     {
-        return HabitosConProgramaciones()
+        return HabitosConProgramaciones(includeStateHistory: true)
             .Where(habito =>
                 habito.Id == habitId &&
                 EF.Property<Guid>(habito, "UsuarioId") == usuarioId)
@@ -59,7 +59,7 @@ public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoReposi
         Guid usuarioId,
         CancellationToken cancellationToken)
     {
-        return HabitosConProgramaciones()
+        return HabitosConProgramaciones(includeOwner: true, includeStateHistory: true)
             .Where(habito =>
                 habito.Id == habitId &&
                 EF.Property<Guid>(habito, "UsuarioId") == usuarioId)
@@ -94,7 +94,24 @@ public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoReposi
         }
     }
 
-    private IQueryable<Habito> HabitosConProgramaciones() => dbContext.Set<Habito>()
-        .Include(habito => habito.Programaciones)
-        .ThenInclude(programacion => programacion.DiasProgramados);
+    private IQueryable<Habito> HabitosConProgramaciones(
+        bool includeOwner = false,
+        bool includeStateHistory = false)
+    {
+        IQueryable<Habito> query = dbContext.Set<Habito>()
+            .Include(habito => habito.Programaciones)
+            .ThenInclude(programacion => programacion.DiasProgramados);
+
+        if (includeOwner)
+        {
+            query = query.Include(habito => habito.Usuario);
+        }
+
+        if (includeStateHistory)
+        {
+            query = query.Include(habito => habito.PeriodosEstado);
+        }
+
+        return query;
+    }
 }

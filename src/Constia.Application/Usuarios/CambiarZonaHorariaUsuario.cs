@@ -1,10 +1,12 @@
 using Constia.Application.Temporal;
+using Constia.Application.Habitos;
 
 namespace Constia.Application.Usuarios;
 
 public sealed class CambiarZonaHorariaUsuario(
     IUsuarioRepository usuarios,
-    IZonaHorariaIana zonasHorarias)
+    IZonaHorariaIana zonasHorarias,
+    IEstadoHabitoReadinessRepository readiness)
 {
     public async Task<bool> EjecutarAsync(
         Guid usuarioId,
@@ -20,6 +22,11 @@ public sealed class CambiarZonaHorariaUsuario(
         if (usuario is null)
         {
             return false;
+        }
+
+        if (!await readiness.SnapshotCapturadoAsync(cancellationToken))
+        {
+            throw new HistorialEstadoHabitoNoInicializadoException();
         }
 
         usuario.CambiarZonaHoraria(timeZoneId);

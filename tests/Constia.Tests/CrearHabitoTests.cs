@@ -12,7 +12,7 @@ public class CrearHabitoTests
         var usuario = CrearUsuario();
         var usuarios = new FakeUsuarioRepository(usuario);
         var habitos = new FakeHabitoRepository();
-        var casoDeUso = new CrearHabito(usuarios, habitos);
+        var casoDeUso = new CrearHabito(usuarios, habitos, new EstadoHabitoReadinessRepositoryFalso());
         using var cancellation = new CancellationTokenSource();
 
         var resultado = await casoDeUso.EjecutarAsync(
@@ -36,7 +36,8 @@ public class CrearHabitoTests
         var habitos = new FakeHabitoRepository();
         var casoDeUso = new CrearHabito(
             new FakeUsuarioRepository(usuario),
-            habitos);
+            habitos,
+            new EstadoHabitoReadinessRepositoryFalso());
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             casoDeUso.EjecutarAsync(CrearSolicitud(usuario.Id, nombre: " ")));
@@ -52,7 +53,8 @@ public class CrearHabitoTests
         var habitos = new FakeHabitoRepository();
         var casoDeUso = new CrearHabito(
             new FakeUsuarioRepository(usuario),
-            habitos);
+            habitos,
+            new EstadoHabitoReadinessRepositoryFalso());
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             casoDeUso.EjecutarAsync(CrearSolicitud(usuario.Id, diasProgramados: [])));
@@ -65,7 +67,8 @@ public class CrearHabitoTests
     public async Task EjecutarAsync_CuandoUsuarioNoExiste_DevuelveNullYSinPersistir()
     {
         var habitos = new FakeHabitoRepository();
-        var casoDeUso = new CrearHabito(new FakeUsuarioRepository(null), habitos);
+        var casoDeUso = new CrearHabito(
+            new FakeUsuarioRepository(null), habitos, new EstadoHabitoReadinessRepositoryFalso());
 
         var resultado = await casoDeUso.EjecutarAsync(CrearSolicitud());
 
@@ -81,7 +84,8 @@ public class CrearHabitoTests
         var habitos = new FakeHabitoRepository();
         var casoDeUso = new CrearHabito(
             new FakeUsuarioRepository(usuario),
-            habitos);
+            habitos,
+            new EstadoHabitoReadinessRepositoryFalso());
         var solicitud = CrearSolicitud(usuario.Id);
 
         var resultado = Assert.IsType<HabitoCreado>(

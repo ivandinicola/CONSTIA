@@ -15,7 +15,7 @@ public sealed class ListarHabitosInactivosTests
             "Descripción conservada",
             new DateOnly(2026, 10, 5),
             [DayOfWeek.Monday, DayOfWeek.Friday]);
-        habit.Desactivar();
+        habit.Desactivar(habit.FechaInicio);
         var repository = new FakeHabitoRepository([habit]);
         var useCase = new ListarHabitosInactivos(repository);
         using var cancellation = new CancellationTokenSource();

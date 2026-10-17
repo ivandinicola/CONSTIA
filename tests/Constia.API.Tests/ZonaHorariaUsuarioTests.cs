@@ -93,6 +93,25 @@ public sealed class ZonaHorariaUsuarioTests(JwtApiFactory factory) : IClassFixtu
     }
 
     [Fact]
+    public async Task CambiarZonaHoraria_AntesDeCapturarSnapshot_Devuelve503YSinCambios()
+    {
+        factory.SnapshotCapturado = false;
+        var original = factory.Usuario.TimeZoneId;
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+        try
+        {
+            var response = await client.PutAsJsonAsync("/api/usuarios/mi-zona-horaria",
+                new CambiarZonaHorariaRequest { TimeZoneId = "Asia/Tokyo" });
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            Assert.Equal(original, factory.Usuario.TimeZoneId);
+        }
+        finally
+        {
+            factory.SnapshotCapturado = true;
+        }
+    }
+
+    [Fact]
     public async Task CambiarZonaHoraria_UsaElUsuarioDelTokenEIgnoraUsuarioIdDelBody()
     {
         var otroUsuario = new Usuario(

@@ -9,7 +9,8 @@ public sealed class RegistrarCumplimiento(
     IUsuarioRepository usuarios,
     IHabitoRepository habitos,
     ICumplimientoRepository cumplimientos,
-    IFechaLocalUsuario fechaLocalUsuario)
+    IFechaLocalUsuario fechaLocalUsuario,
+    IEstadoHabitoReadinessRepository readiness)
 {
     public async Task<CumplimientoRegistrado?> EjecutarAsync(
         Guid habitId,
@@ -32,10 +33,26 @@ public sealed class RegistrarCumplimiento(
             return null;
         }
 
+        if (!await readiness.HistorialCompletoAsync(cancellationToken))
+        {
+            throw new HistorialEstadoHabitoNoInicializadoException();
+        }
+
         var hoy = fechaLocalUsuario.ObtenerHoy(usuario.TimeZoneId);
         if (fecha != hoy && fecha != hoy.AddDays(-1))
         {
             throw new ArgumentException("Solo se permiten cumplimientos de hoy o ayer.", nameof(fecha));
+        }
+
+        if (fecha < habito.FechaInicio)
+        {
+            throw new ArgumentException("La fecha no puede ser anterior al inicio del hábito.", nameof(fecha));
+        }
+
+        var estadoHistorico = habito.ObtenerEstadoPara(fecha);
+        if (estadoHistorico is null)
+        {
+            throw new EstadoHabitoHistoricoDesconocidoException();
         }
 
         if (habito.Estado != EstadoHabito.Activo)
@@ -43,9 +60,9 @@ public sealed class RegistrarCumplimiento(
             throw new ConflictoRegistroCumplimientoException();
         }
 
-        if (fecha < habito.FechaInicio)
+        if (estadoHistorico != EstadoHabito.Activo)
         {
-            throw new ArgumentException("La fecha no puede ser anterior al inicio del hábito.", nameof(fecha));
+            throw new ConflictoRegistroCumplimientoException();
         }
 
         var programacion = habito.ObtenerProgramacionPara(fecha);

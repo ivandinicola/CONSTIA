@@ -37,6 +37,42 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     }
 
     [Fact]
+    public async Task DesactivarHabito_HistorialNoCompleto_Devuelve503YSinCambios()
+    {
+        factory.HistorialCompleto = false;
+        var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        try
+        {
+            var response = await client.DeleteAsync($"/api/habitos/{habit.Id:D}");
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            Assert.Equal(EstadoHabito.Activo, habit.Estado);
+        }
+        finally
+        {
+            factory.HistorialCompleto = true;
+        }
+    }
+
+    [Fact]
+    public async Task DesactivarHabito_ZonaHorariaPersistidaInvalida_Devuelve500SinDetallesInternos()
+    {
+        var usuario = new Usuario("Zona inválida", $"{Guid.NewGuid()}@example.invalid", "fake-hash", "Invalid/Zone");
+        factory.UsuariosPersistidos[usuario.Id] = usuario;
+        var habit = CrearHabitoConIdYFecha(usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticado(usuario.Id);
+
+        var response = await client.DeleteAsync($"/api/habitos/{habit.Id:D}");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.DoesNotContain("Invalid/Zone", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Equal(EstadoHabito.Activo, habit.Estado);
+    }
+
+    [Fact]
     public async Task DesactivarHabito_Propio_Devuelve204YConservaRegistroParaConsultasHistoricas()
     {
         var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow);
@@ -66,7 +102,7 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     public async Task DesactivarHabito_PropioYaInactivo_Devuelve204()
     {
         var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow);
-        habit.Desactivar();
+        habit.Desactivar(habit.FechaInicio);
         factory.ReemplazarHabitos([habit]);
         using var client = ClienteAutenticado(factory.Usuario.Id);
 
@@ -254,7 +290,7 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
         var originalCreatedAt = new DateTimeOffset(2026, 3, 4, 5, 6, 7, TimeSpan.Zero);
         var originalStartDate = new DateOnly(2026, 1, 1);
         var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(), originalCreatedAt);
-        habit.Desactivar();
+        habit.Desactivar(habit.FechaInicio);
         factory.ReemplazarHabitos([habit]);
         using var client = ClienteAutenticado(factory.Usuario.Id);
         var maliciousBody = new
@@ -351,7 +387,7 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
             "Hábito inactivo",
             Guid.NewGuid(),
             DateTimeOffset.UtcNow);
-        habito.Desactivar();
+        habito.Desactivar(habito.FechaInicio);
         factory.ReemplazarHabitos([habito]);
         using var client = ClienteAutenticado(factory.Usuario.Id);
 
@@ -394,19 +430,19 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
             "Empate alto",
             Guid.Parse("00000000-0000-0000-0000-000000000002"),
             fechaEmpatada);
-        propioDesempateAlto.Desactivar();
+        propioDesempateAlto.Desactivar(propioDesempateAlto.FechaInicio);
         var propioAnterior = CrearHabitoConIdYFecha(
             factory.Usuario,
             "Anterior",
             Guid.Parse("00000000-0000-0000-0000-000000000003"),
             fechaAnterior);
-        propioAnterior.Desactivar();
+        propioAnterior.Desactivar(propioAnterior.FechaInicio);
         var propioDesempateBajo = CrearHabitoConIdYFecha(
             factory.Usuario,
             "Empate bajo",
             Guid.Parse("00000000-0000-0000-0000-000000000001"),
             fechaEmpatada);
-        propioDesempateBajo.Desactivar();
+        propioDesempateBajo.Desactivar(propioDesempateBajo.FechaInicio);
         var propioActivo = CrearHabitoConIdYFecha(
             factory.Usuario,
             "Activo propio",
@@ -417,7 +453,7 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
             "Ajeno inactivo",
             Guid.NewGuid(),
             fechaAnterior);
-        ajenoInactivo.Desactivar();
+        ajenoInactivo.Desactivar(ajenoInactivo.FechaInicio);
         var ajenoActivo = CrearHabitoConIdYFecha(
             otroUsuario,
             "Ajeno activo",
@@ -522,7 +558,7 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
             "Inactivo",
             Guid.Parse("00000000-0000-0000-0000-000000000005"),
             fechaAnterior);
-        inactivo.Desactivar();
+        inactivo.Desactivar(inactivo.FechaInicio);
         factory.ReemplazarHabitos([desempateAlto, ajeno, inactivo, desempateBajo, anterior]);
         using var client = ClienteAutenticado(factory.Usuario.Id);
 
@@ -662,7 +698,7 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     public async Task RegistrarCumplimiento_HabitoInactivo_Devuelve409()
     {
         var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow, [DayOfWeek.Saturday]);
-        habit.Desactivar();
+        habit.Desactivar(habit.FechaInicio);
         factory.ReemplazarHabitos([habit]);
         using var client = ClienteAutenticadoParaCumplimientos(factory.Usuario.Id);
 
@@ -782,6 +818,25 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     }
 
     [Fact]
+    public async Task CrearHabito_SnapshotNoCapturado_Devuelve503YSinCrear()
+    {
+        factory.SnapshotCapturado = false;
+        factory.ReemplazarHabitos([]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        try
+        {
+            var response = await client.PostAsJsonAsync("/api/habitos", CrearRequest());
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            Assert.Empty(factory.HabitosPersistidos);
+        }
+        finally
+        {
+            factory.SnapshotCapturado = true;
+        }
+    }
+
+    [Fact]
     public async Task CrearHabito_ConJwtValido_Devuelve201YGuardaElHabito()
     {
         using var client = ClienteAutenticado(factory.Usuario.Id);
@@ -852,6 +907,61 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
         });
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task RegistrarCumplimiento_HistorialGlobalNoInicializado_Devuelve503YSinPersistir()
+    {
+        factory.HistorialCompleto = false;
+        var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(), DateTimeOffset.UtcNow,
+            [DayOfWeek.Saturday]);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticadoParaCumplimientos(factory.Usuario.Id);
+
+        try
+        {
+            var response = await client.PostAsJsonAsync(
+                $"/api/habitos/{habit.Id:D}/cumplimientos",
+                new { fecha = "2026-10-10" });
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            Assert.Equal("habit_status_history_not_initialized",
+                (await response.Content.ReadFromJsonAsync<ProblemDetails>())?.Extensions["code"]?.ToString());
+            Assert.Empty(factory.CumplimientosPersistidos);
+        }
+        finally
+        {
+            factory.HistorialCompleto = true;
+        }
+    }
+
+    [Fact]
+    public async Task RegistrarCumplimiento_EstadoHistoricoDesconocido_Devuelve422YSinPersistir()
+    {
+        var habit = CrearHabitoConIdYFecha(factory.Usuario, "Legado", Guid.NewGuid(), DateTimeOffset.UtcNow,
+            [DayOfWeek.Saturday]);
+        habit.Desactivar(habit.FechaInicio);
+        var periodos = (List<PeriodoEstadoHabito>)typeof(Habito)
+            .GetField("_periodosEstado", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(habit)!;
+        periodos.Clear(); // Representa una fila legada cargada antes del backfill.
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticadoParaCumplimientos(factory.Usuario.Id);
+
+        try
+        {
+            var response = await client.PostAsJsonAsync(
+                $"/api/habitos/{habit.Id:D}/cumplimientos",
+                new { fecha = "2026-10-10" });
+            Assert.Equal((HttpStatusCode)422, response.StatusCode);
+            Assert.Equal("habit_status_history_unknown",
+                (await response.Content.ReadFromJsonAsync<ProblemDetails>())?.Extensions["code"]?.ToString());
+            Assert.Empty(factory.CumplimientosPersistidos);
+        }
+        finally
+        {
+            periodos.Add(new PeriodoEstadoHabito(EstadoHabito.Inactivo, habit.FechaInicio));
+            factory.ReemplazarHabitos([]);
+        }
     }
 
     private HttpClient ClienteAutenticado(Guid subject)

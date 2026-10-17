@@ -1,4 +1,5 @@
 using Constia.Application.Habitos;
+using Constia.Application.Temporal;
 using Constia.Domain;
 
 namespace Constia.Tests;
@@ -12,7 +13,8 @@ public sealed class DesactivarHabitoTests
         var habit = new Habito(usuario, "Leer", "Un capítulo", new DateOnly(2026, 10, 5),
             [DayOfWeek.Monday, DayOfWeek.Wednesday]);
         var repository = new FakeHabitoRepository(habit);
-        var useCase = new DesactivarHabito(repository);
+        var fechaLocal = new FechaLocalFija(new DateOnly(2026, 10, 10));
+        var useCase = new DesactivarHabito(repository, fechaLocal, new EstadoHabitoReadinessRepositoryFalso());
         using var cancellation = new CancellationTokenSource();
 
         var result = await useCase.EjecutarAsync(habit.Id, usuario.Id, cancellation.Token);
@@ -24,6 +26,9 @@ public sealed class DesactivarHabitoTests
         Assert.Equal(cancellation.Token, repository.CancellationTokenGuardado);
         Assert.Equal(1, repository.CantidadDeGuardados);
         Assert.Equal(EstadoHabito.Inactivo, habit.Estado);
+        Assert.Equal("Etc/UTC", fechaLocal.TimeZoneIdRecibido);
+        Assert.Equal(EstadoHabito.Inactivo, habit.ObtenerEstadoPara(new DateOnly(2026, 10, 10)));
+        Assert.Equal(new DateOnly(2026, 10, 10), habit.PeriodosEstado.Single(p => p.VigenteHasta is null).VigenteDesde);
         Assert.Contains(habit, repository.Habitos);
         Assert.Equal("Leer", habit.Nombre);
         Assert.Equal("Un capítulo", habit.Descripcion);
@@ -31,19 +36,19 @@ public sealed class DesactivarHabitoTests
     }
 
     [Fact]
-    public async Task EjecutarAsync_ConHabitoYaInactivo_DevuelveTrueYPersiste()
+    public async Task EjecutarAsync_ConHabitoYaInactivo_DevuelveTrueYSinIncrementarToken()
     {
         var usuario = new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC");
         var habit = new Habito(usuario, "Leer", null, new DateOnly(2026, 10, 5), [DayOfWeek.Monday]);
-        habit.Desactivar();
+        habit.Desactivar(habit.FechaInicio);
         var repository = new FakeHabitoRepository(habit);
-        var useCase = new DesactivarHabito(repository);
+        var useCase = CrearCaso(repository);
 
         var result = await useCase.EjecutarAsync(habit.Id, usuario.Id);
 
         Assert.True(result);
         Assert.Equal(EstadoHabito.Inactivo, habit.Estado);
-        Assert.Equal(1, repository.CantidadDeGuardados);
+        Assert.Equal(0, repository.CantidadDeGuardados);
     }
 
     [Fact]
@@ -56,13 +61,45 @@ public sealed class DesactivarHabitoTests
             new DateOnly(2026, 10, 5),
             [DayOfWeek.Monday]);
         var repository = new FakeHabitoRepository(habit);
-        var useCase = new DesactivarHabito(repository);
+        var useCase = CrearCaso(repository);
 
         var result = await useCase.EjecutarAsync(habit.Id, Guid.NewGuid());
 
         Assert.False(result);
         Assert.Equal(EstadoHabito.Activo, habit.Estado);
         Assert.Equal(0, repository.CantidadDeGuardados);
+    }
+
+    [Fact]
+    public async Task EjecutarAsync_HistorialNoCompleto_BloqueaLaDesactivacion()
+    {
+        var habit = new Habito(new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC"),
+            "Leer", null, new DateOnly(2026, 10, 5), [DayOfWeek.Monday]);
+        var repository = new FakeHabitoRepository(habit);
+        var useCase = new DesactivarHabito(repository, new FechaLocalFija(new DateOnly(2026, 10, 10)),
+            new EstadoHabitoReadinessRepositoryFalso(historialCompleto: false));
+
+        await Assert.ThrowsAsync<HistorialEstadoHabitoNoInicializadoException>(() =>
+            useCase.EjecutarAsync(habit.Id, habit.Usuario.Id));
+
+        Assert.Equal(EstadoHabito.Activo, habit.Estado);
+        Assert.Equal(0, repository.CantidadDeGuardados);
+    }
+
+    private static DesactivarHabito CrearCaso(FakeHabitoRepository repository) => new(
+        repository,
+        new FechaLocalFija(new DateOnly(2026, 10, 10)),
+        new EstadoHabitoReadinessRepositoryFalso());
+
+    private sealed class FechaLocalFija(DateOnly hoy) : IFechaLocalUsuario
+    {
+        public string? TimeZoneIdRecibido { get; private set; }
+
+        public DateOnly ObtenerHoy(string timeZoneId)
+        {
+            TimeZoneIdRecibido = timeZoneId;
+            return hoy;
+        }
     }
 
     private sealed class FakeHabitoRepository(Habito habit) : IHabitoRepository

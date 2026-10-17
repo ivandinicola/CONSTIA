@@ -88,7 +88,7 @@ public class HabitoTests
             new DateOnly(2026, 10, 5),
             [DayOfWeek.Monday, DayOfWeek.Wednesday]);
 
-        habito.Desactivar();
+        habito.Desactivar(habito.FechaInicio);
 
         Assert.Equal(EstadoHabito.Inactivo, habito.Estado);
         Assert.Same(usuario, habito.Usuario);
@@ -112,8 +112,8 @@ public class HabitoTests
         var fechaCreacion = habito.FechaCreacion;
         var fechaInicio = habito.FechaInicio;
 
-        habito.Desactivar();
-        habito.Desactivar();
+        habito.Desactivar(habito.FechaInicio);
+        habito.Desactivar(habito.FechaInicio);
 
         Assert.Equal(EstadoHabito.Inactivo, habito.Estado);
         Assert.Equal(id, habito.Id);
@@ -284,7 +284,7 @@ public class HabitoTests
     public void ActualizarConfiguracion_EnHabitoInactivo_NoLoReactiva()
     {
         var habito = CrearHabitoParaActualizacion();
-        habito.Desactivar();
+        habito.Desactivar(habito.FechaInicio);
 
         habito.ActualizarConfiguracion("Nombre editado", "Descripción", [DayOfWeek.Monday, DayOfWeek.Wednesday]);
 
@@ -538,7 +538,7 @@ public class HabitoTests
     public void ActualizarConfiguracionVersionada_EnHabitoInactivo_PermiteCambiarDiasYSigueInactivo()
     {
         var habito = CrearHabitoParaActualizacion();
-        habito.Desactivar();
+        habito.Desactivar(habito.FechaInicio);
 
         habito.ActualizarConfiguracionVersionada(
             habito.Nombre,

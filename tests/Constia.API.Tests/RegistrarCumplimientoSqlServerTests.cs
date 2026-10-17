@@ -30,6 +30,7 @@ public sealed class RegistrarCumplimientoSqlServerTests
             await using (var context = CreateContext(database.ConnectionString))
             {
                 await context.Database.MigrateAsync();
+                await SeedReadyStateHistoryAsync(context);
             }
 
             var userId = Guid.NewGuid();
@@ -119,7 +120,8 @@ public sealed class RegistrarCumplimientoSqlServerTests
                     new UsuarioRepository(context),
                     new HabitoRepository(context),
                     new BarrierCumplimientoRepository(new CumplimientoRepository(context), barrier),
-                    new FixedLocalDate(today));
+                    new FixedLocalDate(today),
+                    new EstadoHabitoReadinessRepository(context));
                 try
                 {
                     return await useCase.EjecutarAsync(habitId, userId, today) is not null;
@@ -174,7 +176,8 @@ public sealed class RegistrarCumplimientoSqlServerTests
                     new UsuarioRepository(context),
                     new HabitoRepository(context),
                     new CumplimientoRepository(context),
-                    new FixedLocalDate(today));
+                    new FixedLocalDate(today),
+                    new EstadoHabitoReadinessRepository(context));
 
                 Assert.NotNull(await useCase.EjecutarAsync(habitId, ownerId, date));
             }
@@ -302,6 +305,7 @@ public sealed class RegistrarCumplimientoSqlServerTests
         {
             await using var context = CreateContext(database.ConnectionString);
             await context.Database.MigrateAsync();
+            await SeedReadyStateHistoryAsync(context);
             return database;
         }
         catch
@@ -317,6 +321,15 @@ public sealed class RegistrarCumplimientoSqlServerTests
             .UseSqlServer(connectionString, sql => sql.CommandTimeout(60))
             .Options;
         return new ConstiaDbContext(options);
+    }
+
+    private static async Task SeedReadyStateHistoryAsync(ConstiaDbContext context)
+    {
+        var marker = new InicializacionEstadoHabito(new DateTimeOffset(2026, 10, 16, 0, 0, 0, TimeSpan.Zero));
+        marker.MarcarSnapshotCapturado(new DateTimeOffset(2026, 10, 16, 0, 1, 0, TimeSpan.Zero), 0);
+        marker.MarcarCompletado(new DateTimeOffset(2026, 10, 16, 0, 2, 0, TimeSpan.Zero));
+        context.InicializacionesEstadoHabito.Add(marker);
+        await context.SaveChangesAsync();
     }
 
     private static async Task InsertOwnerAndHabitAsync(
@@ -348,6 +361,14 @@ public sealed class RegistrarCumplimientoSqlServerTests
                 command.Parameters.Add("@startDate", SqlDbType.Date).Value = startDate.ToDateTime(TimeOnly.MinValue);
                 command.Parameters.Add("@state", SqlDbType.Int).Value = (int)EstadoHabito.Activo;
                 command.Parameters.Add("@userId", SqlDbType.UniqueIdentifier).Value = userId;
+            });
+        await ExecuteAsync(connection,
+            "IF OBJECT_ID(N'[dbo].[PeriodoEstadoHabito]', N'U') IS NOT NULL INSERT INTO [PeriodoEstadoHabito] ([HabitoId], [VigenteDesde], [VigenteHasta], [Estado]) VALUES (@habitId, @startDate, NULL, @state);",
+            command =>
+            {
+                command.Parameters.Add("@habitId", SqlDbType.UniqueIdentifier).Value = habitId;
+                command.Parameters.Add("@startDate", SqlDbType.Date).Value = startDate.ToDateTime(TimeOnly.MinValue);
+                command.Parameters.Add("@state", SqlDbType.Int).Value = (int)EstadoHabito.Activo;
             });
         await ExecuteAsync(connection,
             "INSERT INTO [ProgramacionHabito] ([HabitoId], [VigenteDesde], [VigenteHasta]) VALUES (@habitId, @startDate, NULL);",
