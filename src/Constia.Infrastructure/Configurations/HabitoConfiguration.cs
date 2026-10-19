@@ -38,6 +38,12 @@ public class HabitoConfiguration : IEntityTypeConfiguration<Habito>
             .HasForeignKey("UsuarioId")
             .IsRequired();
 
+        builder.HasOne<CategoriaHabito>()
+            .WithMany()
+            .HasForeignKey(habito => habito.CategoriaId)
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasMany(habito => habito.Programaciones)
             .WithOne()
             .HasForeignKey("HabitoId")

@@ -13,6 +13,8 @@ public class Habito
 
     public string? Descripcion { get; private set; }
 
+    public Guid? CategoriaId { get; private set; }
+
     public DateTimeOffset FechaCreacion { get; private set; }
 
     public DateOnly FechaInicio { get; private set; }
