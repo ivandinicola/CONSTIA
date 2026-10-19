@@ -22,6 +22,85 @@ namespace Constia.Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("Constia.Domain.CategoriaHabito", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Orden")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CategoriaHabito", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("82c0b8e6-0b9d-4e18-9bf8-000000000001"),
+                            Nombre = "Salud y movimiento",
+                            Orden = 1
+                        },
+                        new
+                        {
+                            Id = new Guid("82c0b8e6-0b9d-4e18-9bf8-000000000002"),
+                            Nombre = "Alimentación e hidratación",
+                            Orden = 2
+                        },
+                        new
+                        {
+                            Id = new Guid("82c0b8e6-0b9d-4e18-9bf8-000000000003"),
+                            Nombre = "Descanso y sueño",
+                            Orden = 3
+                        },
+                        new
+                        {
+                            Id = new Guid("82c0b8e6-0b9d-4e18-9bf8-000000000004"),
+                            Nombre = "Bienestar emocional",
+                            Orden = 4
+                        },
+                        new
+                        {
+                            Id = new Guid("82c0b8e6-0b9d-4e18-9bf8-000000000005"),
+                            Nombre = "Aprendizaje y crecimiento",
+                            Orden = 5
+                        },
+                        new
+                        {
+                            Id = new Guid("82c0b8e6-0b9d-4e18-9bf8-000000000006"),
+                            Nombre = "Productividad y organización",
+                            Orden = 6
+                        },
+                        new
+                        {
+                            Id = new Guid("82c0b8e6-0b9d-4e18-9bf8-000000000007"),
+                            Nombre = "Relaciones y vínculos",
+                            Orden = 7
+                        },
+                        new
+                        {
+                            Id = new Guid("82c0b8e6-0b9d-4e18-9bf8-000000000008"),
+                            Nombre = "Finanzas personales",
+                            Orden = 8
+                        },
+                        new
+                        {
+                            Id = new Guid("82c0b8e6-0b9d-4e18-9bf8-000000000009"),
+                            Nombre = "Creatividad y ocio",
+                            Orden = 9
+                        },
+                        new
+                        {
+                            Id = new Guid("82c0b8e6-0b9d-4e18-9bf8-000000000010"),
+                            Nombre = "Hogar y vida cotidiana",
+                            Orden = 10
+                        });
+                });
+
             modelBuilder.Entity("Constia.Domain.Cumplimiento", b =>
                 {
                     b.Property<Guid>("Id")
@@ -47,6 +126,9 @@ namespace Constia.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("CategoriaId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<long>("ConcurrencyVersion")
@@ -76,6 +158,8 @@ namespace Constia.Infrastructure.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CategoriaId");
 
                     b.HasIndex("UsuarioId");
 
@@ -233,6 +317,11 @@ namespace Constia.Infrastructure.Migrations
 
             modelBuilder.Entity("Constia.Domain.Habito", b =>
                 {
+                    b.HasOne("Constia.Domain.CategoriaHabito", null)
+                        .WithMany()
+                        .HasForeignKey("CategoriaId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Constia.Domain.Usuario", "Usuario")
                         .WithMany()
                         .HasForeignKey("UsuarioId")

@@ -52,7 +52,7 @@ jobs:
       - name: Test
         run: >-
           dotnet test --no-build --configuration Release
-          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests&FullyQualifiedName!~RegistrarCumplimientoSqlServerTests&FullyQualifiedName!~Temp005StateHistorySqlServerTests"
+          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests&FullyQualifiedName!~RegistrarCumplimientoSqlServerTests&FullyQualifiedName!~Temp005StateHistorySqlServerTests&FullyQualifiedName!~CategoriaHabitoSqlServerTests"
 
       - name: Test TEMP-003 migration against disposable SQL Server
         env:
@@ -173,3 +173,40 @@ jobs:
               )
           print("TEMP-005 SQL state history tests: 9 passed; none skipped.")
           PY
+  cat02-sqlserver:
+    name: CAT-02 isolated SQL Server 2022
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up .NET 10 SDK
+        uses: actions/setup-dotnet@v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Check runner scripts without Docker or SQL
+        run: python3 -B -m unittest discover -s .github/scripts -p 'test_cat02_sql_runner.py'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Run only CAT-02 on its verified disposable SQL Server
+        run: python3 -B .github/scripts/cat02_sql_runner.py run
+
+      - name: Always clean up only this CAT-02 container
+        if: always()
+        run: python3 -B .github/scripts/cat02_sql_runner.py cleanup
+
+      - name: Upload sanitized CAT-02 TRX only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cat02-sqlserver-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cat02-results/cat02-sqlserver.trx
+          if-no-files-found: error
+          retention-days: 7

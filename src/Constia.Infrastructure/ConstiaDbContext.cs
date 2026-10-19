@@ -13,6 +13,8 @@ public class ConstiaDbContext : DbContext
 
     public DbSet<Habito> Habitos => Set<Habito>();
 
+    public DbSet<CategoriaHabito> CategoriasHabito => Set<CategoriaHabito>();
+
     public DbSet<InicializacionEstadoHabito> InicializacionesEstadoHabito => Set<InicializacionEstadoHabito>();
 
     public DbSet<SnapshotEstadoHabito> SnapshotsEstadoHabito => Set<SnapshotEstadoHabito>();

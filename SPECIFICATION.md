@@ -53,6 +53,8 @@ Un hábito tendrá conceptualmente:
 * Fecha de creación.
 * Fecha de inicio.
 * Estado.
+* Una categoría oficial, identificada de forma estable e independiente del ícono.
+* Un ícono oficial, identificado de forma estable e independiente de la categoría.
 * Usuario propietario.
 * Días de la semana programados.
 
@@ -61,12 +63,23 @@ Un hábito tendrá conceptualmente:
 Para crear un hábito se deberá proporcionar como mínimo:
 
 * Nombre.
-* Fecha de inicio.
+* Una categoría válida del catálogo oficial, mediante su identificador estable.
+* Un ícono válido del catálogo oficial de dieciséis recursos, mediante un identificador estable.
 * Al menos un día programado.
 
 La descripción será opcional.
 
 Todo hábito nuevo comenzará en estado **Activo**.
+
+### FechaInicio automática para nuevas creaciones · decisión del 19/10/2026
+
+El usuario no ingresará manualmente `FechaInicio`. El backend obtendrá el instante UTC actual mediante `TimeProvider`, lo convertirá a la zona horaria IANA persistida del usuario autenticado y determinará la fecha civil local correspondiente. Esa fecha será `FechaInicio` y seguirá persistida en el modelo. No se utilizará la zona horaria del servidor ni una fecha arbitraria enviada por el cliente. El nuevo contrato rechazará expresamente cualquier solicitud de creación que incluya `FechaInicio`; retirar la propiedad de un DTO sin validar su presencia no basta para satisfacer esta regla. Los detalles de compatibilidad y respuesta se especificarán en API-CAT-01.
+
+El cálculo se realizará una vez por creación y su resultado se reutilizará como inicio del hábito, de su programación inicial y de su período inicial de estado Activo. El estado inicial será Activo desde `FechaInicio`. La operación deberá poder verificarse con un `TimeProvider` controlado. No se admite sustituir silenciosamente una zona persistida inválida por la del servidor.
+
+`FechaInicio` no tiene que coincidir con un día programado. Ejemplo: si la fecha civil local al crear es domingo 18/10/2026 y se selecciona lunes a viernes, `FechaInicio` será 18/10/2026, el estado inicial será Activo y la primera oportunidad programada será lunes 19/10/2026. El domingo no programado y los días anteriores a `FechaInicio` no generan oportunidades ni incumplimientos.
+
+Esta regla se aplica a nuevas creaciones una vez adaptado el contrato. No recalcula ni reescribe fechas de inicio, versiones o cumplimientos de hábitos históricos. Cambiar posteriormente la zona horaria no reinterpreta las fechas civiles ya almacenadas. La fecha de creación como instante y la fecha civil de inicio siguen siendo datos distintos.
 
 ## 2.4. Días programados
 
@@ -93,6 +106,42 @@ Los cambios de días programados tendrán vigencia desde la fecha local del usua
 Los cambios de nombre o descripción no crearán versiones de programación. Si se modifica la programación antes de `FechaInicio`, se actualizará la versión inicial sin adelantar su vigencia.
 
 La programación actualmente almacenada se convertirá en la versión inicial, vigente desde `FechaInicio` y con `VigenteHasta` nulo hasta que exista una versión posterior. No se reconstruirán cambios históricos que nunca fueron registrados.
+
+---
+
+## 2.5. Categorías oficiales · decisión del 19/10/2026
+
+V1 incluye un catálogo inicial predefinido de diez categorías con estos nombres funcionales exactos:
+
+1. Salud y movimiento.
+2. Alimentación e hidratación.
+3. Descanso y sueño.
+4. Bienestar emocional.
+5. Aprendizaje y crecimiento.
+6. Productividad y organización.
+7. Relaciones y vínculos.
+8. Finanzas personales.
+9. Creatividad y ocio.
+10. Hogar y vida cotidiana.
+
+Los ejemplos y los íconos de referencia están en `MVP-SCOPE.md`, sección 3.11. No se agregan categorías ni se renombran estas mediante esta formalización.
+
+* Cada hábito nuevo debe tener exactamente una categoría válida del catálogo una vez habilitada la funcionalidad. Se validarán presencia e identidad; un nombre libre o un ID inexistente no reemplazan una categoría válida.
+* Los identificadores serán estables entre despliegues y no dependerán del nombre visible. La estrategia técnica de claves y precarga se propone en el análisis de impacto; todavía no se crearon seeds.
+* Se podrá consultar y editar la categoría dentro de las operaciones de hábitos, con las mismas garantías de propiedad, integridad y concurrencia que la edición general. Omitirla conserva el valor actual y V1 no permite eliminar una categoría ya asignada. Esta decisión no habilita reactivación ni cambios en `FechaInicio`.
+* No se permitirá crear, editar ni eliminar categorías personalizadas en V1.
+* Categoría e ícono son independientes. Todo hábito nuevo requiere un ícono oficial válido entre los dieciséis recursos disponibles. Billete está aprobado como recurso de referencia de Finanzas personales, pero puede elegirse para cualquier categoría. Elegir o cambiar una categoría no impone ni cambia automáticamente el ícono.
+* Cambiar solo la categoría no modifica días, estado, cumplimientos ni fechas históricas y no crea una versión de programación semanal. No se aprueban métricas históricas por categoría ni una reconstrucción retrospectiva de categorías desconocidas.
+
+### Transición de hábitos existentes
+
+Los hábitos históricos podrán conservar `CategoriaId` e `IconoId` nulos durante una transición compatible. No se les asignará una categoría ni un ícono arbitrarios y no se borrarán o reconstruirán datos históricos. La excepción transitoria no habilita nuevas creaciones sin categoría e ícono válidos después de activar la funcionalidad.
+
+Las lecturas deberán representar ambas ausencias durante la transición. Una categoría informada deberá ser válida; no se utilizará el nombre, el ícono o el texto del hábito para inferirla. Omitir la categoría en una edición conserva su valor, incluso cuando sea nulo; editar un hábito histórico sin categoría no obliga a clasificarlo. No se permite eliminar una categoría asignada. El tratamiento de `null` explícito frente a campo ausente y la semántica de edición del ícono quedan pendientes de especificación en API-CAT-01; no se asumen resueltos. No se ejecuta ninguna migración en AUD-BASE.
+
+### Relación con las aprobaciones visuales
+
+Antecedente histórico: la aprobación inicial de PEN-006 del 18/10/2026 mostraba cinco categorías y quince íconos. Las revisiones visuales aprobadas el 19/10/2026 establecen diez categorías en lista sin íconos en el Paso 1 y dieciséis íconos independientes en grilla 4 × 4 en el Paso 2; Libro permanece seleccionado y Billete ocupa fila 4/columna 4. Pasos 3–5 y el check/confeti aprobados se conservan. Las decisiones de Categorías V1 y FechaInicio automática local están aprobadas como producto, pero todavía requieren implementación. Esta aprobación visual es estática y no certifica contratos, desplazamiento, selección, navegación ni accesibilidad funcional. PEN-007 deberá contemplar edición de categoría e ícono, sin iniciarlo en AUD-BASE.
 
 ---
 
@@ -131,6 +180,8 @@ En V1 no se eliminará físicamente un hábito.
 La acción de "eliminar" un hábito se interpretará como **desactivarlo**.
 
 La desactivación no elimina los cumplimientos existentes.
+
+No existe reactivación de hábitos en V1.
 
 ## 3.4. Interpretación histórica del estado
 
@@ -357,6 +408,10 @@ Los días sin cumplimiento no requieren un registro persistido de "no realizado"
 * Todo hábito debe pertenecer a un usuario.
 * Todo hábito debe tener al menos un día programado.
 * Un hábito nuevo comienza activo.
+* Cada hábito nuevo requiere una sola categoría válida y un ícono oficial válido al habilitarse la funcionalidad; sus valores nulos solo se admiten en hábitos históricos durante la transición.
+* Categoría e ícono son independientes. Omitir la categoría al editar conserva su valor y no se permite eliminarla una vez asignada.
+* `FechaInicio` de nuevos hábitos se calcula en el backend desde UTC y la zona IANA persistida del usuario, mediante `TimeProvider`; no procede de una fecha ingresada por el cliente.
+* Las fechas de inicio históricas se conservan. La fecha inicial no tiene que ser un día programado.
 * Desactivar un hábito no elimina su historial.
 * Las versiones de programación deben tener intervalos semiabiertos sin solapamientos y una única versión aplicable para cada fecha desde `FechaInicio`.
 * Los cambios de programación tienen vigencia desde la fecha local del usuario y no editan versiones históricas anteriores en V1.
@@ -402,3 +457,9 @@ Cuando exista una diferencia entre una implementación y esta especificación:
 3. La implementación deberá adaptarse posteriormente.
 
 Las decisiones de V2 no deben incorporarse a V1 sin modificar previamente el alcance del MVP.
+
+## Decisión funcional del 19/10/2026
+
+Las secciones 2.3 y 2.5 formalizan el catálogo de diez categorías V1 y `FechaInicio` automática local, aprobados explícitamente en esa fecha. Reemplazan la antigua exclusión de Categorías y el ingreso manual de fecha al crear. El código y los contratos existentes deberán adaptarse posteriormente; esta actualización documental no los declara implementados. Las reglas previas de programación versionada, estados por fecha, cumplimientos, zonas horarias y métricas se conservan.
+
+Reconciliación AUD-BASE del 19/10/2026: se incorporan dieciséis íconos, obligatoriedad independiente en nuevas altas, conservación de ambos identificadores nulos históricos y rechazo expreso de `FechaInicio` enviada por clientes en el contrato nuevo. Se conservan íntegros los períodos semiabiertos, el snapshot inmutable de TEMP-005, las respuestas de historia desconocida/inicialización y la ventana de cumplimientos de hoy o ayer de main integrado. No se implementan contratos, validaciones ni migraciones en esta revisión documental.
