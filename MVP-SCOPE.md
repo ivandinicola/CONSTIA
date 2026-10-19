@@ -68,11 +68,15 @@ Un hábito tendrá:
 * Fecha de creación.
 * Fecha de inicio.
 * Estado.
+* Categoría oficial, independiente del ícono elegido.
+* Ícono oficial elegido independientemente de la categoría.
 * Usuario propietario.
 * Días de la semana en los que debe realizarse.
 * Versiones históricas de sus días programados.
 
 Un hábito deberá tener al menos un día de la semana seleccionado.
+
+Para las nuevas creaciones, `FechaInicio` se asignará automáticamente en el backend a partir del instante UTC actual convertido a la zona IANA persistida del usuario. El usuario no la ingresará y el cliente no será su fuente de autoridad. El nuevo contrato rechazará expresamente las solicitudes que envíen `FechaInicio`. Se conservará como fecha civil persistida y el cálculo será verificable mediante `TimeProvider`. No tiene que coincidir con un día programado; no se recalcularán las fechas de inicio de hábitos existentes.
 
 ---
 
@@ -208,13 +212,40 @@ La interfaz deberá priorizar una representación clara y motivadora.
 
 ---
 
+### 3.11. Categorías oficiales de hábitos
+
+Decisión funcional aprobada el **19/10/2026**: las categorías predefinidas forman parte de V1. El catálogo inicial contiene exactamente estas diez categorías:
+
+| Categoría oficial | Ejemplos | Ícono de referencia visual |
+| --- | --- | --- |
+| Salud y movimiento | Caminar, entrenar, hacer ejercicio | Mancuerna |
+| Alimentación e hidratación | Beber agua, comer frutas, cocinar saludable | Manzana |
+| Descanso y sueño | Dormir temprano, mantener una rutina nocturna | Luna |
+| Bienestar emocional | Meditar, escribir un diario, practicar gratitud | Loto |
+| Aprendizaje y crecimiento | Leer, estudiar idiomas, aprender habilidades | Libro |
+| Productividad y organización | Planificar el día, organizar tareas, estudiar | Portátil |
+| Relaciones y vínculos | Llamar familiares, compartir tiempo con amigos | Corazón |
+| Finanzas personales | Registrar gastos, ahorrar, revisar presupuestos | Billete |
+| Creatividad y ocio | Tocar música, dibujar, practicar hobbies | Nota musical |
+| Hogar y vida cotidiana | Ordenar, limpiar, cuidar plantas o mascotas | Brote |
+
+Cada hábito nuevo deberá pertenecer a una sola categoría válida del catálogo, identificada por un ID estable y no por su nombre visible. También deberá tener un ícono oficial válido. La categoría podrá consultarse y editarse mediante las operaciones de hábitos, respetando propiedad y reglas generales de V1. Omitir la categoría en una edición conservará su valor; no se permitirá eliminar una categoría ya asignada. Editar un hábito histórico sin categoría no obligará a clasificarlo. La semántica de `null` explícito y la edición de ícono se precisarán en API-CAT-01. No habrá creación, edición ni eliminación de categorías personalizadas.
+
+Categoría e ícono son conceptos independientes: el usuario podrá elegir cualquiera de los dieciséis íconos oficiales para su hábito; la categoría no impone uno automáticamente. La referencia visual de la tabla no es una restricción de selección. Billete es el recurso oficial de referencia para Finanzas personales y puede elegirse para cualquier categoría; Finanzas personales no lo selecciona automáticamente.
+
+Los hábitos históricos podrán conservar `CategoriaId` e `IconoId` nulos, sin asignaciones arbitrarias ni pérdida de información histórica. Las nuevas creaciones requerirán ambos identificadores oficiales válidos una vez habilitada la funcionalidad. La estrategia recomendada y sus verificaciones están en el [análisis de impacto](docs/superpowers/plans/2026-10-19-categorias-v1-fecha-inicio.md); todavía no se ejecutó ninguna migración.
+
+Antecedente histórico: PEN-006 fue aprobado visualmente el 18/10/2026 con cinco categorías y quince íconos. Las revisiones aprobadas el 19/10/2026 conservan esa aprobación inicial y establecen diez categorías sin íconos en el Paso 1 y dieciséis íconos en grilla 4 × 4 en el Paso 2, con Billete en fila 4/columna 4. La aprobación es exclusivamente visual y estática: no certifica selección, desplazamiento, navegación, persistencia ni accesibilidad funcional. AUD-BASE no modifica Penpot ni inicia PEN-007.
+
+---
+
 ## 4. Funcionalidades fuera del MVP
 
 Las siguientes funcionalidades quedan fuera de V1:
 
 * Recordatorios.
 * Objetivos.
-* Categorías.
+* Categorías personalizadas (crear, editar o eliminar el catálogo por parte del usuario).
 * Estadísticas avanzadas.
 * Gamificación.
 * Insignias.
@@ -264,3 +295,9 @@ CONSTIA V1 se considerará completada cuando:
 * El proyecto pueda ejecutarse desde un entorno limpio siguiendo `DEVELOPMENT.md`.
 * El código se encuentre versionado mediante Git.
 * La versión inicial pueda documentarse como `v0.1.0`.
+
+## 7. Trazabilidad de decisiones funcionales
+
+El 19/10/2026 se aprobó incluir el catálogo de diez categorías oficiales y calcular automáticamente `FechaInicio` según la fecha civil local del usuario. Esto reemplaza la exclusión anterior de Categorías y resuelve los dos pendientes funcionales registrados durante PEN-006; no certifica su implementación ni modifica aprobaciones visuales anteriores. Las categorías personalizadas siguen fuera de V1. Reglas detalladas en `SPECIFICATION.md`, secciones 2.3 y 2.5.
+
+La reconciliación AUD-BASE del 19/10/2026 incorpora además la obligatoriedad de categoría e ícono válidos en nuevas altas, su independencia, la conservación de valores nulos históricos y el rechazo expreso de `FechaInicio` enviada en el contrato nuevo. Conserva las reglas temporales de main integrado, incluida la ventana de cumplimientos de hoy o ayer y la inicialización de TEMP-005; no implementa estas nuevas decisiones en código.

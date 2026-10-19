@@ -35,10 +35,15 @@ El alcance funcional de la primera versión está definido en:
 
 * Crear hábitos.
 * Editar hábitos.
-* Activar y desactivar hábitos.
+* Desactivar hábitos conservando su historial; sin reactivación en V1.
 * Consultar hábitos activos.
 * Consultar hábitos inactivos.
 * Definir los días de la semana en los que se realiza cada hábito.
+* Asignar una categoría del catálogo oficial de diez opciones, independiente del ícono.
+* Elegir un ícono válido del catálogo oficial de dieciséis recursos, independientemente de la categoría.
+* Asignar automáticamente la fecha de inicio desde la fecha civil local del usuario en el backend.
+
+Las decisiones de categoría e ícono obligatorios en nuevas altas y FechaInicio automática están aprobadas y pendientes de adaptación en código. Los hábitos históricos podrán conservar ambos identificadores nulos. Omitir la categoría al editar conserva su valor; no se permite eliminar una ya asignada. El contrato nuevo rechazará solicitudes que incluyan `FechaInicio`. Su alcance y nombres exactos están en [`MVP-SCOPE.md`](MVP-SCOPE.md) y [`SPECIFICATION.md`](SPECIFICATION.md); el [análisis de impacto](docs/superpowers/plans/2026-10-19-categorias-v1-fecha-inicio.md) describe la transición de hábitos existentes y el trabajo futuro.
 
 ### Cumplimientos
 
@@ -170,7 +175,7 @@ Las siguientes funcionalidades quedan fuera del MVP actual y podrán evaluarse p
 
 * Recordatorios.
 * Objetivos.
-* Categorías.
+* Categorías personalizadas (el catálogo oficial de diez categorías sí está incluido en V1).
 * Estadísticas avanzadas.
 * Gamificación.
 * Insignias.
@@ -198,3 +203,7 @@ También es un proyecto de aprendizaje y portfolio orientado a profundizar conoc
 * desarrollo asistido por inteligencia artificial.
 
 El proyecto se construye de forma incremental, manteniendo trazabilidad entre requerimientos, código, pruebas y commits.
+
+## Base documental AUD-BASE · 19/10/2026
+
+La reconciliación parte de main remoto `30058bbcd90e8f6a3733784f6826470eb67989d4`, con COMP-005 y TEMP-005 integrados. Conserva sus reglas temporales, incluida la ventana de cumplimientos de hoy o ayer. PEN-006 tiene aprobación visual estática para diez categorías y dieciséis íconos; no acredita implementación funcional. Esta tarea solo prepara Git y documentación: no implementa funcionalidades ni aplica migraciones.
