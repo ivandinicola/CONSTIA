@@ -1,10 +1,11 @@
 using Constia.Application.Habitos;
 using Constia.Application.Usuarios;
 using Constia.Domain;
+using Constia.Application.Temporal;
 
 namespace Constia.Tests;
 
-public class CrearHabitoTests
+public partial class CrearHabitoTests
 {
     [Fact]
     public async Task EjecutarAsync_ConDatosValidos_UsaElPropietarioYPersisteHabito()
@@ -12,7 +13,8 @@ public class CrearHabitoTests
         var usuario = CrearUsuario();
         var usuarios = new FakeUsuarioRepository(usuario);
         var habitos = new FakeHabitoRepository();
-        var casoDeUso = new CrearHabito(usuarios, habitos, new EstadoHabitoReadinessRepositoryFalso());
+        var casoDeUso = new CrearHabito(usuarios, habitos, new EstadoHabitoReadinessRepositoryFalso(), new Categorias(),
+            new FechaLocalUsuario(new Reloj(), new ZonaHorariaIana()), new Reloj());
         using var cancellation = new CancellationTokenSource();
 
         var resultado = await casoDeUso.EjecutarAsync(
@@ -28,8 +30,8 @@ public class CrearHabitoTests
         Assert.Equal(1, habitos.CantidadDeInserciones);
         Assert.IsType<HabitoCreado>(resultado);
         Assert.NotNull(resultado);
-        Assert.Null(resultado.CategoriaId);
-        Assert.Null(resultado.IconoId);
+        Assert.Equal(CatalogoCategoriasHabito.Todas[4].Id, resultado.CategoriaId);
+        Assert.Equal("libro", resultado.IconoId);
     }
 
     [Fact]
@@ -40,7 +42,8 @@ public class CrearHabitoTests
         var casoDeUso = new CrearHabito(
             new FakeUsuarioRepository(usuario),
             habitos,
-            new EstadoHabitoReadinessRepositoryFalso());
+            new EstadoHabitoReadinessRepositoryFalso(), new Categorias(),
+            new FechaLocalUsuario(new Reloj(), new ZonaHorariaIana()), new Reloj());
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             casoDeUso.EjecutarAsync(CrearSolicitud(usuario.Id, nombre: " ")));
@@ -57,7 +60,8 @@ public class CrearHabitoTests
         var casoDeUso = new CrearHabito(
             new FakeUsuarioRepository(usuario),
             habitos,
-            new EstadoHabitoReadinessRepositoryFalso());
+            new EstadoHabitoReadinessRepositoryFalso(), new Categorias(),
+            new FechaLocalUsuario(new Reloj(), new ZonaHorariaIana()), new Reloj());
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             casoDeUso.EjecutarAsync(CrearSolicitud(usuario.Id, diasProgramados: [])));
@@ -71,7 +75,8 @@ public class CrearHabitoTests
     {
         var habitos = new FakeHabitoRepository();
         var casoDeUso = new CrearHabito(
-            new FakeUsuarioRepository(null), habitos, new EstadoHabitoReadinessRepositoryFalso());
+            new FakeUsuarioRepository(null), habitos, new EstadoHabitoReadinessRepositoryFalso(), new Categorias(),
+            new FechaLocalUsuario(new Reloj(), new ZonaHorariaIana()), new Reloj());
 
         var resultado = await casoDeUso.EjecutarAsync(CrearSolicitud());
 
@@ -88,7 +93,8 @@ public class CrearHabitoTests
         var casoDeUso = new CrearHabito(
             new FakeUsuarioRepository(usuario),
             habitos,
-            new EstadoHabitoReadinessRepositoryFalso());
+            new EstadoHabitoReadinessRepositoryFalso(), new Categorias(),
+            new FechaLocalUsuario(new Reloj(), new ZonaHorariaIana()), new Reloj());
         var solicitud = CrearSolicitud(usuario.Id);
 
         var resultado = Assert.IsType<HabitoCreado>(
@@ -100,7 +106,7 @@ public class CrearHabitoTests
         Assert.Equal(solicitud.Nombre, resultado.Nombre);
         Assert.Equal(solicitud.Descripcion, resultado.Descripcion);
         Assert.Equal(persistido.FechaCreacion, resultado.FechaCreacion);
-        Assert.Equal(solicitud.FechaInicio, resultado.FechaInicio);
+        Assert.Equal(new DateOnly(2026, 10, 10), resultado.FechaInicio);
         Assert.Equal(EstadoHabito.Activo, resultado.Estado);
         Assert.Equal(solicitud.DiasProgramados, resultado.DiasProgramados);
     }
@@ -116,7 +122,8 @@ public class CrearHabitoTests
             usuarioId ?? CrearUsuario().Id,
             nombre,
             "Leer un libro",
-            new DateOnly(2026, 10, 6),
+            CatalogoCategoriasHabito.Todas[4].Id,
+            "libro",
             diasProgramados ?? [DayOfWeek.Monday, DayOfWeek.Wednesday]);
     }
 

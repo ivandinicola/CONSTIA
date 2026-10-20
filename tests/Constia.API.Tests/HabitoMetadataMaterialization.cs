@@ -9,7 +9,7 @@ internal static class HabitoMetadataMaterialization
     internal static Habito Crear(Usuario usuario, Guid? categoriaId, string? iconoId)
     {
         using var context = CategoriaHabitoModelTests.CrearContexto();
-        var source = new Habito(usuario, "Leer", "Historia", new DateOnly(2026, 10, 1), [DayOfWeek.Monday]);
+        var source = HabitoHistorico.Crear(usuario, "Leer", "Historia", new DateOnly(2026, 10, 1), [DayOfWeek.Monday]);
         var values = context.Entry(source).CurrentValues.Clone();
         values[nameof(Habito.CategoriaId)] = categoriaId;
         values[nameof(Habito.IconoId)] = iconoId;

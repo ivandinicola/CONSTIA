@@ -52,7 +52,7 @@ jobs:
       - name: Test
         run: >-
           dotnet test --no-build --configuration Release
-          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests&FullyQualifiedName!~RegistrarCumplimientoSqlServerTests&FullyQualifiedName!~Temp005StateHistorySqlServerTests&FullyQualifiedName!~CategoriaHabitoSqlServerTests&FullyQualifiedName!~HabitoIconoSqlServerTests&FullyQualifiedName!~HabCat02SqlServerTests"
+          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests&FullyQualifiedName!~RegistrarCumplimientoSqlServerTests&FullyQualifiedName!~Temp005StateHistorySqlServerTests&FullyQualifiedName!~CategoriaHabitoSqlServerTests&FullyQualifiedName!~HabitoIconoSqlServerTests&FullyQualifiedName!~HabCat02SqlServerTests&FullyQualifiedName!~HabDate01SqlServerTests"
 
       - name: Test TEMP-003 migration against disposable SQL Server
         env:
@@ -264,6 +264,55 @@ jobs:
               or any(int(counters.attrib.get(key, "-1")) != value for key, value in required.items())):
               raise SystemExit("HAB-CAT-02 requires exactly seven passing SQL tests, with no failures or skips.")
           print("HAB-CAT-02 SQL metadata tests: 7 passed; 0 failed; 0 skipped.")
+          PY
+
+      - name: Test HAB-DATE-01 creation contract and local dates against disposable SQL Server
+        env:
+          CONSTIA_HABDATE01_SQLSERVER_TESTS: "true"
+          CONSTIA_HABDATE01_SQLSERVER_CONNECTION: "Server=127.0.0.1,1433;Initial Catalog=master;User Id=sa;Password=Constia_TEMP003_CI_Only!2026;Encrypt=False;TrustServerCertificate=True;Connect Timeout=5"
+          CONSTIA_HABDATE01_CONTAINER_ID: ${{ job.services.sqlserver.id }}
+        run: |
+          set -euo pipefail
+          results_dir="$RUNNER_TEMP/habdate01-results"
+          mkdir -p "$results_dir"
+          dotnet test tests/Constia.API.Tests/Constia.API.Tests.csproj \
+            --no-build \
+            --configuration Release \
+            --filter FullyQualifiedName~HabDate01SqlServerTests \
+            --logger "trx;LogFileName=habdate01-creation.trx" \
+            --results-directory "$results_dir"
+          python3 - "$results_dir/habdate01-creation.trx" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          ns = {"trx": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+          root = ET.parse(sys.argv[1]).getroot()
+          expected = {
+              "Alta_PersisteMetadatosYVersionInicial",
+              "Alta_UnInstanteUtcYFechaLocalEnTodaLaGrafica",
+              "Alta_NoReclasificaNiReescribeHistoriaExistente",
+              "Fk_RechazaReferenciaInvalidaSinPerdidaParcial",
+              "CategoriaOficialAusente_NoGuardaNingunaParteDelAgregado",
+              "IconoInvalido_NoGuardaNiModificaHistoricos",
+              "SnapshotNoCapturado_BloqueaSinPersistenciaParcial",
+              "Esquema_SinDefaultsBackfillNiNuevasMigraciones",
+          }
+          definitions = {
+              unit.attrib["id"]: unit.find("./trx:TestMethod", ns)
+              for unit in root.findall(".//trx:TestDefinitions/trx:UnitTest", ns)
+          }
+          results = root.findall(".//trx:Results/trx:UnitTestResult", ns)
+          outcomes = [result.attrib.get("outcome") for result in results]
+          methods = [definitions[result.attrib["testId"]] for result in results]
+          names = {method.attrib["name"] for method in methods}
+          counters = root.find("./trx:ResultSummary/trx:Counters", ns)
+          required = {"total": 8, "executed": 8, "passed": 8, "failed": 0, "notExecuted": 0}
+          if (len(results) != 8 or outcomes.count("Passed") != 8 or names != expected
+              or any(method.attrib["className"] != "Constia.API.Tests.HabDate01SqlServerTests" for method in methods)
+              or counters is None
+              or any(int(counters.attrib.get(key, "-1")) != value for key, value in required.items())):
+              raise SystemExit("HAB-DATE-01 requires exactly eight passing SQL tests, with no failures or skips.")
+          print("HAB-DATE-01 SQL metadata tests: 8 passed; 0 failed; 0 skipped.")
           PY
 
   cat02-sqlserver:

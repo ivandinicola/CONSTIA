@@ -108,7 +108,7 @@ public sealed class PeriodoEstadoHabitoTests
         Assert.Equal(FechaInicio.AddDays(3), habit.ObtenerProgramacionPara(FechaInicio.AddDays(3))!.VigenteDesde);
     }
 
-    private static Habito CrearHabito() => new(
+    private static Habito CrearHabito() => HabitoHistorico.Crear(
         new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC"),
         "Leer", null, FechaInicio, [DayOfWeek.Monday]);
 

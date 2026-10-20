@@ -100,7 +100,7 @@ public sealed class PeriodoEstadoHabitoModelTests
         using var context = CrearContexto();
         var user = new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC");
         var start = new DateOnly(2026, 10, 1);
-        var habit = new Habito(user, "Leer", null, start, [DayOfWeek.Monday]);
+        var habit = HabitoHistorico.Crear(user, "Leer", null, start, [DayOfWeek.Monday]);
         context.Add(habit);
 
         var entry = Assert.Single(context.ChangeTracker.Entries<PeriodoEstadoHabito>());

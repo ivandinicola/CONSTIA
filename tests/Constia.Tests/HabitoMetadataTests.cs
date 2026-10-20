@@ -6,11 +6,11 @@ namespace Constia.Tests;
 public sealed class HabitoMetadataTests
 {
     [Fact]
-    public void Constructor_ConservaMetadatosNullYLasReglasTemporalesExistentes()
+    public void MaterializacionHistorica_ConservaMetadatosNullYLasReglasTemporalesExistentes()
     {
         var usuario = new Usuario("Prueba", "metadata@example.invalid", "test-hash", "Etc/UTC");
         var inicio = new DateOnly(2026, 10, 1);
-        var habito = new Habito(usuario, "Leer", null, inicio, [DayOfWeek.Monday]);
+        var habito = HabitoHistorico.Crear(usuario, "Leer", null, inicio, [DayOfWeek.Monday]);
         var creacion = habito.FechaCreacion;
         var icono = typeof(Habito).GetProperty("IconoId");
         Assert.NotNull(icono);

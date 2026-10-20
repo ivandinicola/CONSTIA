@@ -66,7 +66,7 @@ public sealed class ProgramacionHabitoModelTests
         using var dbContext = CrearDbContext();
         var usuario = new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC");
         var fechaInicio = new DateOnly(2026, 10, 5);
-        var habito = new Habito(
+        var habito = HabitoHistorico.Crear(
             usuario,
             "Leer",
             null,

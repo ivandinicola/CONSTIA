@@ -540,6 +540,9 @@ public sealed class RegistrarCumplimientoSqlServerTests
 
     private sealed class FixedLocalDate(DateOnly today) : IFechaLocalUsuario
     {
+        public DateOnly ObtenerFechaLocal(DateTimeOffset instanteUtc, string timeZoneId) =>
+            throw new NotSupportedException("Este fake solo prueba consumidores de ObtenerHoy.");
+
         public DateOnly ObtenerHoy(string timeZoneId) => today;
     }
 

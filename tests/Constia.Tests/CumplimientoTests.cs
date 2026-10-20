@@ -46,7 +46,7 @@ public sealed class CumplimientoTests
         Assert.Equal(EstadoHabito.Inactivo, cumplimiento.Habito.Estado);
     }
 
-    private static Habito CrearHabito() => new(
+    private static Habito CrearHabito() => HabitoHistorico.Crear(
         new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC"),
         "Leer",
         null,

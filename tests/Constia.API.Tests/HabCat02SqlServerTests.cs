@@ -171,6 +171,9 @@ public sealed class HabCat02SqlServerTests
         new(Repo(context), new UsuarioRepository(context), new LocalDate(), new CategoriaHabitoReadRepository(context));
     private sealed class LocalDate : IFechaLocalUsuario
     {
+        public DateOnly ObtenerFechaLocal(DateTimeOffset instanteUtc, string timeZoneId) =>
+            throw new NotSupportedException("Este fake solo prueba consumidores de ObtenerHoy.");
+
         public DateOnly ObtenerHoy(string zone) => new(2026,10,10);
     }
     private static EditarHabitoRequest Request(string name, int category, string icon) =>
@@ -180,7 +183,7 @@ public sealed class HabCat02SqlServerTests
         await using var context = database.CreateContext();
         await context.Database.MigrateAsync();
         var owner = new Usuario("HAB-CAT-02", "habcat02@example.invalid", "test-hash", "Etc/UTC");
-        var habit = new Habito(owner, "Leer", null, new DateOnly(2026,10,1), [DayOfWeek.Monday]);
+        var habit = HabitoHistorico.Crear(owner, "Leer", null, new DateOnly(2026,10,1), [DayOfWeek.Monday]);
         await Repo(context).AgregarAsync(habit, default);
         context.Add(new Cumplimiento(habit, habit.FechaInicio));
         await context.SaveChangesAsync();

@@ -121,7 +121,7 @@ public sealed class CategoriasHabitoControllerTests
     public async Task Listar_CoexisteConLaRutaDeDetallePorGuid()
     {
         using var factory = new JwtApiFactory();
-        var habito = new Habito(factory.Usuario, "Leer", null, new DateOnly(2026, 10, 1), [DayOfWeek.Monday]);
+        var habito = HabitoHistorico.Crear(factory.Usuario, "Leer", null, new DateOnly(2026, 10, 1), [DayOfWeek.Monday]);
         factory.ReemplazarHabitos([habito]);
         using var client = ClienteAutenticado(factory, factory.Usuario);
 
