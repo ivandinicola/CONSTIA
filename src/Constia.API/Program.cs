@@ -37,6 +37,7 @@ builder.Services.AddSingleton<IFechaLocalUsuario, FechaLocalUsuario>();
 
 builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
 builder.Services.AddScoped<IHabitoRepository, HabitoRepository>();
+builder.Services.AddScoped<ICategoriaHabitoReadRepository, CategoriaHabitoReadRepository>();
 builder.Services.AddScoped<ICumplimientoRepository, CumplimientoRepository>();
 builder.Services.AddScoped<IEstadoHabitoReadinessRepository, EstadoHabitoReadinessRepository>();
 builder.Services.AddScoped<IUsuarioActual, HttpContextUsuarioActual>();
@@ -47,6 +48,7 @@ builder.Services.AddScoped<CambiarZonaHorariaUsuario>();
 builder.Services.AddScoped<AutenticarUsuario>();
 builder.Services.AddScoped<CrearHabito>();
 builder.Services.AddScoped<ListarHabitosActivos>();
+builder.Services.AddScoped<ListarCategoriasHabito>();
 builder.Services.AddScoped<ListarHabitosInactivos>();
 builder.Services.AddScoped<ObtenerHabitoPorId>();
 builder.Services.AddScoped<EditarHabito>();

@@ -17,6 +17,7 @@ public sealed class HabitosController(
     CrearHabito crearHabito,
     ListarHabitosActivos listarHabitosActivos,
     ListarHabitosInactivos listarHabitosInactivos,
+    ListarCategoriasHabito listarCategoriasHabito,
     ObtenerHabitoPorId obtenerHabitoPorId,
     EditarHabito editarHabito,
     DesactivarHabito desactivarHabito,
@@ -78,6 +79,16 @@ public sealed class HabitosController(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "No se pudo determinar la fecha local del usuario.");
         }
+    }
+
+    [HttpGet("categorias")]
+    [ProducesResponseType(typeof(IReadOnlyList<CategoriaHabitoListado>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<IReadOnlyList<CategoriaHabitoListado>>> ListarCategorias(
+        CancellationToken cancellationToken)
+    {
+        var categorias = await listarCategoriasHabito.EjecutarAsync(cancellationToken);
+        return Ok(categorias);
     }
 
     [HttpGet("inactivos")]
