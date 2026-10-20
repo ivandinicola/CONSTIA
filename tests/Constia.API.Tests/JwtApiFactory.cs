@@ -37,6 +37,8 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
 
     public ConcurrentQueue<Habito> HabitosPersistidos { get; } = new();
 
+    public HashSet<Guid> CategoriasNoDisponibles { get; } = [];
+
     public bool SnapshotCapturado { get; set; } = true;
 
     public bool HistorialCompleto { get; set; } = true;
@@ -88,7 +90,7 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
                 HabitosPersistidos,
                 RegistrarHabitoGuardado));
             services.RemoveAll<ICategoriaHabitoReadRepository>();
-            services.AddScoped<ICategoriaHabitoReadRepository, FakeCategoriaHabitoReadRepository>();
+            services.AddScoped<ICategoriaHabitoReadRepository>(_ => new FakeCategoriaHabitoReadRepository(this));
             services.RemoveAll<IEstadoHabitoReadinessRepository>();
             services.AddScoped<IEstadoHabitoReadinessRepository>(_ => new FakeEstadoHabitoReadinessRepository(this));
             services.RemoveAll<TimeProvider>();
@@ -184,8 +186,14 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
         }
     }
 
-    private sealed class FakeCategoriaHabitoReadRepository : ICategoriaHabitoReadRepository
+    private sealed class FakeCategoriaHabitoReadRepository(JwtApiFactory factory) : ICategoriaHabitoReadRepository
     {
+        public Task<bool> ExisteAsync(Guid id, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(CatalogoCategoriasHabito.EsOficial(id) && !factory.CategoriasNoDisponibles.Contains(id));
+        }
+
         public Task<IReadOnlyList<CategoriaHabitoListado>> ListarAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();

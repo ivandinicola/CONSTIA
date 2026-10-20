@@ -159,7 +159,9 @@ public sealed class HabitosController(
                 new EditarHabitoRequest(
                     request.Nombre,
                     request.Descripcion,
-                    request.DiasProgramados!),
+                    request.DiasProgramados!,
+                    request.CategoriaId,
+                    request.IconoId),
                 cancellationToken);
 
             if (editado is null)
@@ -177,6 +179,11 @@ public sealed class HabitosController(
                 editado.DiasProgramados,
                 editado.CategoriaId,
                 editado.IconoId));
+        }
+        catch (MetadatosHabitoInvalidosException exception)
+        {
+            ModelState.AddModelError(exception.Campo, exception.Message);
+            return ValidationProblem(ModelState);
         }
         catch (ConflictoVigenciaProgramacionException)
         {
