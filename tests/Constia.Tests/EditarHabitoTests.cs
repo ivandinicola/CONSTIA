@@ -5,7 +5,7 @@ using Constia.Domain;
 
 namespace Constia.Tests;
 
-public sealed class EditarHabitoTests
+public sealed partial class EditarHabitoTests
 {
     private static readonly DateOnly Hoy = new(2026, 10, 10);
 
@@ -147,7 +147,8 @@ public sealed class EditarHabitoTests
             new FakeUsuarioRepository(usuario),
             new FechaLocalUsuario(
                 new TimeProviderFijo(DateTimeOffset.Parse("2026-10-10T12:00:00Z")),
-                new ZonaHorariaIana()));
+                new ZonaHorariaIana()),
+            new CategoriasDisponibles());
 
         await Assert.ThrowsAsync<ZonaHorariaPersistidaInvalidaException>(() => useCase.EjecutarAsync(
             habito.Id,
@@ -197,9 +198,17 @@ public sealed class EditarHabitoTests
         var repository = new FakeHabitoRepository(habito);
         var fechaLocal = new FakeFechaLocalUsuario(fecha);
         return (
-            new EditarHabito(repository, new FakeUsuarioRepository(usuario), fechaLocal),
+            new EditarHabito(repository, new FakeUsuarioRepository(usuario), fechaLocal, new CategoriasDisponibles()),
             repository,
             fechaLocal);
+    }
+
+    private sealed class CategoriasDisponibles : ICategoriaHabitoReadRepository
+    {
+        public Task<bool> ExisteAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult(CatalogoCategoriasHabito.EsOficial(id));
+        public Task<IReadOnlyList<CategoriaHabitoListado>> ListarAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private static Usuario CrearUsuario(string timeZoneId = "Etc/UTC") =>

@@ -70,6 +70,8 @@ public sealed class ListarCategoriasHabitoTests
     private sealed class FakeCategoriaReadRepository(
         Func<CancellationToken, Task<IReadOnlyList<CategoriaHabitoListado>>> listar) : ICategoriaHabitoReadRepository
     {
+        public Task<bool> ExisteAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
+
         public Task<IReadOnlyList<CategoriaHabitoListado>> ListarAsync(CancellationToken cancellationToken) =>
             listar(cancellationToken);
     }

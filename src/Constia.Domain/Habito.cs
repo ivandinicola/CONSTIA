@@ -185,6 +185,17 @@ public class Habito
         Descripcion = descripcion;
     }
 
+    public void ActualizarMetadatos(Guid? categoriaId, string? iconoId)
+    {
+        if (categoriaId is Guid categoria && !CatalogoCategoriasHabito.EsOficial(categoria))
+            throw new ArgumentException("La categoría debe ser oficial.", nameof(categoriaId));
+        if (iconoId is not null && !CatalogoIconosHabito.EsOficial(iconoId))
+            throw new ArgumentException("El ícono debe ser oficial.", nameof(iconoId));
+
+        if (categoriaId is not null) CategoriaId = categoriaId;
+        if (iconoId is not null) IconoId = iconoId;
+    }
+
     public void ActualizarConfiguracionVersionada(
         string nombre,
         string? descripcion,
