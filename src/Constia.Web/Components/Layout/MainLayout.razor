@@ -1,9 +1,12 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 
-@Body
+<a class="skip-link" href="#contenido-principal" data-enhance-nav="false">Saltar al contenido</a>
 
-<div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
+<div class="public-layout">
+    @Body
+</div>
+
+<div id="blazor-error-ui" role="alert" data-nosnippet>
+    Ocurrió un problema al mostrar la página.
+    <a href="" class="reload">Volver a cargar</a>
 </div>

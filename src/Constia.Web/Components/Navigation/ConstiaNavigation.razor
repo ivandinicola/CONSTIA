@@ -1,0 +1,25 @@
+<nav class="constia-navigation" aria-label="Navegación principal" aria-describedby="navigation-availability">
+    <p id="navigation-availability" class="visually-hidden">Vista preliminar. Las cinco secciones todavía no están disponibles.</p>
+    <ul class="navigation-items">
+        @foreach (var item in Items)
+        {
+            <li @key="item.Icon">
+                <button type="button" disabled aria-label="@(item.Label + ": todavía no disponible")">
+                    <img src="@Assets[$"assets/constia-iconos-v1/{item.Icon}"]" width="22" height="22" alt="" />
+                    <span>@item.Label</span>
+                </button>
+            </li>
+        }
+    </ul>
+</nav>
+
+@code {
+    private static readonly (string Label, string Icon)[] Items =
+    [
+        ("Hoy", "constia-hoy.png"),
+        ("Calendario", "constia-calendario.png"),
+        ("Progreso", "constia-progreso.png"),
+        ("Logros", "constia-logros.png"),
+        ("Más", "constia-mas.png")
+    ];
+}

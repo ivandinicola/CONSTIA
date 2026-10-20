@@ -1,20 +1,36 @@
-#blazor-error-ui {
-    color-scheme: light only;
-    background: lightyellow;
-    bottom: 0;
-    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
-    box-sizing: border-box;
-    display: none;
-    left: 0;
-    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
-    position: fixed;
-    width: 100%;
-    z-index: 1000;
+.public-layout {
+    min-block-size: 100svh;
 }
 
-    #blazor-error-ui .dismiss {
-        cursor: pointer;
-        position: absolute;
-        right: 0.75rem;
-        top: 0.5rem;
-    }
+.skip-link {
+    position: fixed;
+    inset-block-start: max(var(--constia-space-sm), env(safe-area-inset-top));
+    inset-inline-start: var(--constia-space-md);
+    z-index: 10;
+    padding: var(--constia-space-sm) var(--constia-space-md);
+    color: var(--constia-ink);
+    background: var(--constia-surface);
+    border-radius: var(--constia-radius-control);
+    box-shadow: var(--constia-shadow-soft);
+    transform: translateY(-200%);
+}
+
+.skip-link:focus {
+    transform: translateY(0);
+}
+
+#blazor-error-ui {
+    display: none;
+    position: fixed;
+    inset-inline: 0;
+    inset-block-end: 0;
+    z-index: 20;
+    padding: var(--constia-space-md);
+    color: var(--constia-ink);
+    background: var(--constia-surface);
+    border-block-start: 2px solid var(--constia-brand-coral);
+}
+
+#blazor-error-ui a {
+    margin-inline-start: var(--constia-space-sm);
+}

@@ -1,0 +1,83 @@
+.constia-navigation {
+    max-inline-size: var(--constia-dock-width);
+    margin-inline: auto;
+    background: var(--constia-surface);
+    border: 1px solid var(--constia-border);
+    border-radius: var(--constia-radius-dock);
+    box-shadow: var(--constia-shadow-soft);
+}
+
+.navigation-items {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.navigation-items li {
+    min-inline-size: 0;
+}
+
+.navigation-items button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    inline-size: 100%;
+    min-block-size: calc(var(--constia-dock-height) - 2px);
+    padding: 8px 0 12px;
+    border: 0;
+    border-radius: var(--constia-radius-dock);
+    background: transparent;
+    color: var(--constia-navigation-muted);
+    font: inherit;
+    font-size: var(--constia-type-navigation);
+    font-weight: 500;
+    line-height: 1.35;
+    cursor: not-allowed;
+}
+
+.navigation-items img {
+    display: block;
+    inline-size: 22px;
+    block-size: 22px;
+    object-fit: contain;
+}
+
+/* En móvil estrecho, reservar el ancho real de los nombres largos sin reducir su letra. */
+@media (max-width: 23.999rem) {
+    .navigation-items {
+        grid-template-columns: minmax(44px, 1fr) max-content max-content minmax(44px, 1fr) minmax(44px, 1fr);
+        column-gap: var(--constia-space-xs);
+        padding-inline: var(--constia-space-xs);
+    }
+
+    .navigation-items button {
+        min-inline-size: 44px;
+    }
+}
+@media (min-width: 64rem) {
+    .constia-navigation {
+        box-shadow: none;
+        border: 0;
+        background: transparent;
+    }
+
+    .navigation-items {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--constia-space-xs);
+    }
+
+    .navigation-items button {
+        flex-direction: row;
+        justify-content: flex-start;
+        gap: var(--constia-space-sm);
+        min-block-size: 56px;
+        padding: var(--constia-space-md);
+        font-size: var(--constia-type-label);
+        background: var(--constia-surface);
+        border-radius: var(--constia-radius-control);
+    }
+}
