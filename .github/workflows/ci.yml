@@ -52,7 +52,7 @@ jobs:
       - name: Test
         run: >-
           dotnet test --no-build --configuration Release
-          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests&FullyQualifiedName!~RegistrarCumplimientoSqlServerTests&FullyQualifiedName!~Temp005StateHistorySqlServerTests&FullyQualifiedName!~CategoriaHabitoSqlServerTests"
+          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests&FullyQualifiedName!~RegistrarCumplimientoSqlServerTests&FullyQualifiedName!~Temp005StateHistorySqlServerTests&FullyQualifiedName!~CategoriaHabitoSqlServerTests&FullyQualifiedName!~HabitoIconoSqlServerTests"
 
       - name: Test TEMP-003 migration against disposable SQL Server
         env:
@@ -173,6 +173,51 @@ jobs:
               )
           print("TEMP-005 SQL state history tests: 9 passed; none skipped.")
           PY
+      - name: Test HAB-CAT-01 icon metadata against disposable SQL Server
+        env:
+          CONSTIA_HABCAT01_SQLSERVER_TESTS: "true"
+          CONSTIA_HABCAT01_SQLSERVER_CONNECTION: "Server=127.0.0.1,1433;Initial Catalog=master;User Id=sa;Password=Constia_TEMP003_CI_Only!2026;Encrypt=False;TrustServerCertificate=True;Connect Timeout=5"
+          CONSTIA_HABCAT01_CONTAINER_ID: ${{ job.services.sqlserver.id }}
+        run: |
+          set -euo pipefail
+          results_dir="$RUNNER_TEMP/habcat01-results"
+          mkdir -p "$results_dir"
+          dotnet test tests/Constia.API.Tests/Constia.API.Tests.csproj \
+            --no-build \
+            --configuration Release \
+            --filter FullyQualifiedName~HabitoIconoSqlServerTests \
+            --logger "trx;LogFileName=habcat01-icon-metadata.trx" \
+            --results-directory "$results_dir"
+          python3 - "$results_dir/habcat01-icon-metadata.trx" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          ns = {"trx": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+          root = ET.parse(sys.argv[1]).getroot()
+          expected = {
+              "Up_PreservaHistoriaCompletaCategoriaYFkYAgregaSoloColumnaNullable",
+              "Asignaciones_SeMaterializanYSePropaganPorMvcSinCambiarFechasNiHistoria",
+              "Down_ConIconoRechazaSinPerdidaParcialDeDatosEsquemaNiAsignaciones",
+              "Down_SoloNullPermiteRollbackYUpNuevamenteConHistoriaIntacta",
+          }
+          definitions = {
+              unit.attrib["id"]: unit.find("./trx:TestMethod", ns)
+              for unit in root.findall(".//trx:TestDefinitions/trx:UnitTest", ns)
+          }
+          results = root.findall(".//trx:Results/trx:UnitTestResult", ns)
+          outcomes = [result.attrib.get("outcome") for result in results]
+          methods = [definitions[result.attrib["testId"]] for result in results]
+          names = {method.attrib["name"] for method in methods}
+          counters = root.find("./trx:ResultSummary/trx:Counters", ns)
+          required = {"total": 4, "executed": 4, "passed": 4, "failed": 0, "notExecuted": 0}
+          if (len(results) != 4 or outcomes.count("Passed") != 4 or names != expected
+              or any(method.attrib["className"] != "Constia.API.Tests.HabitoIconoSqlServerTests" for method in methods)
+              or counters is None
+              or any(int(counters.attrib.get(key, "-1")) != value for key, value in required.items())):
+              raise SystemExit("HAB-CAT-01 requires exactly four passing SQL tests, with no failures or skips.")
+          print("HAB-CAT-01 SQL metadata tests: 4 passed; 0 failed; 0 skipped.")
+          PY
+
   cat02-sqlserver:
     name: CAT-02 isolated SQL Server 2022
     runs-on: ubuntu-latest

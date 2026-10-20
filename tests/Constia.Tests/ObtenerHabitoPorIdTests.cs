@@ -35,6 +35,8 @@ public sealed class ObtenerHabitoPorIdTests
         Assert.Equal(habit.FechaInicio, result.FechaInicio);
         Assert.Equal(habit.Estado, result.Estado);
         Assert.Equal([DayOfWeek.Monday, DayOfWeek.Friday], result.DiasProgramados);
+        Assert.Null(result.CategoriaId);
+        Assert.Null(result.IconoId);
     }
 
     [Fact]

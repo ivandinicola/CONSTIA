@@ -26,6 +26,8 @@ public sealed class ListarHabitosActivosTests
         Assert.Equal("Leer", resultado[0].Nombre);
         Assert.Equal([DayOfWeek.Monday], resultado[0].DiasProgramados);
         Assert.Equal("Caminar", resultado[1].Nombre);
+        Assert.Null(resultado[0].CategoriaId);
+        Assert.Null(resultado[0].IconoId);
     }
 
     [Fact]

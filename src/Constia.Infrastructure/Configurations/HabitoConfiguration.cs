@@ -16,6 +16,11 @@ public class HabitoConfiguration : IEntityTypeConfiguration<Habito>
 
         builder.Property(habito => habito.Descripcion);
 
+        builder.Property(habito => habito.IconoId)
+            .HasMaxLength(64)
+            .HasColumnType("nvarchar(64)")
+            .IsRequired(false);
+
         builder.Property(habito => habito.FechaCreacion)
             .HasColumnName("CreatedAt")
             .IsRequired();

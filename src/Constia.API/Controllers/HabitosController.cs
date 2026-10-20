@@ -123,7 +123,9 @@ public sealed class HabitosController(
             habito.FechaCreacion,
             habito.FechaInicio,
             habito.Estado,
-            habito.DiasProgramados)).ToArray();
+            habito.DiasProgramados,
+            habito.CategoriaId,
+            habito.IconoId)).ToArray();
 
         return Ok(response);
     }
@@ -172,7 +174,9 @@ public sealed class HabitosController(
                 editado.FechaCreacion,
                 editado.FechaInicio,
                 editado.Estado,
-                editado.DiasProgramados));
+                editado.DiasProgramados,
+                editado.CategoriaId,
+                editado.IconoId));
         }
         catch (ConflictoVigenciaProgramacionException)
         {
@@ -239,7 +243,9 @@ public sealed class HabitosController(
             habito.FechaCreacion,
             habito.FechaInicio,
             habito.Estado,
-            habito.DiasProgramados));
+            habito.DiasProgramados,
+            habito.CategoriaId,
+            habito.IconoId));
     }
 
     [HttpGet]
@@ -265,7 +271,9 @@ public sealed class HabitosController(
             habito.FechaCreacion,
             habito.FechaInicio,
             habito.Estado,
-            habito.DiasProgramados)).ToArray();
+            habito.DiasProgramados,
+            habito.CategoriaId,
+            habito.IconoId)).ToArray();
 
         return Ok(response);
     }
@@ -406,7 +414,9 @@ public sealed class HabitosController(
                 creado.FechaCreacion,
                 creado.FechaInicio,
                 creado.Estado,
-                creado.DiasProgramados));
+                creado.DiasProgramados,
+                creado.CategoriaId,
+                creado.IconoId));
         }
         catch (ArgumentException exception)
         {

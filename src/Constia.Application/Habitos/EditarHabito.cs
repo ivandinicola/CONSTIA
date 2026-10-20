@@ -46,6 +46,8 @@ public sealed class EditarHabito(
             habito.FechaCreacion,
             habito.FechaInicio,
             habito.Estado,
-            habito.DiasProgramados.Select(dia => dia.Dia).ToArray());
+            habito.DiasProgramados.Select(dia => dia.Dia).ToArray(),
+            habito.CategoriaId,
+            habito.IconoId);
     }
 }
