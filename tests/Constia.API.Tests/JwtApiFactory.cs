@@ -87,6 +87,8 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
             services.AddScoped<IHabitoRepository>(_ => new FakeHabitoRepository(
                 HabitosPersistidos,
                 RegistrarHabitoGuardado));
+            services.RemoveAll<ICategoriaHabitoReadRepository>();
+            services.AddScoped<ICategoriaHabitoReadRepository, FakeCategoriaHabitoReadRepository>();
             services.RemoveAll<IEstadoHabitoReadinessRepository>();
             services.AddScoped<IEstadoHabitoReadinessRepository>(_ => new FakeEstadoHabitoReadinessRepository(this));
             services.RemoveAll<TimeProvider>();
@@ -179,6 +181,19 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
         public bool VerifyPassword(string passwordHash, string password)
         {
             return passwordHash == "not-a-real-password-hash" && password == TestPassword;
+        }
+    }
+
+    private sealed class FakeCategoriaHabitoReadRepository : ICategoriaHabitoReadRepository
+    {
+        public Task<IReadOnlyList<CategoriaHabitoListado>> ListarAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            IReadOnlyList<CategoriaHabitoListado> categorias = CatalogoCategoriasHabito.Todas
+                .OrderBy(categoria => categoria.Orden)
+                .Select(categoria => new CategoriaHabitoListado(categoria.Id, categoria.Nombre, categoria.Orden))
+                .ToArray();
+            return Task.FromResult(categorias);
         }
     }
 
