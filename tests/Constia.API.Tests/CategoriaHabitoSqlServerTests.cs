@@ -136,15 +136,31 @@ public sealed class CategoriaHabitoSqlServerTests
         Guid habitId;
         await using (var context = database.CreateContext())
         {
-            await context.Database.MigrateAsync();
-            var user = new Usuario("Rollback", "rollback@example.invalid", "test-hash", "Etc/UTC");
-            var habit = new Habito(user, "Con categoria", null, new DateOnly(2026, 10, 1), [DayOfWeek.Monday]);
-            context.Add(habit);
-            context.Entry(habit).Property(h => h.CategoriaId).CurrentValue = categoryId;
-            await context.SaveChangesAsync();
-            habitId = habit.Id;
+            await context.GetService<IMigrator>().MigrateAsync("20261019204255_AddHabitCategories");
+            // Preparar el esquema CAT-02 sin utilizar el modelo actual, que ya incluye IconoId.
+            var userId = Guid.NewGuid();
+            habitId = Guid.NewGuid();
+            var createdAt = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
+            var startDate = new DateOnly(2026, 10, 1);
+            await context.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO [Usuario] ([Id],[Nombre],[Email],[PasswordHash],[TimeZoneId])
+                VALUES ({userId},N'Rollback',N'rollback@example.invalid',N'test-hash',N'Etc/UTC');
+                INSERT INTO [Habito] ([Id],[Nombre],[Descripcion],[CreatedAt],[StartDate],[Estado],[UsuarioId],[ConcurrencyVersion],[CategoriaId])
+                VALUES ({habitId},N'Con categoria',NULL,{createdAt},{startDate},0,{userId},0,{categoryId});
+                INSERT INTO [ProgramacionHabito] ([HabitoId],[VigenteDesde],[VigenteHasta])
+                VALUES ({habitId},{startDate},NULL);
+                INSERT INTO [ProgramacionHabitoDia] ([HabitoId],[VigenteDesde],[Dia])
+                VALUES ({habitId},{startDate},1);
+                INSERT INTO [PeriodoEstadoHabito] ([HabitoId],[VigenteDesde],[VigenteHasta],[Estado])
+                VALUES ({habitId},{startDate},NULL,0);
+                """);
         }
         var before = await ReadHistoricalDataAsync(database);
+        string[] appliedBefore;
+        await using (var beforeContext = database.CreateContext())
+        {
+            appliedBefore = (await beforeContext.Database.GetAppliedMigrationsAsync()).ToArray();
+        }
         await using (var rollback = database.CreateContext())
         {
             var error = await Assert.ThrowsAsync<SqlException>(() =>
@@ -158,7 +174,9 @@ public sealed class CategoriaHabitoSqlServerTests
         var categories = await verify.CategoriasHabito.AsNoTracking().OrderBy(c => c.Orden).ToArrayAsync();
         Assert.Equal(CatalogoCategoriasHabito.Todas.Select(c => (c.Id, c.Nombre, c.Orden)),
             categories.Select(c => (c.Id, c.Nombre, c.Orden)));
-        Assert.Equal(categoryId, (await verify.Habitos.AsNoTracking().SingleAsync(h => h.Id == habitId)).CategoriaId);
+        Assert.Equal(categoryId, await verify.Database.SqlQuery<Guid?>($"""
+            SELECT [CategoriaId] AS [Value] FROM [Habito] WHERE [Id] = {habitId}
+            """).SingleAsync());
         Assert.Equal(1, await verify.Database.SqlQueryRaw<int>("""
             SELECT COUNT(*) AS [Value] FROM sys.foreign_keys
             WHERE [name] = N'FK_Habito_CategoriaHabito_CategoriaId' AND [is_disabled] = 0 AND [is_not_trusted] = 0
@@ -167,7 +185,7 @@ public sealed class CategoriaHabitoSqlServerTests
             SELECT COUNT(*) AS [Value] FROM sys.indexes
             WHERE [object_id] = OBJECT_ID(N'Habito') AND [name] = N'IX_Habito_CategoriaId'
             """).SingleAsync());
-        Assert.EndsWith("_AddHabitCategories", (await verify.Database.GetAppliedMigrationsAsync()).Last());
+        Assert.Equal(appliedBefore, (await verify.Database.GetAppliedMigrationsAsync()).ToArray());
     }
 
     private static async Task<string[]> ReadHistoricalDataAsync(DisposableDatabase database)

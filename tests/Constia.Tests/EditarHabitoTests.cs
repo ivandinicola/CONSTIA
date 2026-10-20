@@ -35,6 +35,8 @@ public sealed class EditarHabitoTests
         Assert.NotNull(result);
         Assert.Equal(habito.Id, result.Id);
         Assert.Equal([DayOfWeek.Friday], result.DiasProgramados);
+        Assert.Null(result.CategoriaId);
+        Assert.Null(result.IconoId);
     }
 
     [Fact]

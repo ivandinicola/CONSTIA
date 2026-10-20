@@ -9,4 +9,6 @@ public sealed record HabitoResponse(
     DateTimeOffset CreatedAt,
     DateOnly StartDate,
     EstadoHabito Estado,
-    IReadOnlyList<DayOfWeek> DiasProgramados);
+    IReadOnlyList<DayOfWeek> DiasProgramados,
+    Guid? CategoriaId,
+    string? IconoId);

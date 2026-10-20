@@ -150,6 +150,10 @@ namespace Constia.Infrastructure.Migrations
                         .HasColumnType("date")
                         .HasColumnName("StartDate");
 
+                    b.Property<string>("IconoId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<string>("Nombre")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");

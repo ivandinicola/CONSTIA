@@ -27,6 +27,9 @@ public class CrearHabitoTests
         Assert.Equal(cancellation.Token, habitos.CancellationTokenRecibido);
         Assert.Equal(1, habitos.CantidadDeInserciones);
         Assert.IsType<HabitoCreado>(resultado);
+        Assert.NotNull(resultado);
+        Assert.Null(resultado.CategoriaId);
+        Assert.Null(resultado.IconoId);
     }
 
     [Fact]

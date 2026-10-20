@@ -15,6 +15,8 @@ public class Habito
 
     public Guid? CategoriaId { get; private set; }
 
+    public string? IconoId { get; private set; }
+
     public DateTimeOffset FechaCreacion { get; private set; }
 
     public DateOnly FechaInicio { get; private set; }

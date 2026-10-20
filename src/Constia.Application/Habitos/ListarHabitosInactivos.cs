@@ -16,7 +16,9 @@ public sealed class ListarHabitosInactivos(IHabitoRepository habitos)
                 habito.FechaCreacion,
                 habito.FechaInicio,
                 habito.Estado,
-                habito.DiasProgramados.Select(dia => dia.Dia).ToArray()))
+                habito.DiasProgramados.Select(dia => dia.Dia).ToArray(),
+                habito.CategoriaId,
+                habito.IconoId))
             .ToArray();
     }
 }

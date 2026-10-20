@@ -30,6 +30,8 @@ public sealed class ListarHabitosInactivosTests
         Assert.Equal(habit.Descripcion, listed.Descripcion);
         Assert.Equal(EstadoHabito.Inactivo, listed.Estado);
         Assert.Equal([DayOfWeek.Monday, DayOfWeek.Friday], listed.DiasProgramados);
+        Assert.Null(listed.CategoriaId);
+        Assert.Null(listed.IconoId);
     }
 
     [Fact]

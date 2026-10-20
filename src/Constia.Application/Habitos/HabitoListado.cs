@@ -9,4 +9,6 @@ public sealed record HabitoListado(
     DateTimeOffset FechaCreacion,
     DateOnly FechaInicio,
     EstadoHabito Estado,
-    IReadOnlyList<DayOfWeek> DiasProgramados);
+    IReadOnlyList<DayOfWeek> DiasProgramados,
+    Guid? CategoriaId,
+    string? IconoId);
