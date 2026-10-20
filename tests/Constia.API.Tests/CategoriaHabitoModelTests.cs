@@ -59,7 +59,7 @@ public sealed class CategoriaHabitoModelTests
         Assert.NotNull(property);
         Assert.False(property.SetMethod!.IsPublic);
         var user = new Usuario("Prueba", "test@example.com", "hash", "Etc/UTC");
-        var habit = new Habito(user, "Leer", null, new DateOnly(2026, 10, 1), [DayOfWeek.Monday]);
+        var habit = HabitoHistorico.Crear(user, "Leer", null, new DateOnly(2026, 10, 1), [DayOfWeek.Monday]);
         Assert.Null(property.GetValue(habit));
     }
 

@@ -63,7 +63,7 @@ public sealed class ListarHabitosActivosTests
         Usuario usuario,
         string nombre,
         DateOnly fechaInicio,
-        IReadOnlyCollection<DayOfWeek> dias) => new(usuario, nombre, null, fechaInicio, dias);
+        IReadOnlyCollection<DayOfWeek> dias) => HabitoHistorico.Crear(usuario, nombre, null, fechaInicio, dias);
 
     private sealed class FakeHabitoRepository(IReadOnlyList<Habito> resultados) : IHabitoRepository
     {

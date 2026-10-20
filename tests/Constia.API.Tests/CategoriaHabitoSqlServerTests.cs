@@ -71,8 +71,8 @@ public sealed class CategoriaHabitoSqlServerTests
         await using var context = database.CreateContext();
         await context.Database.MigrateAsync();
         var user = new Usuario("CAT-02", "cat02@example.invalid", "test-hash", "Etc/UTC");
-        var categorized = new Habito(user, "Con categoria", null, new DateOnly(2026, 10, 1), [DayOfWeek.Monday]);
-        var historical = new Habito(user, "Sin categoria", null, new DateOnly(2026, 10, 1), [DayOfWeek.Monday]);
+        var categorized = HabitoHistorico.Crear(user, "Con categoria", null, new DateOnly(2026, 10, 1), [DayOfWeek.Monday]);
+        var historical = HabitoHistorico.Crear(user, "Sin categoria", null, new DateOnly(2026, 10, 1), [DayOfWeek.Monday]);
         context.AddRange(categorized, historical);
         var officialId = CatalogoCategoriasHabito.Todas[4].Id;
         context.Entry(categorized).Property(h => h.CategoriaId).CurrentValue = officialId;
@@ -101,7 +101,7 @@ public sealed class CategoriaHabitoSqlServerTests
         {
             await context.Database.MigrateAsync();
             var user = new Usuario("Rollback", "rollback@example.invalid", "test-hash", "Etc/UTC");
-            context.Add(new Habito(user, "Sin categoria", null, new DateOnly(2026, 10, 1), [DayOfWeek.Monday]));
+            context.Add(HabitoHistorico.Crear(user, "Sin categoria", null, new DateOnly(2026, 10, 1), [DayOfWeek.Monday]));
             await context.SaveChangesAsync();
         }
         var before = await ReadHistoricalDataAsync(database);

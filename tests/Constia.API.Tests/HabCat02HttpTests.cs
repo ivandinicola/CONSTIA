@@ -141,7 +141,7 @@ public sealed class HabCat02HttpTests
     {
         using var factory = new JwtApiFactory();
         var habit = foreign
-            ? new Habito(new Usuario("Otro", "otro@example.invalid", "test-hash", "Etc/UTC"),
+            ? HabitoHistorico.Crear(new Usuario("Otro", "otro@example.invalid", "test-hash", "Etc/UTC"),
                 "Privado", null, new DateOnly(2026,10,1), [DayOfWeek.Monday])
             : NewHabit(factory);
         factory.ReemplazarHabitos([habit]);
@@ -185,7 +185,7 @@ public sealed class HabCat02HttpTests
 
     private static Habito NewHabit(JwtApiFactory factory)
     {
-        var habit = new Habito(factory.Usuario, "Leer", "Historia", new DateOnly(2026,10,1), [DayOfWeek.Monday]);
+        var habit = HabitoHistorico.Crear(factory.Usuario, "Leer", "Historia", new DateOnly(2026,10,1), [DayOfWeek.Monday]);
         factory.ReemplazarHabitos([habit]);
         return habit;
     }

@@ -74,7 +74,7 @@ public sealed class HabitoActualizarMetadatosTests
         Assert.Equal("billete", habit.IconoId);
     }
 
-    private static Habito NewHabit() => new(
+    private static Habito NewHabit() => HabitoHistorico.Crear(
         new Usuario("Test", "test@example.invalid", "test-hash", "Etc/UTC"),
         "Leer", "Historia", new DateOnly(2026, 10, 1), [DayOfWeek.Monday]);
 }

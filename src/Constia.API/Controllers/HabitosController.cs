@@ -6,6 +6,7 @@ using Constia.Application.Temporal;
 using Constia.Domain;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace Constia.API.Controllers;
 
@@ -377,6 +378,7 @@ public sealed class HabitosController(
         }
     }
     [HttpPost]
+    [ValidarContratoCreacion]
     [ProducesResponseType(typeof(HabitoResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -401,7 +403,8 @@ public sealed class HabitosController(
                     usuarioId,
                     request.Nombre,
                     request.Descripcion,
-                    request.FechaInicio!.Value,
+                    request.CategoriaId!.Value,
+                    request.IconoId!,
                     request.DiasProgramados!),
                 cancellationToken);
 
@@ -425,6 +428,23 @@ public sealed class HabitosController(
                 creado.CategoriaId,
                 creado.IconoId));
         }
+        catch (MetadatosHabitoInvalidosException exception)
+        {
+            return BadRequest(new ValidationProblemDetails(
+                new Dictionary<string, string[]> { [exception.Campo] = [exception.Message] })
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Los metadatos del hábito no son válidos."
+            });
+        }
+        catch (ZonaHorariaPersistidaInvalidaException)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new ProblemDetails
+            {
+                Status = StatusCodes.Status500InternalServerError,
+                Title = "La zona horaria persistida no es válida."
+            });
+        }
         catch (ArgumentException exception)
         {
             return BadRequest(new ProblemDetails
@@ -442,6 +462,27 @@ public sealed class HabitosController(
                 Title = "El historial de estados todavía no está disponible.",
                 Extensions = { ["code"] = "habit_status_history_not_initialized" }
             });
+        }
+    }
+
+    // Solo este POST: conserva las claves del contrato incluso si el input formatter
+    // rechaza el tipo JSON antes de poder ejecutar IValidatableObject.
+    private sealed class ValidarContratoCreacionAttribute : ActionFilterAttribute
+    {
+        public ValidarContratoCreacionAttribute() => Order = -2001;
+
+        public override void OnActionExecuting(ActionExecutingContext context)
+        {
+            foreach (var campo in new[] { "categoriaId", "iconoId" })
+            {
+                var claves = context.ModelState.Keys.Where(key =>
+                    key.Equals("$." + campo, StringComparison.OrdinalIgnoreCase)).ToArray();
+                foreach (var clave in claves)
+                {
+                    context.ModelState.Remove(clave);
+                    context.ModelState.AddModelError(campo, "El identificador no tiene un formato válido.");
+                }
+            }
         }
     }
 }

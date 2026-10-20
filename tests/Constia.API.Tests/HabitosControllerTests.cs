@@ -663,7 +663,7 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
         var usuario = new Usuario("Zona argentina", $"{Guid.NewGuid()}@example.invalid", "fake-hash",
             "America/Argentina/Buenos_Aires");
         factory.UsuariosPersistidos[usuario.Id] = usuario;
-        var habit = new Habito(usuario, "Leer", null, new DateOnly(2026, 10, 9), [DayOfWeek.Thursday]);
+        var habit = HabitoHistorico.Crear(usuario, "Leer", null, new DateOnly(2026, 10, 9), [DayOfWeek.Thursday]);
         typeof(Habito).GetProperty(nameof(Habito.Id))!.SetValue(habit, Guid.NewGuid());
         factory.ReemplazarHabitos([habit]);
         using var client = ClienteAutenticadoParaCumplimientos(usuario.Id);
@@ -848,7 +848,7 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
         var body = await response.Content.ReadFromJsonAsync<HabitoResponse>();
         Assert.NotNull(body);
         Assert.Equal(nombre, body.Nombre);
-        Assert.Equal(DateOnly.Parse("2026-10-06"), body.StartDate);
+        Assert.Equal(DateOnly.Parse("2026-10-10"), body.StartDate);
         Assert.Equal(EstadoHabito.Activo, body.Estado);
         Assert.DoesNotContain("usuarioId", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
         Assert.Contains(factory.HabitosPersistidos, habit => habit.Nombre == nombre && habit.Usuario.Id == factory.Usuario.Id);
@@ -864,7 +864,8 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
         {
             nombre,
             descripcion = "Paseo diario",
-            fechaInicio = "2026-10-06",
+            categoriaId = CatalogoCategoriasHabito.Todas[4].Id,
+            iconoId = "libro",
             diasProgramados = new[] { (int)DayOfWeek.Monday },
             usuarioId = otroUsuarioId
         };
@@ -884,7 +885,8 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
         {
             nombre = "Leer",
             descripcion = "",
-            fechaInicio = "2026-10-06",
+            categoriaId = CatalogoCategoriasHabito.Todas[4].Id,
+            iconoId = "libro",
             diasProgramados = Array.Empty<int>()
         };
 
@@ -1006,7 +1008,8 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     {
         nombre,
         descripcion = "Diez páginas",
-        fechaInicio = "2026-10-06",
+        categoriaId = CatalogoCategoriasHabito.Todas[4].Id,
+            iconoId = "libro",
         diasProgramados = new[] { (int)DayOfWeek.Monday, (int)DayOfWeek.Wednesday }
     };
 
@@ -1029,7 +1032,7 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
         DateTimeOffset fechaCreacion,
         DayOfWeek[]? diasProgramados = null)
     {
-        var habito = new Habito(propietario, nombre, null, new DateOnly(2026, 1, 1), diasProgramados ?? [DayOfWeek.Monday]);
+        var habito = HabitoHistorico.Crear(propietario, nombre, null, new DateOnly(2026, 1, 1), diasProgramados ?? [DayOfWeek.Monday]);
         typeof(Habito).GetProperty(nameof(Habito.Id))!.SetValue(habito, id);
         typeof(Habito).GetProperty(nameof(Habito.FechaCreacion))!.SetValue(habito, fechaCreacion);
         return habito;

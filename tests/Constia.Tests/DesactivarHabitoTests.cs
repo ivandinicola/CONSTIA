@@ -10,7 +10,7 @@ public sealed class DesactivarHabitoTests
     public async Task EjecutarAsync_ConHabitoPropio_DesactivaPersisteYPropagaParametros()
     {
         var usuario = new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC");
-        var habit = new Habito(usuario, "Leer", "Un capítulo", new DateOnly(2026, 10, 5),
+        var habit = HabitoHistorico.Crear(usuario, "Leer", "Un capítulo", new DateOnly(2026, 10, 5),
             [DayOfWeek.Monday, DayOfWeek.Wednesday]);
         var repository = new FakeHabitoRepository(habit);
         var fechaLocal = new FechaLocalFija(new DateOnly(2026, 10, 10));
@@ -39,7 +39,7 @@ public sealed class DesactivarHabitoTests
     public async Task EjecutarAsync_ConHabitoYaInactivo_DevuelveTrueYSinIncrementarToken()
     {
         var usuario = new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC");
-        var habit = new Habito(usuario, "Leer", null, new DateOnly(2026, 10, 5), [DayOfWeek.Monday]);
+        var habit = HabitoHistorico.Crear(usuario, "Leer", null, new DateOnly(2026, 10, 5), [DayOfWeek.Monday]);
         habit.Desactivar(habit.FechaInicio);
         var repository = new FakeHabitoRepository(habit);
         var useCase = CrearCaso(repository);
@@ -54,7 +54,7 @@ public sealed class DesactivarHabitoTests
     [Fact]
     public async Task EjecutarAsync_SinCoincidencia_DevuelveFalseYSinGuardar()
     {
-        var habit = new Habito(
+        var habit = HabitoHistorico.Crear(
             new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC"),
             "Leer",
             null,
@@ -73,7 +73,7 @@ public sealed class DesactivarHabitoTests
     [Fact]
     public async Task EjecutarAsync_HistorialNoCompleto_BloqueaLaDesactivacion()
     {
-        var habit = new Habito(new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC"),
+        var habit = HabitoHistorico.Crear(new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC"),
             "Leer", null, new DateOnly(2026, 10, 5), [DayOfWeek.Monday]);
         var repository = new FakeHabitoRepository(habit);
         var useCase = new DesactivarHabito(repository, new FechaLocalFija(new DateOnly(2026, 10, 10)),
@@ -93,6 +93,9 @@ public sealed class DesactivarHabitoTests
 
     private sealed class FechaLocalFija(DateOnly hoy) : IFechaLocalUsuario
     {
+        public DateOnly ObtenerFechaLocal(DateTimeOffset instanteUtc, string timeZoneId) =>
+            throw new NotSupportedException("Este fake solo prueba consumidores de ObtenerHoy.");
+
         public string? TimeZoneIdRecibido { get; private set; }
 
         public DateOnly ObtenerHoy(string timeZoneId)

@@ -44,18 +44,30 @@ public class Habito
         Usuario usuario,
         string nombre,
         string? descripcion,
+        DateTimeOffset fechaCreacionUtc,
         DateOnly fechaInicio,
+        Guid categoriaId,
+        string iconoId,
         IEnumerable<DayOfWeek> diasProgramados)
     {
         ArgumentNullException.ThrowIfNull(usuario);
         ArgumentException.ThrowIfNullOrWhiteSpace(nombre);
         ArgumentNullException.ThrowIfNull(diasProgramados);
 
+        if (fechaCreacionUtc.Offset != TimeSpan.Zero)
+            throw new ArgumentException("La fecha de creación debe ser UTC.", nameof(fechaCreacionUtc));
+        if (!CatalogoCategoriasHabito.EsOficial(categoriaId))
+            throw new ArgumentException("La categoría debe ser oficial.", nameof(categoriaId));
+        if (!CatalogoIconosHabito.EsOficial(iconoId))
+            throw new ArgumentException("El ícono debe ser oficial.", nameof(iconoId));
+
         Id = Guid.NewGuid();
         Usuario = usuario;
         Nombre = nombre;
         Descripcion = descripcion;
-        FechaCreacion = DateTimeOffset.UtcNow;
+        FechaCreacion = fechaCreacionUtc;
+        CategoriaId = categoriaId;
+        IconoId = iconoId;
         FechaInicio = fechaInicio;
         Estado = EstadoHabito.Activo;
         _programaciones.Add(new ProgramacionHabito(fechaInicio, null, diasProgramados));

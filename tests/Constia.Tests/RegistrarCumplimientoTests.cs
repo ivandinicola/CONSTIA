@@ -70,7 +70,7 @@ public sealed class RegistrarCumplimientoTests
     public async Task EjecutarAsync_AntesDeFechaInicio_LanzaArgumentException()
     {
         var usuario = CrearUsuario("America/Argentina/Buenos_Aires");
-        var habit = new Habito(usuario, "Leer", null, HoyBuenosAires, [DayOfWeek.Friday]);
+        var habit = HabitoHistorico.Crear(usuario, "Leer", null, HoyBuenosAires, [DayOfWeek.Friday]);
         var store = CrearCaso(usuario, habit);
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
@@ -168,7 +168,7 @@ public sealed class RegistrarCumplimientoTests
         new("Ana", $"{Guid.NewGuid():N}@example.test", "synthetic-hash", timeZoneId);
 
     private static Habito CrearHabito(Usuario usuario, DayOfWeek[] days) =>
-        new(usuario, "Leer", null, new DateOnly(2026, 1, 1), days);
+        HabitoHistorico.Crear(usuario, "Leer", null, new DateOnly(2026, 1, 1), days);
 
     private static (RegistrarCumplimiento Caso, FakeFechaLocalUsuario FechaLocal, FakeCumplimientoRepository Cumplimientos)
         CrearCaso(Usuario? usuario, Habito habit, bool duplicado = false)
@@ -224,6 +224,9 @@ public sealed class RegistrarCumplimientoTests
 
     private sealed class FakeFechaLocalUsuario(DateOnly hoy) : IFechaLocalUsuario
     {
+        public DateOnly ObtenerFechaLocal(DateTimeOffset instanteUtc, string timeZoneId) =>
+            throw new NotSupportedException("Este fake solo prueba consumidores de ObtenerHoy.");
+
         public string? TimeZoneIdRecibido { get; private set; }
 
         public DateOnly ObtenerHoy(string timeZoneId)

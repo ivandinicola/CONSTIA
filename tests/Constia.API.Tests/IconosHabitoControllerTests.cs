@@ -81,7 +81,7 @@ public sealed class IconosHabitoControllerTests
     public async Task Listar_SinReadinessNiAccesoASql_NoModificaHabitosNiCumplimientos()
     {
         using var factory = new JwtApiFactory { SnapshotCapturado = false, HistorialCompleto = false };
-        var habito = new Habito(factory.Usuario, "Leer", null, new DateOnly(2026, 10, 1), [DayOfWeek.Monday]);
+        var habito = HabitoHistorico.Crear(factory.Usuario, "Leer", null, new DateOnly(2026, 10, 1), [DayOfWeek.Monday]);
         factory.ReemplazarHabitos([habito]);
         using var host = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
@@ -113,7 +113,7 @@ public sealed class IconosHabitoControllerTests
     public async Task Listar_CoexisteConCategoriasInactivosYDetallePorGuid()
     {
         using var factory = new JwtApiFactory();
-        var habito = new Habito(factory.Usuario, "Leer", null, new DateOnly(2026, 10, 1), [DayOfWeek.Monday]);
+        var habito = HabitoHistorico.Crear(factory.Usuario, "Leer", null, new DateOnly(2026, 10, 1), [DayOfWeek.Monday]);
         factory.ReemplazarHabitos([habito]);
         using var client = factory.CreateClient();
         Autenticar(client, factory);

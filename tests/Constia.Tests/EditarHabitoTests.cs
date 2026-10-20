@@ -215,7 +215,7 @@ public sealed partial class EditarHabitoTests
         new("Ana", "ana@example.com", "hashed-value", timeZoneId);
 
     private static Habito CrearHabito(Usuario usuario) =>
-        new(usuario, "Leer", "Descripción original", new DateOnly(2026, 10, 1),
+        HabitoHistorico.Crear(usuario, "Leer", "Descripción original", new DateOnly(2026, 10, 1),
             [DayOfWeek.Monday, DayOfWeek.Wednesday]);
 
     private sealed class FakeHabitoRepository(Habito? habit) : IHabitoRepository
@@ -276,6 +276,9 @@ public sealed partial class EditarHabitoTests
 
     private sealed class FakeFechaLocalUsuario(DateOnly fecha) : IFechaLocalUsuario
     {
+        public DateOnly ObtenerFechaLocal(DateTimeOffset instanteUtc, string timeZoneId) =>
+            throw new NotSupportedException("Este fake solo prueba consumidores de ObtenerHoy.");
+
         public string? ZonaSolicitada { get; private set; }
 
         public int CantidadDeCalculos { get; private set; }

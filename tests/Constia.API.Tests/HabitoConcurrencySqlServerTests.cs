@@ -229,7 +229,7 @@ public sealed class HabitoConcurrencySqlServerTests
     private static (Usuario Usuario, Habito Habito) CrearAgregado()
     {
         var usuario = new Usuario("Concurrency test", $"{Guid.NewGuid():N}@example.test", "synthetic-test-hash", "Etc/UTC");
-        var habito = new Habito(
+        var habito = HabitoHistorico.Crear(
             usuario,
             "Concurrency habit",
             null,

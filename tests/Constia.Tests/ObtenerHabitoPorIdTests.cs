@@ -10,7 +10,7 @@ public sealed class ObtenerHabitoPorIdTests
     {
         var usuario = new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC");
         var habitId = Guid.NewGuid();
-        var habit = new Habito(
+        var habit = HabitoHistorico.Crear(
             usuario,
             "Leer",
             "Un capítulo",

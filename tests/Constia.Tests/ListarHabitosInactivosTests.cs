@@ -9,7 +9,7 @@ public sealed class ListarHabitosInactivosTests
     public async Task EjecutarAsync_PropagaUsuarioYCancellationTokenYMapeaHabitosYDias()
     {
         var usuario = new Usuario("Ana", "ana@example.com", "hashed-value", "Etc/UTC");
-        var habit = new Habito(
+        var habit = HabitoHistorico.Crear(
             usuario,
             "Hábito archivado",
             "Descripción conservada",

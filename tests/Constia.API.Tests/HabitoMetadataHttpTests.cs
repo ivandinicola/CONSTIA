@@ -58,21 +58,22 @@ public sealed class HabitoMetadataHttpTests
     }
 
     [Fact]
-    public async Task Post_ConservaFechaDelClienteYSinExigirMetadatos_Devuelve201()
+    public async Task Post_CalculaFechaLocalYExigeMetadatosOficiales_Devuelve201()
     {
         using var factory = new JwtApiFactory();
         using var client = ClienteAutenticado(factory);
         var response = await client.PostAsJsonAsync("/api/habitos", new
         {
-            nombre = "Leer", descripcion = "Historia", fechaInicio = "2026-10-01",
+            nombre = "Leer", descripcion = "Historia",
+            categoriaId = CatalogoCategoriasHabito.Todas[4].Id, iconoId = "libro",
             diasProgramados = new[] { (int)DayOfWeek.Monday }
         });
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var habito = Assert.Single(factory.HabitosPersistidos);
-        Assert.Equal(new DateOnly(2026, 10, 1), habito.FechaInicio);
+        Assert.Equal(new DateOnly(2026, 10, 10), habito.FechaInicio);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        VerificarContrato(json.RootElement, habito, null, null);
+        VerificarContrato(json.RootElement, habito, CatalogoCategoriasHabito.Todas[4].Id, "libro");
     }
 
     internal static HttpClient ClienteAutenticado(JwtApiFactory factory, Usuario? usuario = null)

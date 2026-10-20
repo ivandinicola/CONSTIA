@@ -8,24 +8,23 @@ public class HabitoTests
     public void Constructor_WithValidValues_CreatesActiveHabitoWithUniqueIdentifier()
     {
         var usuario = CrearUsuario();
-        var antesDeCrear = DateTimeOffset.UtcNow;
+        var instante = new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero);
 
         var habito = new Habito(
             usuario,
             "Leer",
-            "Leer un libro",
-            new DateOnly(2026, 10, 5),
+            "Leer un libro", new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero),
+            new DateOnly(2026, 10, 5), CatalogoCategoriasHabito.Todas[4].Id, "libro",
             [DayOfWeek.Monday, DayOfWeek.Wednesday]);
 
-        var despuesDeCrear = DateTimeOffset.UtcNow;
-        var otroHabito = new Habito(usuario, "Caminar", null, new DateOnly(2026, 10, 5), [DayOfWeek.Friday]);
+        var otroHabito = new Habito(usuario, "Caminar", null, new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero), new DateOnly(2026, 10, 5), CatalogoCategoriasHabito.Todas[4].Id, "libro", [DayOfWeek.Friday]);
 
         Assert.NotEqual(Guid.Empty, habito.Id);
         Assert.NotEqual(habito.Id, otroHabito.Id);
         Assert.Same(usuario, habito.Usuario);
         Assert.Equal("Leer", habito.Nombre);
         Assert.Equal("Leer un libro", habito.Descripcion);
-        Assert.InRange(habito.FechaCreacion, antesDeCrear, despuesDeCrear);
+        Assert.Equal(instante, habito.FechaCreacion);
         Assert.Equal(new DateOnly(2026, 10, 5), habito.FechaInicio);
         Assert.Equal(EstadoHabito.Activo, habito.Estado);
         Assert.Equal([DayOfWeek.Monday, DayOfWeek.Wednesday], habito.DiasProgramados.Select(dia => dia.Dia));
@@ -44,35 +43,35 @@ public class HabitoTests
     public void Constructor_WithEmptyOrWhitespaceName_ThrowsArgumentException(string nombre)
     {
         Assert.Throws<ArgumentException>(() => new Habito(
-            CrearUsuario(), nombre, null, new DateOnly(2026, 10, 5), [DayOfWeek.Monday]));
+            CrearUsuario(), nombre, null, new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero), new DateOnly(2026, 10, 5), CatalogoCategoriasHabito.Todas[4].Id, "libro", [DayOfWeek.Monday]));
     }
 
     [Fact]
     public void Constructor_WithNullUsuario_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => new Habito(
-            null!, "Leer", null, new DateOnly(2026, 10, 5), [DayOfWeek.Monday]));
+            null!, "Leer", null, new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero), new DateOnly(2026, 10, 5), CatalogoCategoriasHabito.Todas[4].Id, "libro", [DayOfWeek.Monday]));
     }
 
     [Fact]
     public void Constructor_WithNoScheduledDays_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new Habito(
-            CrearUsuario(), "Leer", null, new DateOnly(2026, 10, 5), []));
+            CrearUsuario(), "Leer", null, new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero), new DateOnly(2026, 10, 5), CatalogoCategoriasHabito.Todas[4].Id, "libro", []));
     }
 
     [Fact]
     public void Constructor_WithInvalidScheduledDay_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new Habito(
-            CrearUsuario(), "Leer", null, new DateOnly(2026, 10, 5), [(DayOfWeek)7]));
+            CrearUsuario(), "Leer", null, new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero), new DateOnly(2026, 10, 5), CatalogoCategoriasHabito.Todas[4].Id, "libro", [(DayOfWeek)7]));
     }
 
     [Fact]
     public void Constructor_WithRepeatedScheduledDays_StoresEachDayOnce()
     {
         var habito = new Habito(
-            CrearUsuario(), "Leer", null, new DateOnly(2026, 10, 5), [DayOfWeek.Monday, DayOfWeek.Monday]);
+            CrearUsuario(), "Leer", null, new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero), new DateOnly(2026, 10, 5), CatalogoCategoriasHabito.Todas[4].Id, "libro", [DayOfWeek.Monday, DayOfWeek.Monday]);
 
         Assert.Equal([DayOfWeek.Monday], habito.DiasProgramados.Select(dia => dia.Dia));
     }
@@ -81,7 +80,7 @@ public class HabitoTests
     public void Desactivar_SetsInactiveAndPreservesHabitData()
     {
         var usuario = CrearUsuario();
-        var habito = new Habito(
+        var habito = HabitoHistorico.Crear(
             usuario,
             "Leer",
             "Leer un libro",
@@ -102,7 +101,7 @@ public class HabitoTests
     public void Desactivar_Repetidamente_MantieneEstadoInactivoYSusDatos()
     {
         var usuario = CrearUsuario();
-        var habito = new Habito(
+        var habito = HabitoHistorico.Crear(
             usuario,
             "Leer",
             "Un capítulo",
@@ -129,7 +128,7 @@ public class HabitoTests
     public void ActualizarConfiguracion_ActualizaCamposEditablesYSinCambiarProgramacion()
     {
         var usuario = CrearUsuario();
-        var habito = new Habito(
+        var habito = HabitoHistorico.Crear(
             usuario,
             "Leer",
             "Descripción anterior",
@@ -159,7 +158,7 @@ public class HabitoTests
     [Fact]
     public void ActualizarConfiguracion_PermiteEliminarDescripcion()
     {
-        var habito = new Habito(
+        var habito = HabitoHistorico.Crear(
             CrearUsuario(),
             "Leer",
             "Descripción anterior",
@@ -520,7 +519,7 @@ public class HabitoTests
     public void ActualizarConfiguracionVersionada_RetrocedeAntesDeFechaInicioConVersionInicialCerrada_LanzaConflictoSinMutar()
     {
         var fechaInicio = new DateOnly(2026, 10, 10);
-        var habito = new Habito(CrearUsuario(), "Leer", null, fechaInicio, [DayOfWeek.Monday]);
+        var habito = HabitoHistorico.Crear(CrearUsuario(), "Leer", null, fechaInicio, [DayOfWeek.Monday]);
         habito.ActualizarConfiguracionVersionada(
             habito.Nombre, habito.Descripcion, [DayOfWeek.Friday], fechaInicio.AddDays(2));
         var estadoAntes = CapturarEstadoCompleto(habito);
@@ -593,7 +592,7 @@ public class HabitoTests
 
     private static Usuario CrearUsuario() => new("Ana", "ana@example.com", "hashed-value", "Etc/UTC");
 
-    private static Habito CrearHabitoParaActualizacion() => new(
+    private static Habito CrearHabitoParaActualizacion() => HabitoHistorico.Crear(
         CrearUsuario(),
         "Nombre original",
         "Descripción original",
