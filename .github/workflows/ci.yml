@@ -52,7 +52,7 @@ jobs:
       - name: Test
         run: >-
           dotnet test --no-build --configuration Release
-          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests&FullyQualifiedName!~RegistrarCumplimientoSqlServerTests&FullyQualifiedName!~Temp005StateHistorySqlServerTests&FullyQualifiedName!~CategoriaHabitoSqlServerTests&FullyQualifiedName!~HabitoIconoSqlServerTests&FullyQualifiedName!~HabCat02SqlServerTests&FullyQualifiedName!~HabDate01SqlServerTests"
+          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests&FullyQualifiedName!~RegistrarCumplimientoSqlServerTests&FullyQualifiedName!~Temp005StateHistorySqlServerTests&FullyQualifiedName!~CategoriaHabitoSqlServerTests&FullyQualifiedName!~HabitoIconoSqlServerTests&FullyQualifiedName!~HabCat02SqlServerTests&FullyQualifiedName!~HabDate01SqlServerTests&FullyQualifiedName!~EmailVerificationSqlServerTests"
 
       - name: Test TEMP-003 migration against disposable SQL Server
         env:
@@ -313,6 +313,78 @@ jobs:
               or any(int(counters.attrib.get(key, "-1")) != value for key, value in required.items())):
               raise SystemExit("HAB-DATE-01 requires exactly eight passing SQL tests, with no failures or skips.")
           print("HAB-DATE-01 SQL metadata tests: 8 passed; 0 failed; 0 skipped.")
+          PY
+
+      - name: Test AUTH-EMAIL-01-B email verification against disposable SQL Server
+        env:
+          CONSTIA_AUTHEMAIL01B_SQLSERVER_TESTS: "true"
+          CONSTIA_AUTHEMAIL01B_SQLSERVER_CONNECTION: "Server=127.0.0.1,1433;Initial Catalog=master;User Id=sa;Password=Constia_TEMP003_CI_Only!2026;Encrypt=False;TrustServerCertificate=True;Connect Timeout=5"
+          CONSTIA_AUTHEMAIL01B_CONTAINER_ID: ${{ job.services.sqlserver.id }}
+        run: |
+          set -euo pipefail
+          results_dir="$RUNNER_TEMP/auth-email-01-b-results"
+          mkdir -p "$results_dir"
+          dotnet test tests/Constia.API.Tests/Constia.API.Tests.csproj \
+            --no-build \
+            --no-restore \
+            --configuration Release \
+            --filter FullyQualifiedName~EmailVerificationSqlServerTests \
+            --logger "trx;LogFileName=auth-email-01-b-sqlserver.trx" \
+            --results-directory "$results_dir"
+          python3 - "$results_dir/auth-email-01-b-sqlserver.trx" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          ns = {"trx": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+          root = ET.parse(sys.argv[1]).getroot()
+          expected = {
+              "Up_PreservaLegadoHashZonaYLoginSinFechaInventada",
+              "DefaultsYTrigger_AltasPendientesYRechazoDeLegadoNuevo",
+              "Constraints_HashPropositoUnicidadYFk",
+              "PasswordIncorrecta_NoConsumeLuegoConfirmaYReintentoNoDuplica",
+              "DosConfirmaciones_UnGanador",
+              "DosReenvios_UnGanadorYTokenAnteriorSustituido",
+              "ConfirmacionContraReenvio_NoHayEstadoParcial",
+              "PresupuestoGlobalConcurrente_NoSupera40YExpiraExactamenteEn24Horas",
+              "CincoEmisiones_CuentanReemplazosYRecuperanVentana",
+              "VencimientoYEmailVinculado_RechazanSinConsumir",
+              "FalloDespuesDeSql_AltaRevierteUsuarioDesafioYPresupuesto",
+              "FalloDespuesDeSql_ConfirmacionRevierteEstadoYConsumo",
+              "Down_LegadoSolamentePermiteReversion",
+              "Down_ConCuentaNuevaRechaza51030SinPerdidaParcial",
+              "ContextoConTrackingObsoleto_NoReenviaDespuesDeConfirmacionExterna",
+          }
+          expected_class = "Constia.API.Tests.EmailVerificationSqlServerTests"
+
+          def reject():
+              raise SystemExit("AUTH-EMAIL-01-B requires exactly fifteen expected passing SQL tests, with no failures, skips or duplicates.")
+
+          units = root.findall("./trx:TestDefinitions/trx:UnitTest", ns)
+          if len(units) != 15:
+              reject()
+          definitions = {}
+          for unit in units:
+              test_id = unit.get("id")
+              method = unit.find("./trx:TestMethod", ns)
+              if not test_id or test_id in definitions or method is None:
+                  reject()
+              if method.get("className") != expected_class:
+                  reject()
+              definitions[test_id] = method.get("name")
+          if set(definitions.values()) != expected:
+              reject()
+
+          results = root.findall("./trx:Results/trx:UnitTestResult", ns)
+          result_ids = [result.get("testId") for result in results]
+          if (len(results) != 15 or len(set(result_ids)) != 15
+              or set(result_ids) != set(definitions)
+              or any(result.get("outcome") != "Passed" for result in results)):
+              reject()
+          counters = root.find("./trx:ResultSummary/trx:Counters", ns)
+          required = {"total": 15, "executed": 15, "passed": 15, "failed": 0, "notExecuted": 0}
+          if counters is None or any(int(counters.get(key, "-1")) != value for key, value in required.items()):
+              reject()
+          print("AUTH-EMAIL-01-B SQL email verification tests: 15 passed; 0 failed; 0 skipped.")
           PY
 
   cat02-sqlserver:
