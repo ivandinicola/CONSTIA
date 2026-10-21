@@ -1,0 +1,36 @@
+.home-intro {
+    text-align: center;
+    padding-block: var(--constia-space-lg);
+}
+
+.home-intro h1 {
+    max-inline-size: 18ch;
+    margin-inline: auto;
+}
+
+.home-tagline {
+    margin-block: var(--constia-space-md) 0;
+    color: var(--constia-text-secondary);
+}
+
+.preview-notice {
+    max-inline-size: 32ch;
+    margin: 3rem auto 0;
+    color: var(--constia-text-secondary);
+    font-size: var(--constia-type-label);
+}
+
+.preview-notice p {
+    margin-block: var(--constia-space-xs) 0;
+}
+
+.preview-notice .preview-label {
+    display: inline-block;
+    margin: 0;
+    padding: var(--constia-space-xs) var(--constia-space-md);
+    border-radius: 999px;
+    background: var(--constia-selection-soft);
+    color: var(--constia-secondary-action);
+    font-size: var(--constia-type-navigation);
+    font-weight: 600;
+}

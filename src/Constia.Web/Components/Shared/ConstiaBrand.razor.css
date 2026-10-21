@@ -1,0 +1,19 @@
+.constia-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--constia-space-xs);
+    color: var(--constia-ink);
+    font-size: var(--constia-type-heading);
+    font-weight: 700;
+    line-height: 1.2;
+    text-decoration: none;
+    border-radius: var(--constia-radius-control);
+}
+
+.constia-brand img {
+    display: block;
+    flex: none;
+    inline-size: 40px;
+    block-size: 40px;
+    object-fit: contain;
+}

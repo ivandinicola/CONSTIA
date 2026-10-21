@@ -1,0 +1,35 @@
+:root {
+    /* Colores verificados en la biblioteca y los frames aprobados de Penpot. */
+    --constia-page: #FFFCFA;
+    --constia-surface: #FFFFFF;
+    --constia-ink: #111B72;
+    --constia-text-secondary: #56609F;
+    --constia-secondary-action: #655BC6;
+    --constia-navigation-muted: #596094;
+    --constia-border: #DDE1F0;
+    --constia-selection-soft: #F0ECFF;
+    --constia-brand-violet: #7141F3;
+    --constia-brand-coral: #FC7068;
+
+    --constia-font-family: "Plus Jakarta Sans", sans-serif;
+    --constia-type-title: 2rem;
+    --constia-type-heading: 1.375rem;
+    --constia-type-body: 1rem;
+    --constia-type-label: 0.875rem;
+    --constia-type-navigation: 0.75rem;
+
+    /* Medidas reutilizadas de componentes; no sustituyen sus variantes específicas. */
+    --constia-space-xs: 8px;
+    --constia-space-sm: 12px;
+    --constia-space-md: 16px;
+    --constia-space-lg: 28px;
+    --constia-radius-control: 14px;
+    --constia-radius-dock: 21px;
+    --constia-dock-inset: 7px;
+    --constia-dock-width: 376px;
+    --constia-dock-height: 69px;
+    --constia-shadow-soft: 0 2px 9px rgb(52 47 114 / 7.5%);
+
+    /* Tratamiento de accesibilidad de implementación, sujeto a revisión visual. */
+    --constia-focus-ring: 3px solid var(--constia-brand-violet);
+}

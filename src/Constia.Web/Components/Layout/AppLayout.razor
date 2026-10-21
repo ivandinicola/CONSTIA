@@ -1,0 +1,16 @@
+@inherits LayoutComponentBase
+@layout MainLayout
+
+<div class="app-shell">
+    <header class="app-header">
+        <ConstiaBrand />
+    </header>
+
+    <main id="contenido-principal" class="app-content" tabindex="-1">
+        @Body
+    </main>
+
+    <footer class="app-navigation">
+        <ConstiaNavigation />
+    </footer>
+</div>
