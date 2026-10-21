@@ -22,6 +22,8 @@ public sealed class RegistrarUsuario(
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
 
+        PoliticaContrasenaRegistro.Validar(password);
+
         if (!zonasHorarias.EsValida(timeZoneId))
         {
             throw new ZonaHorariaIanaInvalidaException(timeZoneId);

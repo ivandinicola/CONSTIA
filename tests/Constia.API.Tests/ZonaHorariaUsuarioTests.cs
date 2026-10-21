@@ -22,7 +22,7 @@ public sealed class ZonaHorariaUsuarioTests(JwtApiFactory factory) : IClassFixtu
         {
             nombre = "Nueva persona",
             email,
-            password = "fictitious-registration-password",
+            password = "Fictitious-registration-1!",
             timeZoneId = "America/Argentina/Buenos_Aires"
         });
 
@@ -40,7 +40,7 @@ public sealed class ZonaHorariaUsuarioTests(JwtApiFactory factory) : IClassFixtu
         {
             nombre = "Nueva persona",
             email = $"{Guid.NewGuid()}@example.invalid",
-            password = "fictitious-registration-password"
+            password = "Fictitious-registration-1!"
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -55,7 +55,7 @@ public sealed class ZonaHorariaUsuarioTests(JwtApiFactory factory) : IClassFixtu
         {
             nombre = "Nueva persona",
             email = $"{Guid.NewGuid()}@example.invalid",
-            password = "fictitious-registration-password",
+            password = "Fictitious-registration-1!",
             timeZoneId = new string('x', 101)
         });
 
@@ -73,7 +73,7 @@ public sealed class ZonaHorariaUsuarioTests(JwtApiFactory factory) : IClassFixtu
         {
             nombre = "Nueva persona",
             email = $"{Guid.NewGuid()}@example.invalid",
-            password = "fictitious-registration-password",
+            password = "Fictitious-registration-1!",
             timeZoneId
         });
 

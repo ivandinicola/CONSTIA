@@ -7,7 +7,7 @@ namespace Constia.Tests;
 
 public class RegistrarUsuarioTests
 {
-    private const string PasswordDePrueba = "clave-de-prueba-no-real";
+    private const string PasswordDePrueba = "Clave-de-prueba-1!";
 
     [Fact]
     public async Task EjecutarAsync_ConDatosValidos_PersisteUsuarioConHashYDevuelveDatosPublicos()
