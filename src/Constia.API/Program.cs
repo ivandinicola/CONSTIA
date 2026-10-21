@@ -12,6 +12,9 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -43,6 +46,33 @@ builder.Services.AddScoped<IEstadoHabitoReadinessRepository, EstadoHabitoReadine
 builder.Services.AddScoped<IUsuarioActual, HttpContextUsuarioActual>();
 builder.Services.AddScoped<IUsuarioPasswordHasher, AspNetCorePasswordHasher>();
 builder.Services.AddScoped<IAccessTokenService, JwtAccessTokenService>();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IConfiguration>().GetSection("VerificacionCorreo").Get<OpcionesVerificacionCorreo>() ?? new());
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IConfiguration>().GetSection("VerificacionCorreo:Limites").Get<PoliticaVerificacionCorreo>() ?? new());
+builder.Services.AddScoped<IVerificacionCorreoRepository, VerificacionCorreoRepository>();
+builder.Services.AddSingleton<IGeneradorTokenVerificacion, GeneradorTokenVerificacion>();
+builder.Services.AddScoped<IEntregaCorreoVerificacion, EntregaCorreoNoDisponible>();
+builder.Services.AddScoped<IActivacionCorreo, ActivacionCorreo>();
+builder.Services.AddScoped<ServicioVerificacionCorreo>();
+builder.Services.AddScoped<IRegistroUsuarioCorreo>(sp => sp.GetRequiredService<ServicioVerificacionCorreo>());
+builder.Services.AddRateLimiter(options =>
+{
+    var correoPolicy = builder.Configuration.GetSection("VerificacionCorreo:Limites").Get<PoliticaVerificacionCorreo>() ?? new();
+    options.RejectionStatusCode = 429;
+    options.AddPolicy("correo", context => RateLimitPartition.Get(
+        context.Connection.RemoteIpAddress?.ToString() ?? "sin-ip",
+        _ => new LimiteVentanaMovilCorreo(
+            correoPolicy.EsValida ? correoPolicy.SolicitudesPorIp : 10,
+            TimeSpan.FromMinutes(correoPolicy.EsValida ? correoPolicy.VentanaSolicitudesMinutos : 10),
+            context.RequestServices.GetRequiredService<TimeProvider>())));
+    options.OnRejected = async (context, ct) =>
+    {
+        await context.HttpContext.Response.WriteAsJsonAsync(new ProblemDetails
+        {
+            Status = 429, Title = "Demasiadas solicitudes.",
+            Extensions = { ["code"] = "rate_limited" }
+        }, cancellationToken: ct);
+    };
+});
 builder.Services.AddScoped<RegistrarUsuario>();
 builder.Services.AddScoped<CambiarZonaHorariaUsuario>();
 builder.Services.AddScoped<AutenticarUsuario>();
@@ -86,6 +116,8 @@ var app = builder.Build();
 
 app.UseHttpsRedirection();
 
+app.UseRouting();
+app.UseRateLimiter();
 app.UseAuthentication();
 
 app.UseAuthorization();

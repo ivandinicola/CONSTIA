@@ -155,7 +155,7 @@ public sealed class HabDate01SqlServerTests
         var migrations = (await context.Database.GetAppliedMigrationsAsync()).ToArray();
         Assert.NotNull(await Create(context).EjecutarAsync(Request(owner)));
         Assert.Equal(migrations, await context.Database.GetAppliedMigrationsAsync());
-        Assert.EndsWith("_AddHabitIconId", migrations[^1]);
+        Assert.EndsWith("_AddEmailVerification", migrations[^1]); // Baseline ampliada por Etapa B; la operación sigue sin generar migraciones.
         var defaults = await context.Database.SqlQueryRaw<int>("""
             SELECT COUNT(*) AS [Value] FROM sys.default_constraints d
             JOIN sys.columns c ON c.object_id=d.parent_object_id AND c.column_id=d.parent_column_id

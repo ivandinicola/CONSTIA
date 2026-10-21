@@ -99,8 +99,14 @@ public sealed class CategoriaHabitoSqlServerTests
         await using var database = await DisposableDatabase.CreateAsync();
         await using (var context = database.CreateContext())
         {
+            // Fixture legado real previo al corte de correo; no crear un pendiente que la nueva guardia de Down deba proteger.
+            await context.GetService<IMigrator>().MigrateAsync("20261020071619_AddHabitIconId");
+            var userId = Guid.NewGuid();
+            await context.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO [Usuario] ([Id],[Nombre],[Email],[PasswordHash],[TimeZoneId]) VALUES ({userId},{"Rollback"},{"rollback@example.invalid"},{"test-hash"},{"Etc/UTC"})");
             await context.Database.MigrateAsync();
-            var user = new Usuario("Rollback", "rollback@example.invalid", "test-hash", "Etc/UTC");
+            var user = await context.Set<Usuario>().SingleAsync(u => u.Id == userId);
+            Assert.Equal(EstadoVerificacionCorreo.LegadoExento, user.EstadoVerificacionCorreo);
             context.Add(HabitoHistorico.Crear(user, "Sin categoria", null, new DateOnly(2026, 10, 1), [DayOfWeek.Monday]));
             await context.SaveChangesAsync();
         }
@@ -194,7 +200,7 @@ public sealed class CategoriaHabitoSqlServerTests
         string[] queries =
         [
             "SELECT [Id],[Nombre],[Descripcion],[CreatedAt],[StartDate],[Estado],[UsuarioId],[ConcurrencyVersion] FROM [Habito] ORDER BY [Id] FOR JSON PATH, INCLUDE_NULL_VALUES",
-            "SELECT * FROM [Usuario] ORDER BY [Id] FOR JSON PATH, INCLUDE_NULL_VALUES",
+            "SELECT [Id],[Nombre],[Email],[PasswordHash],[TimeZoneId] FROM [Usuario] ORDER BY [Id] FOR JSON PATH, INCLUDE_NULL_VALUES",
             "SELECT * FROM [ProgramacionHabito] ORDER BY [HabitoId],[VigenteDesde] FOR JSON PATH, INCLUDE_NULL_VALUES",
             "SELECT * FROM [ProgramacionHabitoDia] ORDER BY [HabitoId],[VigenteDesde],[Dia] FOR JSON PATH, INCLUDE_NULL_VALUES",
             "SELECT * FROM [PeriodoEstadoHabito] ORDER BY [HabitoId],[VigenteDesde] FOR JSON PATH, INCLUDE_NULL_VALUES",

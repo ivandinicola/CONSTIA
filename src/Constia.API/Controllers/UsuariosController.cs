@@ -5,6 +5,7 @@ using Constia.Application.Temporal;
 using Constia.Application.Usuarios;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Constia.API.Controllers;
 
@@ -16,6 +17,7 @@ public sealed class UsuariosController(
     IUsuarioActual usuarioActual) : ControllerBase
 {
     [HttpPost]
+    [EnableRateLimiting("correo")]
     [ProducesResponseType(typeof(RegistroUsuarioResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -32,6 +34,14 @@ public sealed class UsuariosController(
                 request.Password,
                 request.TimeZoneId,
                 cancellationToken);
+        }
+        catch (CorreoNoDisponibleException)
+        {
+            return StatusCode(503, new ProblemDetails
+            {
+                Status = 503, Title = "El registro no está disponible temporalmente.",
+                Extensions = { ["code"] = "registration_unavailable" }
+            });
         }
         catch (ContrasenaInvalidaException exception)
         {

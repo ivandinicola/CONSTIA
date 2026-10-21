@@ -4,6 +4,7 @@ using Constia.Application.Habitos;
 using Constia.Application.Usuarios;
 using Constia.Domain;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,6 +24,11 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
     public Usuario Usuario { get; } = new("Test User", "test@example.invalid", "not-a-real-password-hash", "Etc/UTC");
 
     public ConcurrentDictionary<Guid, Usuario> UsuariosPersistidos { get; } = new();
+    internal object CorreoLock { get; } = new();
+    internal ConcurrentDictionary<Guid, DesafioVerificacionCorreo> DesafiosCorreo { get; } = new();
+    internal ConcurrentQueue<(Guid Id,string Email,string Token)> CorreosDePrueba { get; } = new();
+    internal bool EsquemaCorreoDisponible { get; set; } = true;
+    internal bool FallarEntregaCorreo { get; set; }
 
     private int _cantidadDeCambiosGuardados;
     private int _cantidadDeHabitosGuardados;
@@ -45,6 +51,7 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
 
     public JwtApiFactory()
     {
+        Usuario.ConfirmarCorreo(DateTimeOffset.Parse("2026-10-10T00:00:00Z"));
         UsuariosPersistidos[Usuario.Id] = Usuario;
     }
 
@@ -75,8 +82,18 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.ConfigureAppConfiguration((_, c) => c.AddInMemoryCollection(new Dictionary<string,string?>
+        {
+            ["VerificacionCorreo:PublicRegistrationEnabled"] = "true",
+            ["VerificacionCorreo:PublicUrl"] = "https://constia.example"
+        }));
         builder.ConfigureTestServices(services =>
         {
+            services.RemoveAll<IVerificacionCorreoRepository>();
+            services.AddScoped<IVerificacionCorreoRepository>(sp => new CorreoRepositorioFalso(this,
+                sp.GetRequiredService<IUsuarioPasswordHasher>(),sp.GetRequiredService<TimeProvider>()));
+            services.RemoveAll<IEntregaCorreoVerificacion>();
+            services.AddScoped<IEntregaCorreoVerificacion>(_ => new EntregaCorreoFalsa(this));
             services.RemoveAll<IUsuarioRepository>();
             services.AddScoped<IUsuarioRepository>(_ => new FakeUsuarioRepository(UsuariosPersistidos, RegistrarCambioGuardado));
             services.RemoveAll<IUsuarioPasswordHasher>();

@@ -122,6 +122,80 @@ namespace Constia.Infrastructure.Migrations
                     b.ToTable("Cumplimiento");
                 });
 
+            modelBuilder.Entity("Constia.Domain.DesafioVerificacionCorreo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("ConsumidoEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("EmailDestino")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTimeOffset>("EmitidoEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("ExpiraEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("IntentosConfirmacion")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("InvalidadoEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<byte>("Proposito")
+                        .HasColumnType("tinyint");
+
+                    b.Property<byte[]>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varbinary(32)");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("VentanaIntentosEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<byte[]>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmitidoEnUtc");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UsuarioId", "Proposito")
+                        .IsUnique()
+                        .HasFilter("[ConsumidoEnUtc] IS NULL AND [InvalidadoEnUtc] IS NULL");
+
+                    b.HasIndex("UsuarioId", "Proposito", "EmitidoEnUtc");
+
+                    b.ToTable("DesafioVerificacionCorreo", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_DesafioCorreo_Consumo", "[ConsumidoEnUtc] IS NULL OR ([InvalidadoEnUtc] IS NULL AND DATEPART(TZOFFSET,[ConsumidoEnUtc]) = 0 AND [ConsumidoEnUtc] >= [EmitidoEnUtc] AND [ConsumidoEnUtc] < [ExpiraEnUtc])");
+
+                            t.HasCheckConstraint("CK_DesafioCorreo_Fechas", "DATEPART(TZOFFSET,[EmitidoEnUtc]) = 0 AND DATEPART(TZOFFSET,[ExpiraEnUtc]) = 0 AND [ExpiraEnUtc] = DATEADD(hour,24,[EmitidoEnUtc])");
+
+                            t.HasCheckConstraint("CK_DesafioCorreo_Hash", "DATALENGTH([TokenHash]) = 32");
+
+                            t.HasCheckConstraint("CK_DesafioCorreo_Intentos", "[IntentosConfirmacion] >= 0 AND (([IntentosConfirmacion] = 0 AND [VentanaIntentosEnUtc] IS NULL) OR ([IntentosConfirmacion] > 0 AND [VentanaIntentosEnUtc] IS NOT NULL AND DATEPART(TZOFFSET,[VentanaIntentosEnUtc]) = 0))");
+
+                            t.HasCheckConstraint("CK_DesafioCorreo_Invalidacion", "[InvalidadoEnUtc] IS NULL OR (DATEPART(TZOFFSET,[InvalidadoEnUtc]) = 0 AND [InvalidadoEnUtc] >= [EmitidoEnUtc])");
+
+                            t.HasCheckConstraint("CK_DesafioCorreo_Proposito", "[Proposito] = 1");
+                        });
+                });
+
             modelBuilder.Entity("Constia.Domain.Habito", b =>
                 {
                     b.Property<Guid>("Id")
@@ -231,6 +305,15 @@ namespace Constia.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<DateTimeOffset?>("EmailVerificadoEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<byte>("EstadoVerificacionCorreo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint")
+                        .HasDefaultValue((byte)1)
+                        .HasSentinel((byte)255);
+
                     b.Property<string>("Nombre")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -244,12 +327,24 @@ namespace Constia.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<byte[]>("VersionCorreo")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.ToTable("Usuario");
+                    b.ToTable("Usuario", null, t =>
+                        {
+                            t.HasTrigger("TR_Usuario_ProtegeVerificacionCorreo");
+
+                            t.HasCheckConstraint("CK_Usuario_VerificacionCorreo", "([EstadoVerificacionCorreo] IN (0,1) AND [EmailVerificadoEnUtc] IS NULL) OR ([EstadoVerificacionCorreo] = 2 AND [EmailVerificadoEnUtc] IS NOT NULL AND DATEPART(TZOFFSET,[EmailVerificadoEnUtc]) = 0)");
+                        });
+
+                    b.HasAnnotation("SqlServer:UseSqlOutputClause", false);
                 });
 
             modelBuilder.Entity("Constia.Infrastructure.Habitos.InicializacionEstadoHabito", b =>
@@ -308,6 +403,34 @@ namespace Constia.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Constia.Infrastructure.Usuarios.PresupuestoEmisionCorreo", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("int");
+
+                    b.Property<long>("TotalEmisiones")
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("PresupuestoEmisionCorreo", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PresupuestoCorreo", "[Id] = 1 AND [TotalEmisiones] >= 0");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            TotalEmisiones = 0L
+                        });
+                });
+
             modelBuilder.Entity("Constia.Domain.Cumplimiento", b =>
                 {
                     b.HasOne("Constia.Domain.Habito", "Habito")
@@ -317,6 +440,15 @@ namespace Constia.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Habito");
+                });
+
+            modelBuilder.Entity("Constia.Domain.DesafioVerificacionCorreo", b =>
+                {
+                    b.HasOne("Constia.Domain.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Constia.Domain.Habito", b =>

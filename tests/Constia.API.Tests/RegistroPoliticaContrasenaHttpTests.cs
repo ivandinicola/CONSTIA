@@ -118,6 +118,8 @@ public sealed class RegistroPoliticaContrasenaHttpTests(JwtApiFactory factory) :
         using var client = host.CreateClient();
         var hash = new AspNetCorePasswordHasher().HashPassword(password);
         var usuario = new Usuario("Historico", $"{Guid.NewGuid()}@example.invalid", hash, "Etc/UTC");
+        // Fixture histórico: estado que la migración asignará, sin fábrica productiva de exentos.
+        typeof(Usuario).GetProperty(nameof(Usuario.EstadoVerificacionCorreo))!.SetValue(usuario, EstadoVerificacionCorreo.LegadoExento);
         Assert.True(factory.UsuariosPersistidos.TryAdd(usuario.Id, usuario));
 
         var response = await client.PostAsJsonAsync("/api/auth/login", new { email = usuario.Email, password });
