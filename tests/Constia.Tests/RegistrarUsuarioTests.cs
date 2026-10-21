@@ -146,7 +146,7 @@ public class RegistrarUsuarioTests
 
     private static RegistrarUsuario CrearCasoDeUso(
         IUsuarioRepository usuarios,
-        IUsuarioPasswordHasher hasher) => new(usuarios, hasher, new ZonaHorariaIana());
+        IUsuarioPasswordHasher hasher) => new(usuarios, hasher, new ZonaHorariaIana(), new RegistroCorreoFalso(usuarios));
 
     private sealed class FakeUsuarioRepository : IUsuarioRepository
     {

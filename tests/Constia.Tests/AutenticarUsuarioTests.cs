@@ -11,6 +11,7 @@ public class AutenticarUsuarioTests
     public async Task EjecutarAsync_ConCredencialesCorrectas_DevuelveDatosPublicosYVerificaHash()
     {
         var usuario = new Usuario("Ana", "ana@example.com", "hash-seguro", "Etc/UTC");
+        usuario.ConfirmarCorreo(DateTimeOffset.Parse("2026-10-21T00:00:00Z"));
         var usuarios = new FakeUsuarioRepository(usuario);
         var passwordHasher = new FakePasswordHasher(resultadoVerificacion: true);
         var accessTokenService = new FakeAccessTokenService();
@@ -25,7 +26,7 @@ public class AutenticarUsuarioTests
                 usuario.Email,
                 "token-ficticio-de-prueba",
                 accessTokenService.ExpiresAt),
-            resultado);
+            resultado.Usuario);
         Assert.Equal((usuario.PasswordHash, PasswordDePrueba), passwordHasher.ArgumentosVerificacion);
         Assert.Equal((usuario.Id, usuario.Nombre, usuario.Email), accessTokenService.ArgumentosEmision);
         Assert.DoesNotContain(
@@ -43,7 +44,8 @@ public class AutenticarUsuarioTests
 
         var resultado = await casoDeUso.EjecutarAsync("ausente@example.com", PasswordDePrueba);
 
-        Assert.Null(resultado);
+        Assert.Equal(EstadoAutenticacion.CredencialesInvalidas, resultado.Estado);
+        Assert.Null(resultado.Usuario);
         Assert.Null(passwordHasher.ArgumentosVerificacion);
         Assert.Null(accessTokenService.ArgumentosEmision);
     }
@@ -58,7 +60,8 @@ public class AutenticarUsuarioTests
 
         var resultado = await casoDeUso.EjecutarAsync(usuario.Email, "otra-clave-ficticia");
 
-        Assert.Null(resultado);
+        Assert.Equal(EstadoAutenticacion.CredencialesInvalidas, resultado.Estado);
+        Assert.Null(resultado.Usuario);
         Assert.Equal((usuario.PasswordHash, "otra-clave-ficticia"), passwordHasher.ArgumentosVerificacion);
         Assert.Null(accessTokenService.ArgumentosEmision);
     }

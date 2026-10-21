@@ -6,7 +6,8 @@ namespace Constia.Application.Usuarios;
 public sealed class RegistrarUsuario(
     IUsuarioRepository usuarios,
     IUsuarioPasswordHasher passwordHasher,
-    IZonaHorariaIana zonasHorarias)
+    IZonaHorariaIana zonasHorarias,
+    IRegistroUsuarioCorreo correo)
 {
     /// <summary>
     /// Returns null when the email is already registered, including a concurrent insert conflict.
@@ -18,6 +19,7 @@ public sealed class RegistrarUsuario(
         string timeZoneId,
         CancellationToken cancellationToken = default)
     {
+        if (!await correo.DisponibleAsync(cancellationToken)) throw new CorreoNoDisponibleException();
         ArgumentException.ThrowIfNullOrWhiteSpace(nombre);
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
@@ -36,7 +38,7 @@ public sealed class RegistrarUsuario(
 
         var usuario = new Usuario(nombre, email, passwordHasher.HashPassword(password), timeZoneId);
 
-        if (!await usuarios.IntentarAgregarAsync(usuario, cancellationToken))
+        if (!await correo.RegistrarAsync(usuario, cancellationToken))
         {
             return null;
         }

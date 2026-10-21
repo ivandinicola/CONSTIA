@@ -6,9 +6,9 @@ public sealed class AutenticarUsuario(
     IAccessTokenService accessTokenService)
 {
     /// <summary>
-    /// Returns null for any invalid credentials.
+    /// Returns an explicit result; pending accounts never invoke the JWT issuer.
     /// </summary>
-    public async Task<UsuarioAutenticado?> EjecutarAsync(
+    public async Task<ResultadoAutenticacion> EjecutarAsync(
         string email,
         string password,
         CancellationToken cancellationToken = default)
@@ -19,16 +19,22 @@ public sealed class AutenticarUsuario(
         var usuario = await usuarios.BuscarPorEmailAsync(email, cancellationToken);
         if (usuario is null || !passwordHasher.VerifyPassword(usuario.PasswordHash, password))
         {
-            return null;
+            return new ResultadoAutenticacion(EstadoAutenticacion.CredencialesInvalidas);
         }
+
+        if (usuario.EstadoVerificacionCorreo == Constia.Domain.EstadoVerificacionCorreo.Pendiente)
+            return new ResultadoAutenticacion(EstadoAutenticacion.VerificacionRequerida);
+
+        if (usuario.EstadoVerificacionCorreo is not (Constia.Domain.EstadoVerificacionCorreo.Verificado or Constia.Domain.EstadoVerificacionCorreo.LegadoExento))
+            return new ResultadoAutenticacion(EstadoAutenticacion.CredencialesInvalidas);
 
         var token = accessTokenService.Emitir(usuario.Id, usuario.Nombre, usuario.Email);
 
-        return new UsuarioAutenticado(
+        return new ResultadoAutenticacion(EstadoAutenticacion.Autenticado, new UsuarioAutenticado(
             usuario.Id,
             usuario.Nombre,
             usuario.Email,
             token.Value,
-            token.ExpiresAt);
+            token.ExpiresAt));
     }
 }

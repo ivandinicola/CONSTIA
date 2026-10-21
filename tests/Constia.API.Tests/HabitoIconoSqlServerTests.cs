@@ -53,10 +53,20 @@ public sealed class HabitoIconoSqlServerTests
         await context.Database.ExecuteSqlRawAsync(
             "UPDATE [Habito] SET [IconoId]=N'libro' WHERE [CategoriaId] IS NOT NULL");
         context.ChangeTracker.Clear();
-        var habits = await context.Habitos.AsNoTracking()
-            .Include(h => h.Usuario)
+        var habits = await context.Habitos.AsTracking()
             .Include(h => h.Programaciones).ThenInclude(p => p.DiasProgramados)
             .Include(h => h.PeriodosEstado).ToArrayAsync();
+        // El escenario se detiene antes de Etapa B: proyectar sólo columnas del usuario histórico.
+        var historicalUsers = await context.Database.SqlQueryRaw<UsuarioAnteriorCorreo>(
+            "SELECT [Id],[Nombre],[Email],[PasswordHash],[TimeZoneId] FROM [Usuario]").ToArrayAsync();
+        foreach (var row in historicalUsers)
+        {
+            var user = new Usuario(row.Nombre, row.Email, row.PasswordHash, row.TimeZoneId);
+            context.Entry(user).Property(x => x.Id).CurrentValue = row.Id;
+            context.Entry(user).Property(x => x.EstadoVerificacionCorreo).CurrentValue = EstadoVerificacionCorreo.LegadoExento;
+            foreach (var habit in habits.Where(h => context.Entry(h).Property<Guid>("UsuarioId").CurrentValue == row.Id))
+                context.Entry(habit).Reference(h => h.Usuario).CurrentValue = user;
+        }
         var assigned = Assert.Single(habits, h => h.CategoriaId is not null);
         Assert.Equal("libro", assigned.IconoId);
         Assert.Equal(CatalogoCategoriasHabito.Todas[4].Id, assigned.CategoriaId);
@@ -134,6 +144,8 @@ public sealed class HabitoIconoSqlServerTests
         Assert.All(await context.Habitos.AsNoTracking().ToArrayAsync(), h => Assert.Null(h.IconoId));
         await VerifyCategoryFkAsync(context);
     }
+
+    private sealed record UsuarioAnteriorCorreo(Guid Id, string Nombre, string Email, string PasswordHash, string TimeZoneId);
 
     private static async Task VerifyCategoryFkAsync(ConstiaDbContext context)
     {

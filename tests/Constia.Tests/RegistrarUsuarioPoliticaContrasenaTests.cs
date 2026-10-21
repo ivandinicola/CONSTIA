@@ -56,7 +56,7 @@ public sealed class RegistrarUsuarioPoliticaContrasenaTests
     {
         var usuarios = new RepositorioObservado();
         var hasher = new HasherObservado();
-        var registrar = new RegistrarUsuario(usuarios, hasher, new ZonaHorariaIana());
+        var registrar = new RegistrarUsuario(usuarios, hasher, new ZonaHorariaIana(), new RegistroCorreoFalso(usuarios));
 
         var error = await Assert.ThrowsAnyAsync<ArgumentException>(() =>
             registrar.EjecutarAsync("Ana", "ana@example.invalid", password, "Etc/UTC"));
@@ -74,7 +74,7 @@ public sealed class RegistrarUsuarioPoliticaContrasenaTests
     {
         var usuarios = new RepositorioObservado();
         var hasher = new HasherObservado();
-        var registrar = new RegistrarUsuario(usuarios, hasher, new ZonaHorariaIana());
+        var registrar = new RegistrarUsuario(usuarios, hasher, new ZonaHorariaIana(), new RegistroCorreoFalso(usuarios));
 
         var resultado = await registrar.EjecutarAsync("Ana", "ana@example.invalid", password, "Etc/UTC");
 
