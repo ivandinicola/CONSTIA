@@ -33,6 +33,14 @@ public sealed class UsuariosController(
                 request.TimeZoneId,
                 cancellationToken);
         }
+        catch (ContrasenaInvalidaException exception)
+        {
+            foreach (var error in exception.Errores)
+            {
+                ModelState.AddModelError(nameof(RegistroUsuarioRequest.Password), error);
+            }
+            return ValidationProblem(ModelState);
+        }
         catch (ZonaHorariaIanaInvalidaException)
         {
             return BadRequest(new ProblemDetails

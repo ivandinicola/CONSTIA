@@ -904,7 +904,7 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
         {
             nombre = "Existing User",
             email = factory.Usuario.Email,
-            password = JwtApiFactory.TestPassword,
+            password = "Registro-publico-1!",
             timeZoneId = "Etc/UTC"
         });
 
