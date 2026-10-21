@@ -109,6 +109,7 @@ builder.Services
     });
 
 builder.Services.AddControllers();
+Constia.API.Configuration.ResendC1ServiceCollectionExtensions.AddResendC1(builder.Services, builder.Configuration);
 
 var app = builder.Build();
 
