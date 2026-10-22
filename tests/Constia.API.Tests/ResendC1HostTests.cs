@@ -43,10 +43,10 @@ public sealed class ResendC1HostTests
     {
         using var host=new Host(enabled);using var client=host.CreateClient();
         using var scope=host.Services.CreateScope();
-        var b=scope.ServiceProvider.GetRequiredService<IEntregaCorreoVerificacion>();
-        Assert.IsType<EntregaCorreoNoDisponible>(b);
+        var canal=scope.ServiceProvider.GetRequiredService<ICanalVerificacionCorreo>();
+        Assert.NotNull(canal);
         var c1=scope.ServiceProvider.GetRequiredService<ITransporteCorreoVerificacion>();
-        Assert.False(c1 is IEntregaCorreoProduccion);Assert.False(c1 is IEntregaCorreoDePrueba);
+        Assert.IsNotType<EntregaCorreoFalsa>(c1);
         Assert.Equal(0,host.Http.Calls);
         var response=await client.PostAsJsonAsync("/api/usuarios",new{
             nombre="Ana",email="nuevo@example.invalid",password="ABCDE1.@",timeZoneId="Etc/UTC"});
@@ -73,6 +73,7 @@ public sealed class ResendC1HostTests
         var register=await client.PostAsJsonAsync("/api/usuarios",new{nombre="Ana",email="ana-c1@example.invalid",password="ABCDE1.@",timeZoneId="Etc/UTC"});
         Assert.Equal(HttpStatusCode.Created,register.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,(await client.PostAsJsonAsync("/api/auth/login",new{email="ana-c1@example.invalid",password="ABCDE1.@"})).StatusCode);
+        await verified.Services.GetRequiredService<ICanalVerificacionCorreo>().EsperarVacioAsync(default);
         var mail=Assert.Single(f.CorreosDePrueba);
         Assert.Equal(HttpStatusCode.NoContent,(await client.PostAsJsonAsync("/api/auth/email/verificar",new{desafioId=mail.Id,token=mail.Token,password="ABCDE1.@"})).StatusCode);
         Assert.Equal(HttpStatusCode.OK,(await client.PostAsJsonAsync("/api/auth/login",new{email="ana-c1@example.invalid",password="ABCDE1.@"})).StatusCode);

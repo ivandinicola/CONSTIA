@@ -13,5 +13,6 @@ public sealed record ConfirmarCorreoRequest
 /// <summary>Solicitud de reenvío con respuesta pública independiente de la existencia de la cuenta.</summary>
 public sealed record ReenviarCorreoRequest
 {
-    [Required] public string Email { get; init; } = string.Empty;
+    [Required, StringLength(254)] public string Email { get; init; } = string.Empty;
+    public override string ToString() => "[reenvío de correo redactado]";
 }

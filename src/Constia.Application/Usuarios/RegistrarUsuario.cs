@@ -24,6 +24,7 @@ public sealed class RegistrarUsuario(
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
 
+        Constia.Application.Correo.DatosVerificacionCorreo.ValidarAlta(nombre, email);
         PoliticaContrasenaRegistro.Validar(password);
 
         if (!zonasHorarias.EsValida(timeZoneId))

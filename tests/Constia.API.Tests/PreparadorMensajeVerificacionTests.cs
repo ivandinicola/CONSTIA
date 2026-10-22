@@ -26,6 +26,17 @@ public sealed class PreparadorMensajeVerificacionTests
         Assert.DoesNotContain(token, m.ToString());
     }
 
+    [Theory]
+    [InlineData("Nombre\r\nPrivado")]
+    [InlineData("")]
+    public void NombreHistoricoIncompatible_UsaSaludoNeutro(string nombre)
+    {
+        var p=new PreparadorMensajeVerificacion(ResendConfiguracionTests.Validas());
+        var ahora=DateTimeOffset.Parse("2026-10-22T00:00:00Z");
+        var m=p.Preparar(Guid.NewGuid(),"a@example.invalid",nombre,new string('A',43),ahora,ahora.AddHours(24));
+        Assert.Contains("Hola.",m.Html);Assert.Contains("Hola.",m.TextoPlano);
+        Assert.DoesNotContain("Privado",m.Html);Assert.DoesNotContain("Privado",m.TextoPlano);
+    }
     [Fact]
     public void DatosInvalidos_NoFiltranEntrada()
     {

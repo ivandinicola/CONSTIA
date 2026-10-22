@@ -1,3 +1,4 @@
+using Constia.Application.Correo;
 using System.Collections.Concurrent;
 using Constia.Application.Cumplimientos;
 using Constia.Application.Habitos;
@@ -85,6 +86,7 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
         builder.ConfigureAppConfiguration((_, c) => c.AddInMemoryCollection(new Dictionary<string,string?>
         {
             ["VerificacionCorreo:PublicRegistrationEnabled"] = "true",
+            ["VerificacionCorreo:C2Enabled"] = "true",
             ["VerificacionCorreo:PublicUrl"] = "https://constia.example"
         }));
         builder.ConfigureTestServices(services =>
@@ -92,8 +94,13 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<IVerificacionCorreoRepository>();
             services.AddScoped<IVerificacionCorreoRepository>(sp => new CorreoRepositorioFalso(this,
                 sp.GetRequiredService<IUsuarioPasswordHasher>(),sp.GetRequiredService<TimeProvider>()));
-            services.RemoveAll<IEntregaCorreoVerificacion>();
-            services.AddScoped<IEntregaCorreoVerificacion>(_ => new EntregaCorreoFalsa(this));
+            services.RemoveAll<ICanalVerificacionCorreo>();
+            services.AddSingleton<ICanalVerificacionCorreo,CanalCorreoFalso>();
+            services.RemoveAll<ITransporteCorreoVerificacion>();
+            services.AddScoped<ITransporteCorreoVerificacion>(_ => new EntregaCorreoFalsa(this));
+            services.RemoveAll<IPreparadorMensajeVerificacion>();
+            services.AddScoped<IPreparadorMensajeVerificacion>(_ => new Constia.Infrastructure.Correo.PreparadorMensajeVerificacion(
+                ResendConfiguracionTests.Validas()));
             services.RemoveAll<IUsuarioRepository>();
             services.AddScoped<IUsuarioRepository>(_ => new FakeUsuarioRepository(UsuariosPersistidos, RegistrarCambioGuardado));
             services.RemoveAll<IUsuarioPasswordHasher>();

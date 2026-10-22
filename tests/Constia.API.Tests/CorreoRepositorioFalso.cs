@@ -1,3 +1,4 @@
+using Constia.Application.Correo;
 using Constia.Application.Usuarios;
 using Constia.Domain;
 
@@ -7,6 +8,17 @@ namespace Constia.API.Tests;
 internal sealed class CorreoRepositorioFalso(JwtApiFactory factory, IUsuarioPasswordHasher hasher, TimeProvider clock)
     : IVerificacionCorreoRepository
 {
+    public Task<bool> VigenteParaEnvioAsync(Guid id, string destinatario, CancellationToken ct)
+    {
+        lock(factory.CorreoLock)
+        {
+            return Task.FromResult(factory.DesafiosCorreo.TryGetValue(id,out var d) &&
+                d.EstaVigente(clock.GetUtcNow()) && factory.UsuariosPersistidos.TryGetValue(d.UsuarioId,out var u) &&
+                u.EstadoVerificacionCorreo == EstadoVerificacionCorreo.Pendiente &&
+                string.Equals(d.EmailDestino,u.Email,StringComparison.Ordinal) &&
+                string.Equals(d.EmailDestino,destinatario,StringComparison.Ordinal));
+        }
+    }
     public Task<bool> EsquemaDisponibleAsync(CancellationToken ct) => Task.FromResult(factory.EsquemaCorreoDisponible);
 
     public Task<ReservaRegistroCorreo> RegistrarAsync(Usuario u, byte[] hash, PoliticaVerificacionCorreo p, CancellationToken ct)
@@ -21,7 +33,7 @@ internal sealed class CorreoRepositorioFalso(JwtApiFactory factory, IUsuarioPass
             var d = new DesafioVerificacionCorreo(u.Id,u.Email,hash,now);
             factory.UsuariosPersistidos[u.Id] = u;
             factory.DesafiosCorreo[d.Id] = d;
-            return Task.FromResult(new ReservaRegistroCorreo(EstadoReservaCorreo.Creado,new(d.Id,u.Email)));
+            return Task.FromResult(new ReservaRegistroCorreo(EstadoReservaCorreo.Creado,new(d.Id,u.Email,u.Nombre,d.EmitidoEnUtc,d.ExpiraEnUtc)));
         }
     }
 
@@ -31,7 +43,7 @@ internal sealed class CorreoRepositorioFalso(JwtApiFactory factory, IUsuarioPass
         {
             var u = factory.UsuariosPersistidos.Values.SingleOrDefault(x => x.Email == email);
             var now = clock.GetUtcNow();
-            if(u is null || u.EstadoVerificacionCorreo != EstadoVerificacionCorreo.Pendiente) return Task.FromResult<EmisionCorreo?>(null);
+            if(u is null || u.EstadoVerificacionCorreo != EstadoVerificacionCorreo.Pendiente || !DatosVerificacionCorreo.DireccionSimple(u.Email)) return Task.FromResult<EmisionCorreo?>(null);
             var ds = factory.DesafiosCorreo.Values.Where(x => x.UsuarioId == u.Id).ToArray();
             if(!p.PermiteEmision(ds.Select(x => x.EmitidoEnUtc).ToArray(),now) ||
                 factory.DesafiosCorreo.Values.Count(x => x.EmitidoEnUtc > now.AddHours(-24)) >= p.EmisionesGlobales)
@@ -40,7 +52,7 @@ internal sealed class CorreoRepositorioFalso(JwtApiFactory factory, IUsuarioPass
             actual?.Invalidar(now);
             var nuevo = new DesafioVerificacionCorreo(u.Id,u.Email,hash,now);
             factory.DesafiosCorreo[nuevo.Id] = nuevo;
-            return Task.FromResult<EmisionCorreo?>(new(nuevo.Id,u.Email));
+            return Task.FromResult<EmisionCorreo?>(new(nuevo.Id,u.Email,u.Nombre,nuevo.EmitidoEnUtc,nuevo.ExpiraEnUtc));
         }
     }
 
@@ -64,11 +76,25 @@ internal sealed class CorreoRepositorioFalso(JwtApiFactory factory, IUsuarioPass
     }
 }
 
-internal sealed class EntregaCorreoFalsa(JwtApiFactory factory) : IEntregaCorreoDePrueba
+internal sealed class EntregaCorreoFalsa(JwtApiFactory factory) : ITransporteCorreoVerificacion
 {
-    public Task<bool> IntentarEntregarAsync(EmisionCorreo emision,string token,CancellationToken ct)
+    public Task<ResultadoEntregaCorreo> EnviarAsync(MensajeVerificacionCorreo mensaje, CancellationToken ct)
     {
-        factory.CorreosDePrueba.Enqueue((emision.DesafioId,emision.Email,token));
-        return Task.FromResult(!factory.FallarEntregaCorreo);
+        var token = System.Text.RegularExpressions.Regex.Match(mensaje.TextoPlano,"token=([A-Za-z0-9_-]+)").Groups[1].Value;
+        factory.CorreosDePrueba.Enqueue((mensaje.DesafioId,mensaje.Destinatario,token));
+        return Task.FromResult(factory.FallarEntregaCorreo
+            ? new ResultadoEntregaCorreo(EstadoEntregaCorreo.RechazadaDefinitivamente,MotivoEntregaCorreo.SolicitudRechazada)
+            : new ResultadoEntregaCorreo(EstadoEntregaCorreo.AceptadaPorProveedor,MotivoEntregaCorreo.Ninguno,"synthetic",intentoHttpIniciado:true));
     }
+}
+internal sealed class CanalCorreoFalso : ICanalCorreoDePrueba
+{
+    private readonly Constia.Infrastructure.Correo.ColaVerificacionCorreoMemoria _cola = new(new());
+    public bool Disponible => _cola.Disponible;
+    public IReservaTrabajoCorreo? Reservar() => _cola.Reservar();
+    public void Iniciar() => _cola.Iniciar();
+    public void CerrarAdmision() => _cola.CerrarAdmision();
+    public void Fallar() => _cola.Fallar();
+    public Task EsperarVacioAsync(CancellationToken ct) => _cola.EsperarVacioAsync(ct);
+    public ValueTask<TrabajoVerificacionCorreo?> LeerAsync(CancellationToken ct) => _cola.LeerAsync(ct);
 }
