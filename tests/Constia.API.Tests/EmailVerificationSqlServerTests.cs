@@ -27,12 +27,12 @@ public sealed class EmailVerificationSqlServerTests
     private static VerificacionCorreoRepository Repo(ConstiaDbContext db,Clock clock)=>new(db,Hasher,clock);
     private static Usuario Nuevo()=>new("Ana",$"{Guid.NewGuid()}@example.invalid",Hasher.HashPassword(Password),"Etc/UTC");
     private static TokenVerificacion Token()=>new GeneradorTokenVerificacion().Generar();
-    private static async Task Init(DisposableDatabase d)
+    private static async Task Init(EmailVerificationSqlDatabase d)
     {
         await using var db=d.CreateContext();
         await db.Database.MigrateAsync();
     }
-    private static async Task<(Usuario U,TokenVerificacion T,Guid Id)> Alta(DisposableDatabase d,Clock clock)
+    private static async Task<(Usuario U,TokenVerificacion T,Guid Id)> Alta(EmailVerificationSqlDatabase d,Clock clock)
     {
         await using var db=d.CreateContext();
         var u=Nuevo(); var token=Token();
@@ -44,7 +44,7 @@ public sealed class EmailVerificationSqlServerTests
     [EmailSqlFact]
     public async Task Up_PreservaLegadoHashZonaYLoginSinFechaInventada()
     {
-        await using var d=await DisposableDatabase.CreateAsync();
+        await using var d=await EmailVerificationSqlDatabase.CreateAsync();
         var id=Guid.NewGuid(); var hash=Hasher.HashPassword("vieja");
         await using(var db=d.CreateContext())
         {
@@ -64,7 +64,7 @@ public sealed class EmailVerificationSqlServerTests
     [EmailSqlFact]
     public async Task DefaultsYTrigger_AltasPendientesYRechazoDeLegadoNuevo()
     {
-        await using var d=await DisposableDatabase.CreateAsync(); await Init(d);
+        await using var d=await EmailVerificationSqlDatabase.CreateAsync(); await Init(d);
         await using var db=d.CreateContext();
         var id=Guid.NewGuid();
         await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO [Usuario] ([Id],[Nombre],[Email],[PasswordHash],[TimeZoneId]) VALUES ({id},{"Ana"},{"a@example.invalid"},{"hash"},{"Etc/UTC"})");
@@ -80,7 +80,7 @@ public sealed class EmailVerificationSqlServerTests
     [EmailSqlFact]
     public async Task Constraints_HashPropositoUnicidadYFk()
     {
-        await using var d=await DisposableDatabase.CreateAsync(); await Init(d);
+        await using var d=await EmailVerificationSqlDatabase.CreateAsync(); await Init(d);
         var clock=new Clock(); var a=await Alta(d,clock);
         await using var db=d.CreateContext();
         var id=Guid.NewGuid(); var token=Token();
@@ -96,7 +96,7 @@ public sealed class EmailVerificationSqlServerTests
     [EmailSqlFact]
     public async Task PasswordIncorrecta_NoConsumeLuegoConfirmaYReintentoNoDuplica()
     {
-        await using var d=await DisposableDatabase.CreateAsync(); await Init(d);
+        await using var d=await EmailVerificationSqlDatabase.CreateAsync(); await Init(d);
         var clock=new Clock(); var a=await Alta(d,clock);
         await using(var db=d.CreateContext())
             Assert.Equal(ResultadoConfirmacionCorreo.Invalido,await Repo(db,clock).ConfirmarAsync(a.Id,a.T.Hash,"incorrecta",Policy,default));
@@ -120,7 +120,7 @@ public sealed class EmailVerificationSqlServerTests
     [EmailSqlFact]
     public async Task DosConfirmaciones_UnGanador()
     {
-        await using var d=await DisposableDatabase.CreateAsync(); await Init(d);
+        await using var d=await EmailVerificationSqlDatabase.CreateAsync(); await Init(d);
         var clock=new Clock(); var a=await Alta(d,clock);
         async Task<ResultadoConfirmacionCorreo> Confirmar()
         {
@@ -135,7 +135,7 @@ public sealed class EmailVerificationSqlServerTests
     [EmailSqlFact]
     public async Task DosReenvios_UnGanadorYTokenAnteriorSustituido()
     {
-        await using var d=await DisposableDatabase.CreateAsync(); await Init(d);
+        await using var d=await EmailVerificationSqlDatabase.CreateAsync(); await Init(d);
         var clock=new Clock(); var a=await Alta(d,clock); clock.Now=clock.Now.AddSeconds(60);
         async Task<EmisionCorreo?> Enviar()
         {
@@ -152,7 +152,7 @@ public sealed class EmailVerificationSqlServerTests
     [EmailSqlFact]
     public async Task ConfirmacionContraReenvio_NoHayEstadoParcial()
     {
-        await using var d=await DisposableDatabase.CreateAsync(); await Init(d);
+        await using var d=await EmailVerificationSqlDatabase.CreateAsync(); await Init(d);
         var clock=new Clock(); var a=await Alta(d,clock); clock.Now=clock.Now.AddSeconds(60);
         await using var c1=d.CreateContext(); await using var c2=d.CreateContext();
         var confirm=Repo(c1,clock).ConfirmarAsync(a.Id,a.T.Hash,Password,Policy,default);
@@ -170,7 +170,7 @@ public sealed class EmailVerificationSqlServerTests
     [EmailSqlFact]
     public async Task PresupuestoGlobalConcurrente_NoSupera40YExpiraExactamenteEn24Horas()
     {
-        await using var d=await DisposableDatabase.CreateAsync(); await Init(d); var clock=new Clock();
+        await using var d=await EmailVerificationSqlDatabase.CreateAsync(); await Init(d); var clock=new Clock();
         for(var i=0;i<39;i++) await Alta(d,clock);
         async Task<ReservaRegistroCorreo> AltaConcurrente()
         {
@@ -193,7 +193,7 @@ public sealed class EmailVerificationSqlServerTests
     [EmailSqlFact]
     public async Task CincoEmisiones_CuentanReemplazosYRecuperanVentana()
     {
-        await using var d=await DisposableDatabase.CreateAsync(); await Init(d); var clock=new Clock();
+        await using var d=await EmailVerificationSqlDatabase.CreateAsync(); await Init(d); var clock=new Clock();
         var a=await Alta(d,clock);
         for(var i=0;i<4;i++)
         {
@@ -215,7 +215,7 @@ public sealed class EmailVerificationSqlServerTests
     [EmailSqlFact]
     public async Task VencimientoYEmailVinculado_RechazanSinConsumir()
     {
-        await using var d=await DisposableDatabase.CreateAsync(); await Init(d); var clock=new Clock(); var a=await Alta(d,clock);
+        await using var d=await EmailVerificationSqlDatabase.CreateAsync(); await Init(d); var clock=new Clock(); var a=await Alta(d,clock);
         await using(var db=d.CreateContext())
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE [DesafioVerificacionCorreo] SET [EmailDestino]={"otro@example.invalid"} WHERE [Id]={a.Id}");
@@ -232,7 +232,7 @@ public sealed class EmailVerificationSqlServerTests
     [EmailSqlFact]
     public async Task FalloDespuesDeSql_AltaRevierteUsuarioDesafioYPresupuesto()
     {
-        await using var d=await DisposableDatabase.CreateAsync(); await Init(d); var clock=new Clock();
+        await using var d=await EmailVerificationSqlDatabase.CreateAsync(); await Init(d); var clock=new Clock();
         await using(var db=d.CreateContext(new FalloDespuesGuardar()))
             await Assert.ThrowsAsync<InvalidOperationException>(()=>Repo(db,clock).RegistrarAsync(Nuevo(),Token().Hash,Policy,default));
         await using var verify=d.CreateContext();
@@ -244,7 +244,7 @@ public sealed class EmailVerificationSqlServerTests
     [EmailSqlFact]
     public async Task FalloDespuesDeSql_ConfirmacionRevierteEstadoYConsumo()
     {
-        await using var d=await DisposableDatabase.CreateAsync(); await Init(d); var clock=new Clock(); var a=await Alta(d,clock);
+        await using var d=await EmailVerificationSqlDatabase.CreateAsync(); await Init(d); var clock=new Clock(); var a=await Alta(d,clock);
         await using(var db=d.CreateContext(new FalloDespuesGuardar()))
             await Assert.ThrowsAsync<InvalidOperationException>(()=>Repo(db,clock).ConfirmarAsync(a.Id,a.T.Hash,Password,Policy,default));
         await using var verify=d.CreateContext();
@@ -256,7 +256,7 @@ public sealed class EmailVerificationSqlServerTests
     [EmailSqlFact]
     public async Task Down_LegadoSolamentePermiteReversion()
     {
-        await using var d=await DisposableDatabase.CreateAsync();
+        await using var d=await EmailVerificationSqlDatabase.CreateAsync();
         await using var db=d.CreateContext();
         await db.GetService<IMigrator>().MigrateAsync(Previous);
         var id=Guid.NewGuid();
@@ -270,7 +270,7 @@ public sealed class EmailVerificationSqlServerTests
     [EmailSqlFact]
     public async Task Down_ConCuentaNuevaRechaza51030SinPerdidaParcial()
     {
-        await using var d=await DisposableDatabase.CreateAsync(); await Init(d); var clock=new Clock(); var a=await Alta(d,clock);
+        await using var d=await EmailVerificationSqlDatabase.CreateAsync(); await Init(d); var clock=new Clock(); var a=await Alta(d,clock);
         await using var db=d.CreateContext();
         var history=(await db.Database.GetAppliedMigrationsAsync()).ToArray();
         var ex=await Assert.ThrowsAsync<SqlException>(()=>db.GetService<IMigrator>().MigrateAsync(Previous));
@@ -286,7 +286,7 @@ public sealed class EmailVerificationSqlServerTests
     [EmailSqlFact]
     public async Task ContextoConTrackingObsoleto_NoReenviaDespuesDeConfirmacionExterna()
     {
-        await using var d=await DisposableDatabase.CreateAsync(); await Init(d); var clock=new Clock(); var a=await Alta(d,clock);
+        await using var d=await EmailVerificationSqlDatabase.CreateAsync(); await Init(d); var clock=new Clock(); var a=await Alta(d,clock);
         await using var obsoleto=d.CreateContext();
         var previo=await obsoleto.Set<Usuario>().SingleAsync();
         Assert.Equal(EstadoVerificacionCorreo.Pendiente,previo.EstadoVerificacionCorreo);
@@ -314,73 +314,6 @@ public sealed class EmailVerificationSqlServerTests
     {
         public override ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData,int result,CancellationToken ct=default) =>
             throw new InvalidOperationException("Fallo simulado después de SQL y antes del commit.");
-    }
-
-    private sealed class DisposableDatabase : IAsyncDisposable
-    {
-        private readonly string _adminConnection;
-        private readonly string _name;
-        public string ConnectionString { get; }
-
-        private DisposableDatabase(string admin, string name)
-        {
-            _adminConnection = admin;
-            _name = name;
-            ConnectionString = new SqlConnectionStringBuilder(admin) { InitialCatalog = name }.ConnectionString;
-        }
-
-        internal ConstiaDbContext CreateContext(params IInterceptor[] interceptors) => new(new DbContextOptionsBuilder<ConstiaDbContext>()
-            .UseSqlServer(ConnectionString).AddInterceptors(interceptors).Options);
-
-        internal static async Task<DisposableDatabase> CreateAsync()
-        {
-            var admin = await VerifyAdminAsync();
-            var database = new DisposableDatabase(admin, $"Constia_AuthEmail01B_{Guid.NewGuid():N}");
-            await using var connection = new SqlConnection(admin);
-            await connection.OpenAsync();
-            await using var command = new SqlCommand($"CREATE DATABASE [{database._name}];", connection);
-            await command.ExecuteNonQueryAsync();
-            return database;
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            if (!Regex.IsMatch(_name, "^Constia_AuthEmail01B_[0-9a-f]{32}$")
-                || new SqlConnectionStringBuilder(ConnectionString).InitialCatalog != _name)
-                throw new InvalidOperationException("Refusing cleanup of a non-AUTH-EMAIL-01-B database.");
-            var admin = await VerifyAdminAsync();
-            if (admin != _adminConnection)
-                throw new InvalidOperationException("The disposable SQL destination changed.");
-            using (var ownPool = new SqlConnection(ConnectionString)) SqlConnection.ClearPool(ownPool);
-            await using var connection = new SqlConnection(admin);
-            await connection.OpenAsync();
-            await using var command = new SqlCommand(
-                $"ALTER DATABASE [{_name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{_name}];", connection);
-            await command.ExecuteNonQueryAsync();
-        }
-
-        private static async Task<string> VerifyAdminAsync()
-        {
-            if (!IsEnabled()
-                || Environment.GetEnvironmentVariable("RUNNER_ENVIRONMENT") != "github-hosted")
-                throw new InvalidOperationException("AUTH-EMAIL-01-B requires its explicitly enabled disposable GitHub Actions service.");
-            var container = Environment.GetEnvironmentVariable(ContainerVariable) ?? "";
-            if (!Regex.IsMatch(container, "^[0-9a-f]{64}$"))
-                throw new InvalidOperationException("Missing disposable SQL service container identity.");
-            var builder = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable(ConnectionVariable));
-            if (builder.DataSource != "127.0.0.1,1433" || builder.InitialCatalog != "master"
-                || builder.UserID != "sa" || string.IsNullOrWhiteSpace(builder.Password))
-                throw new InvalidOperationException("Only the disposable runner SQL endpoint is allowed.");
-            await using var connection = new SqlConnection(builder.ConnectionString);
-            await connection.OpenAsync();
-            await using var command = new SqlCommand(
-                "SELECT CONVERT(int,SERVERPROPERTY('ProductMajorVersion')),CONVERT(nvarchar(128),SERVERPROPERTY('MachineName'));", connection);
-            await using var reader = await command.ExecuteReaderAsync();
-            Assert.True(await reader.ReadAsync());
-            if (reader.GetInt32(0) != 16 || reader.GetString(1) != container[..12])
-                throw new InvalidOperationException("SQL Server 2022 service identity does not match the disposable CI container.");
-            return builder.ConnectionString;
-        }
     }
 
     private static bool IsEnabled() =>

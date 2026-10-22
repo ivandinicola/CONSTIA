@@ -1,4 +1,3 @@
-using System.Net.Mail;
 namespace Constia.Application.Correo;
 
 /// <summary>Instantánea sensible sólo en memoria. Nunca serializar en logs ni persistir.</summary>
@@ -28,10 +27,7 @@ public sealed class MensajeVerificacionCorreo
         Asunto = asunto; Html = html; TextoPlano = textoPlano; EmitidoEnUtc = emitidoEnUtc; ExpiraEnUtc = expiraEnUtc;
     }
 
-    public static bool DireccionSimple(string? valor) =>
-        !string.IsNullOrWhiteSpace(valor) && !valor.Any(char.IsControl) &&
-        MailAddress.TryCreate(valor, out var address) && address.DisplayName.Length == 0 &&
-        string.Equals(address.Address, valor, StringComparison.Ordinal);
+    public static bool DireccionSimple(string? valor) => DatosVerificacionCorreo.DireccionSimple(valor);
 
     public override string ToString() => "[mensaje de verificación redactado]";
 }

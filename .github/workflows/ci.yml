@@ -52,7 +52,7 @@ jobs:
       - name: Test
         run: >-
           dotnet test --no-build --configuration Release
-          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests&FullyQualifiedName!~RegistrarCumplimientoSqlServerTests&FullyQualifiedName!~Temp005StateHistorySqlServerTests&FullyQualifiedName!~CategoriaHabitoSqlServerTests&FullyQualifiedName!~HabitoIconoSqlServerTests&FullyQualifiedName!~HabCat02SqlServerTests&FullyQualifiedName!~HabDate01SqlServerTests&FullyQualifiedName!~EmailVerificationSqlServerTests"
+          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests&FullyQualifiedName!~RegistrarCumplimientoSqlServerTests&FullyQualifiedName!~Temp005StateHistorySqlServerTests&FullyQualifiedName!~CategoriaHabitoSqlServerTests&FullyQualifiedName!~HabitoIconoSqlServerTests&FullyQualifiedName!~HabCat02SqlServerTests&FullyQualifiedName!~HabDate01SqlServerTests&FullyQualifiedName!~EmailVerificationSqlServerTests&FullyQualifiedName!~VerificacionCorreoC2SqlServerTests"
 
       - name: Test TEMP-003 migration against disposable SQL Server
         env:
@@ -386,6 +386,88 @@ jobs:
               reject()
           print("AUTH-EMAIL-01-B SQL email verification tests: 15 passed; 0 failed; 0 skipped.")
           PY
+
+      - name: Test AUTH-EMAIL-01-C2 coordination against disposable SQL Server
+        env:
+          CONSTIA_AUTHEMAIL01C2_SQLSERVER_TESTS: "true"
+          CONSTIA_AUTHEMAIL01B_SQLSERVER_TESTS: "true"
+          CONSTIA_AUTHEMAIL01B_SQLSERVER_CONNECTION: "Server=127.0.0.1,1433;Initial Catalog=master;User Id=sa;Password=Constia_TEMP003_CI_Only!2026;Encrypt=False;TrustServerCertificate=True;Connect Timeout=5"
+          CONSTIA_AUTHEMAIL01B_CONTAINER_ID: ${{ job.services.sqlserver.id }}
+        run: |
+          set -euo pipefail
+          results_dir="$RUNNER_TEMP/auth-email-01-c2-results"
+          mkdir -p "$results_dir"
+          tests=(
+            Registro_DevuelveDatosYFechasPersistidos
+            Reenvio_DevuelveDatosYFechasPersistidos
+            DestinatarioIncompatible_NoInvalidaNiReserva
+            ConsultaVigencia_ObservaConfirmacionDesdeOtroContexto
+            ConsultaVigencia_ObservaReemplazoDesdeOtroContexto
+            ConsultaVigencia_RechazaVencimiento
+            FalloPreparacionTrasCommit_ConservaCuentaDesafioYPresupuesto
+            ReintentoTransporte_NoCreaDesafioNiReserva
+            Reinicio_ReenvioRespetaIntervaloDe60Segundos
+            Reinicio_ReenvioConservaLimitesPersistentes
+          )
+          for test_name in "${tests[@]}"; do
+            dotnet test tests/Constia.API.Tests/Constia.API.Tests.csproj \
+              --no-build --no-restore --configuration Release \
+              --filter "FullyQualifiedName=Constia.API.Tests.VerificacionCorreoC2SqlServerTests.$test_name" \
+              --logger "trx;LogFileName=$test_name.trx" --results-directory "$results_dir"
+          done
+          python3 - "$results_dir" <<'PY'
+          import pathlib
+          import sys
+          import xml.etree.ElementTree as ET
+          ns = {"t": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+          expected = {
+              "Registro_DevuelveDatosYFechasPersistidos",
+              "Reenvio_DevuelveDatosYFechasPersistidos",
+              "DestinatarioIncompatible_NoInvalidaNiReserva",
+              "ConsultaVigencia_ObservaConfirmacionDesdeOtroContexto",
+              "ConsultaVigencia_ObservaReemplazoDesdeOtroContexto",
+              "ConsultaVigencia_RechazaVencimiento",
+              "FalloPreparacionTrasCommit_ConservaCuentaDesafioYPresupuesto",
+              "ReintentoTransporte_NoCreaDesafioNiReserva",
+              "Reinicio_ReenvioRespetaIntervaloDe60Segundos",
+              "Reinicio_ReenvioConservaLimitesPersistentes",
+          }
+          files = list(pathlib.Path(sys.argv[1]).glob("*.trx"))
+          if len(files) != 10:
+              raise SystemExit("C2 requires exactly ten independent TRX files.")
+          seen = set()
+          for file in files:
+              root = ET.parse(file).getroot()
+              units = root.findall("./t:TestDefinitions/t:UnitTest", ns)
+              results = root.findall("./t:Results/t:UnitTestResult", ns)
+              if len(units) != 1 or len(results) != 1:
+                  raise SystemExit("C2 requires one test per TRX.")
+              method = units[0].find("./t:TestMethod", ns)
+              if (method is None
+                  or method.get("className") != "Constia.API.Tests.VerificacionCorreoC2SqlServerTests"
+                  or method.get("name") not in expected or method.get("name") in seen
+                  or results[0].get("testId") != units[0].get("id")
+                  or results[0].get("outcome") != "Passed"):
+                  raise SystemExit("C2 SQL result identity or outcome mismatch.")
+              seen.add(method.get("name"))
+              counters = root.find("./t:ResultSummary/t:Counters", ns)
+              required = {"total": 1, "executed": 1, "passed": 1, "failed": 0, "notExecuted": 0}
+              if counters is None or any(int(counters.get(k, -1)) != v for k, v in required.items()):
+                  raise SystemExit("C2 SQL counters mismatch.")
+          if seen != expected:
+              raise SystemExit("Missing C2 SQL cases.")
+          print("AUTH-EMAIL-01-C2 SQL: 10 passed; 0 failed; 0 skipped.")
+          PY
+
+      - name: Upload C2 SQL TRX evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: auth-email-01-c2-sql-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/auth-email-01-c2-results/*.trx
+          if-no-files-found: error
+          retention-days: 7
+
 
   cat02-sqlserver:
     name: CAT-02 isolated SQL Server 2022

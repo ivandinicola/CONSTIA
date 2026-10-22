@@ -144,6 +144,20 @@ public class RegistrarUsuarioTests
         Assert.Equal(0, hasher.CantidadDeHashes);
     }
 
+    [Theory]
+    [InlineData("Ana", "Ana <ana@example.invalid>")]
+    [InlineData("Ana\r\nPrivado", "ana@example.invalid")]
+    [InlineData("Ana", "ana@example.invalid ")]
+    public async Task C2_DatosNoRepresentables_NoCreanCuenta(string nombre, string email)
+    {
+        var usuarios = new FakeUsuarioRepository();
+        var hasher = new IdentityPasswordHasherForTests();
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => CrearCasoDeUso(usuarios, hasher)
+            .EjecutarAsync(nombre, email, PasswordDePrueba, "Etc/UTC"));
+        Assert.Null(usuarios.UsuarioPersistido);
+        Assert.Equal(0, hasher.CantidadDeHashes);
+    }
+
     private static RegistrarUsuario CrearCasoDeUso(
         IUsuarioRepository usuarios,
         IUsuarioPasswordHasher hasher) => new(usuarios, hasher, new ZonaHorariaIana(), new RegistroCorreoFalso(usuarios));

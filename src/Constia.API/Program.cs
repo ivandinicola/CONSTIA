@@ -50,7 +50,7 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<IConfiguration>().GetS
 builder.Services.AddSingleton(sp => sp.GetRequiredService<IConfiguration>().GetSection("VerificacionCorreo:Limites").Get<PoliticaVerificacionCorreo>() ?? new());
 builder.Services.AddScoped<IVerificacionCorreoRepository, VerificacionCorreoRepository>();
 builder.Services.AddSingleton<IGeneradorTokenVerificacion, GeneradorTokenVerificacion>();
-builder.Services.AddScoped<IEntregaCorreoVerificacion, EntregaCorreoNoDisponible>();
+Constia.API.Configuration.VerificacionCorreoC2ServiceCollectionExtensions.AddVerificacionCorreoC2(builder.Services);
 builder.Services.AddScoped<IActivacionCorreo, ActivacionCorreo>();
 builder.Services.AddScoped<ServicioVerificacionCorreo>();
 builder.Services.AddScoped<IRegistroUsuarioCorreo>(sp => sp.GetRequiredService<ServicioVerificacionCorreo>());

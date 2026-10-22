@@ -43,6 +43,11 @@ public sealed class UsuariosController(
                 Extensions = { ["code"] = "registration_unavailable" }
             });
         }
+        catch (Constia.Application.Correo.DatosCorreoInvalidosException exception)
+        {
+            ModelState.AddModelError(exception.Campo, "El dato no es válido para el registro.");
+            return ValidationProblem(ModelState);
+        }
         catch (ContrasenaInvalidaException exception)
         {
             foreach (var error in exception.Errores)

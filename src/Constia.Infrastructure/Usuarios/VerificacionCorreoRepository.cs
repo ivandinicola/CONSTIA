@@ -1,3 +1,4 @@
+using Constia.Application.Correo;
 using System.Data;
 using System.Data.Common;
 using Constia.Application.Usuarios;
@@ -53,7 +54,7 @@ public sealed class VerificacionCorreoRepository(ConstiaDbContext db, IUsuarioPa
             presupuesto.Reservar();
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
-            return new(EstadoReservaCorreo.Creado, new(desafio.Id, usuario.Email));
+            return new(EstadoReservaCorreo.Creado, new(desafio.Id, usuario.Email, usuario.Nombre, desafio.EmitidoEnUtc, desafio.ExpiraEnUtc));
         }
         catch (DbUpdateException ex) when (DuplicadoEmail(ex))
         {
@@ -75,7 +76,7 @@ public sealed class VerificacionCorreoRepository(ConstiaDbContext db, IUsuarioPa
             await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
             var usuario = await PorEmailBloqueado(email).SingleOrDefaultAsync(ct);
             if (usuario is not null) await db.Entry(usuario).ReloadAsync(ct);
-            if (usuario is null || usuario.EstadoVerificacionCorreo != EstadoVerificacionCorreo.Pendiente)
+            if (usuario is null || usuario.EstadoVerificacionCorreo != EstadoVerificacionCorreo.Pendiente || !DatosVerificacionCorreo.DireccionSimple(usuario.Email))
                 return null;
             var presupuesto = await PresupuestoBloqueado().SingleAsync(ct);
             await db.Entry(presupuesto).ReloadAsync(ct);
@@ -99,7 +100,7 @@ public sealed class VerificacionCorreoRepository(ConstiaDbContext db, IUsuarioPa
             presupuesto.Reservar();
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
-            return new(nuevo.Id, usuario.Email);
+            return new(nuevo.Id, usuario.Email, usuario.Nombre, nuevo.EmitidoEnUtc, nuevo.ExpiraEnUtc);
         }
         catch (Exception ex) when (ex is DbException or DbUpdateException)
         {
@@ -152,6 +153,22 @@ public sealed class VerificacionCorreoRepository(ConstiaDbContext db, IUsuarioPa
         }
     }
 
+    public async Task<bool> VigenteParaEnvioAsync(Guid desafioId, string destinatario, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        try
+        {
+            var datos = await (from d in db.Set<DesafioVerificacionCorreo>().AsNoTracking()
+                join u in db.Set<Usuario>().AsNoTracking() on d.UsuarioId equals u.Id
+                where d.Id == desafioId && d.Proposito == 1 && d.ConsumidoEnUtc == null &&
+                    d.InvalidadoEnUtc == null && d.EmitidoEnUtc <= now && d.ExpiraEnUtc > now &&
+                    u.EstadoVerificacionCorreo == EstadoVerificacionCorreo.Pendiente
+                select new { d.EmailDestino, u.Email }).SingleOrDefaultAsync(ct);
+            return datos is not null && string.Equals(datos.EmailDestino, datos.Email, StringComparison.Ordinal) &&
+                string.Equals(datos.EmailDestino, destinatario, StringComparison.Ordinal);
+        }
+        catch (DbException) { throw new CorreoNoDisponibleException(); }
+    }
     private IQueryable<Usuario> PorEmailBloqueado(string email) =>
         db.Set<Usuario>().FromSqlInterpolated($"SELECT * FROM [Usuario] WITH (UPDLOCK,HOLDLOCK) WHERE [Email] = {email}");
 

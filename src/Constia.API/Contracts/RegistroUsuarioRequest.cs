@@ -5,10 +5,10 @@ namespace Constia.API.Contracts;
 
 public sealed class RegistroUsuarioRequest
 {
-    [Required]
+    [Required, StringLength(Constia.Application.Correo.DatosVerificacionCorreo.MaximoNombre)]
     public string Nombre { get; init; } = string.Empty;
 
-    [Required]
+    [Required, StringLength(Constia.Application.Correo.DatosVerificacionCorreo.MaximoEmail)]
     public string Email { get; init; } = string.Empty;
 
     [Required]
