@@ -165,9 +165,19 @@ public sealed class BienvenidaProcesamientoSqlServerTests
     [C3BSqlFact] public async Task S05_MaximoTresReservas()
     {
         await using var f=await F.Crear();
-        for(var k=0;k<3;k++){var r=await f.Reservar();await using var d=f.Db();
-            Assert.True(await f.Repo(d).RegistrarResultadoAsync(r,Temporal,default));await f.HacerElegible();}
+        for (var k = 0; k < 3; k++)
+        {
+            var r = await f.Reservar();
+            await using var d = f.Db();
+
+            Assert.True(await f.Repo(d)
+                .RegistrarResultadoAsync(r, Temporal, default));
+
+            if (k < 2)
+                await f.HacerElegible();
+        }
         var e=await f.Evento();Assert.Equal(3,e.Reservas);Assert.Equal(EstadoEventoBienvenida.FinalSinAceptacion,e.Estado);
+        Assert.Null(e.ProximaEjecucionEnUtc);
         await using var check=f.Db();Assert.Null(await f.Repo(check).AdquirirAsync(default));
     }
     [C3BSqlFact] public async Task S06_PropietarioAnteriorRechazado()
