@@ -1,3 +1,5 @@
+using Constia.Application.Bienvenida;
+using Constia.Infrastructure.Bienvenida;
 using Constia.Application.Correo;
 using System.Data;
 using System.Data.Common;
@@ -9,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Constia.Infrastructure.Usuarios;
 
 /// <summary>Operaciones especializadas; bloqueos y mutaciones pertenecen a la misma transacción/contexto.</summary>
-public sealed class VerificacionCorreoRepository(ConstiaDbContext db, IUsuarioPasswordHasher hasher, TimeProvider clock)
+public sealed class VerificacionCorreoRepository(ConstiaDbContext db, IUsuarioPasswordHasher hasher, TimeProvider clock, OpcionesCapturaBienvenida? capturaBienvenida = null)
     : IVerificacionCorreoRepository
 {
     public async Task<bool> EsquemaDisponibleAsync(CancellationToken ct)
@@ -138,6 +140,8 @@ public sealed class VerificacionCorreoRepository(ConstiaDbContext db, IUsuarioPa
                 && hasher.VerifyPassword(usuario.PasswordHash, password);
             if (valido)
             {
+                var evento = await new CapturaBienvenidaEnConfirmacion(db, capturaBienvenida ?? new()).PrepararAsync(usuario!, now, ct);
+                if (evento is not null) db.Set<EventoBienvenida>().Add(evento);
                 usuario!.ConfirmarCorreo(now);
                 desafio.Consumir(now);
             }

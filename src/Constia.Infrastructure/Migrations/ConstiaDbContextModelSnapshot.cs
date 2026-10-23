@@ -196,6 +196,131 @@ namespace Constia.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Constia.Domain.EventoBienvenida", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CapturadoEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("ConfirmadoEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("DatosDepuradosEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Destinatario")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("EpocaCaptura")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte>("Estado")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTimeOffset>("ExpiraEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("FinalizadoEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("HorizonteHttpEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<bool>("HuboIncertidumbre")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("IdProveedor")
+                        .HasMaxLength(256)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<long>("LeaseGeneracion")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("LeaseHastaUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("LeaseId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte>("MotivoFinal")
+                        .HasColumnType("tinyint");
+
+                    b.Property<byte[]>("PayloadSha256")
+                        .HasColumnType("binary(32)");
+
+                    b.Property<byte[]>("PayloadUtf8")
+                        .HasColumnType("varbinary(max)");
+
+                    b.Property<string>("PerfilProveedorVersion")
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("PlantillaVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<DateTimeOffset?>("PrimeraReservaEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("ProximaEjecucionEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Reservas")
+                        .HasColumnType("int");
+
+                    b.Property<byte>("Tipo")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTimeOffset?>("UltimoLeaseHastaUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("Version")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsuarioId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_EventoBienvenida_UsuarioId");
+
+                    b.HasIndex("Estado", "ProximaEjecucionEnUtc", "Id");
+
+                    b.ToTable("EventoBienvenida", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Bienvenida_Coherencia", "([Estado]<>1 OR ([Reservas]=0 AND [HuboIncertidumbre]=0)) AND ([Estado] NOT IN (3,4) OR [Reservas]>0) AND ([Reservas]=0 OR [PayloadUtf8] IS NOT NULL OR [DatosDepuradosEnUtc] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_Bienvenida_Depuracion", "[DatosDepuradosEnUtc] IS NULL OR ([Estado] BETWEEN 6 AND 8 AND [Destinatario] IS NULL AND [PayloadUtf8] IS NULL AND [PayloadSha256] IS NULL AND DATEPART(TZOFFSET,[DatosDepuradosEnUtc])=0 AND [DatosDepuradosEnUtc]>=[FinalizadoEnUtc])");
+
+                            t.HasCheckConstraint("CK_Bienvenida_Estado", "[Estado] BETWEEN 1 AND 8 AND [MotivoFinal] BETWEEN 0 AND 7 AND [Reservas] BETWEEN 0 AND 3 AND [LeaseGeneracion]>=0");
+
+                            t.HasCheckConstraint("CK_Bienvenida_Fechas", "DATEPART(TZOFFSET,[ConfirmadoEnUtc])=0 AND DATEPART(TZOFFSET,[CapturadoEnUtc])=0 AND DATEPART(TZOFFSET,[ExpiraEnUtc])=0 AND [ExpiraEnUtc]=DATEADD(hour,24,[CapturadoEnUtc])");
+
+                            t.HasCheckConstraint("CK_Bienvenida_FechasOpcionales", "([ProximaEjecucionEnUtc] IS NULL OR DATEPART(TZOFFSET,[ProximaEjecucionEnUtc])=0) AND ([PrimeraReservaEnUtc] IS NULL OR DATEPART(TZOFFSET,[PrimeraReservaEnUtc])=0) AND ([HorizonteHttpEnUtc] IS NULL OR DATEPART(TZOFFSET,[HorizonteHttpEnUtc])=0) AND ([LeaseHastaUtc] IS NULL OR DATEPART(TZOFFSET,[LeaseHastaUtc])=0) AND ([UltimoLeaseHastaUtc] IS NULL OR DATEPART(TZOFFSET,[UltimoLeaseHastaUtc])=0)");
+
+                            t.HasCheckConstraint("CK_Bienvenida_Final", "([Estado] BETWEEN 1 AND 5 AND [FinalizadoEnUtc] IS NULL AND [DatosDepuradosEnUtc] IS NULL AND [Destinatario] IS NOT NULL AND [MotivoFinal]=0) OR ([Estado] BETWEEN 6 AND 8 AND [FinalizadoEnUtc] IS NOT NULL AND DATEPART(TZOFFSET,[FinalizadoEnUtc])=0 AND [FinalizadoEnUtc]>=[CapturadoEnUtc] AND [ProximaEjecucionEnUtc] IS NULL AND [LeaseId] IS NULL AND ([Estado]<>7 OR ([HuboIncertidumbre]=0 AND [MotivoFinal]<>0)) AND ([Estado]<>8 OR ([HuboIncertidumbre]=1 AND [MotivoFinal]<>0)) AND ([Estado]<>6 OR ([Reservas]>0 AND [MotivoFinal]=0)))");
+
+                            t.HasCheckConstraint("CK_Bienvenida_Identidad", "[Id] <> '00000000-0000-0000-0000-000000000000' AND [EpocaCaptura] <> '00000000-0000-0000-0000-000000000000' AND [Tipo] = 1");
+
+                            t.HasCheckConstraint("CK_Bienvenida_Lease", "([Estado] IN (2,3) AND [LeaseId] IS NOT NULL AND [LeaseId]<>'00000000-0000-0000-0000-000000000000' AND [LeaseHastaUtc] IS NOT NULL AND [LeaseGeneracion]>0 AND [UltimoLeaseHastaUtc] IS NOT NULL AND [UltimoLeaseHastaUtc]>=[LeaseHastaUtc]) OR ([Estado] NOT IN (2,3) AND [LeaseId] IS NULL AND [LeaseHastaUtc] IS NULL)");
+
+                            t.HasCheckConstraint("CK_Bienvenida_Payload", "([PayloadUtf8] IS NULL AND [PayloadSha256] IS NULL) OR ([PayloadUtf8] IS NOT NULL AND DATALENGTH([PayloadUtf8]) BETWEEN 1 AND 16384 AND [PayloadSha256] IS NOT NULL AND DATALENGTH([PayloadSha256])=32 AND [PerfilProveedorVersion] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_Bienvenida_Reserva", "([Reservas]=0 AND [PrimeraReservaEnUtc] IS NULL AND [HorizonteHttpEnUtc] IS NULL) OR ([Reservas]>0 AND [PrimeraReservaEnUtc] IS NOT NULL AND [HorizonteHttpEnUtc] IS NOT NULL AND [PrimeraReservaEnUtc]>=[CapturadoEnUtc] AND [HorizonteHttpEnUtc]=CASE WHEN DATEADD(hour,23,[PrimeraReservaEnUtc])<[ExpiraEnUtc] THEN DATEADD(hour,23,[PrimeraReservaEnUtc]) ELSE [ExpiraEnUtc] END)");
+                        });
+                });
+
             modelBuilder.Entity("Constia.Domain.Habito", b =>
                 {
                     b.Property<Guid>("Id")
@@ -311,8 +436,7 @@ namespace Constia.Infrastructure.Migrations
                     b.Property<byte>("EstadoVerificacionCorreo")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("tinyint")
-                        .HasDefaultValue((byte)1)
-                        .HasSentinel((byte)255);
+                        .HasDefaultValue((byte)1);
 
                     b.Property<string>("Nombre")
                         .IsRequired()
@@ -345,6 +469,128 @@ namespace Constia.Infrastructure.Migrations
                         });
 
                     b.HasAnnotation("SqlServer:UseSqlOutputClause", false);
+                });
+
+            modelBuilder.Entity("Constia.Infrastructure.Bienvenida.ControlBienvenida", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("CapturaHabilitada")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("EnvioHabilitado")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid?>("EpocaCaptura")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("FinCapturaEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("InicioCapturaEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int?>("MotivoPausa")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("PausaProveedor")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("ProtocoloEscritor")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("Version")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<int>("VersionEsquema")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ControlBienvenida", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ControlBienvenida_Epoca", "([EpocaCaptura] IS NULL AND [CapturaHabilitada]=0 AND [InicioCapturaEnUtc] IS NULL AND [FinCapturaEnUtc] IS NULL) OR ([EpocaCaptura] IS NOT NULL AND [EpocaCaptura]<>'00000000-0000-0000-0000-000000000000' AND [InicioCapturaEnUtc] IS NOT NULL AND DATEPART(TZOFFSET,[InicioCapturaEnUtc])=0 AND (([CapturaHabilitada]=1 AND [FinCapturaEnUtc] IS NULL) OR ([CapturaHabilitada]=0 AND [FinCapturaEnUtc] IS NOT NULL AND DATEPART(TZOFFSET,[FinCapturaEnUtc])=0 AND [FinCapturaEnUtc]>=[InicioCapturaEnUtc])))");
+
+                            t.HasCheckConstraint("CK_ControlBienvenida_Identidad", "[Id]=1 AND [VersionEsquema]=1 AND [ProtocoloEscritor]=1");
+
+                            t.HasCheckConstraint("CK_ControlBienvenida_Pausa", "([PausaProveedor]=0 AND [MotivoPausa] IS NULL) OR ([PausaProveedor]=1 AND [MotivoPausa] IS NOT NULL AND [MotivoPausa]>=0)");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            CapturaHabilitada = false,
+                            EnvioHabilitado = false,
+                            PausaProveedor = false,
+                            ProtocoloEscritor = 1,
+                            VersionEsquema = 1
+                        });
+                });
+
+            modelBuilder.Entity("Constia.Infrastructure.Bienvenida.IntentoBienvenida", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte>("Estado")
+                        .HasColumnType("tinyint");
+
+                    b.Property<Guid>("EventoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("FinalizadoEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<bool?>("HttpIniciadoConfirmado")
+                        .HasColumnType("bit");
+
+                    b.Property<short?>("HttpStatus")
+                        .HasColumnType("smallint");
+
+                    b.Property<long>("LeaseGeneracion")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("MotivoEntrega")
+                        .HasColumnType("int");
+
+                    b.Property<byte>("Ordinal")
+                        .HasColumnType("tinyint");
+
+                    b.Property<Guid>("PropietarioLeaseId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("ReservadoEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<byte[]>("Version")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventoId", "Ordinal")
+                        .IsUnique()
+                        .HasDatabaseName("UX_IntentoBienvenida_EventoId_Ordinal");
+
+                    b.HasIndex("ReservadoEnUtc", "EventoId");
+
+                    b.ToTable("IntentoBienvenida", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_IntentoBienvenida_Estado", "[Estado] BETWEEN 1 AND 6 AND (([Estado]=1 AND [FinalizadoEnUtc] IS NULL AND [HttpIniciadoConfirmado] IS NULL AND [MotivoEntrega] IS NULL AND [HttpStatus] IS NULL) OR ([Estado]<>1 AND [FinalizadoEnUtc] IS NOT NULL)) AND ([Estado]<>2 OR ([HttpIniciadoConfirmado] IS NOT NULL AND [HttpIniciadoConfirmado]=1)) AND ([Estado]<>5 OR ([HttpIniciadoConfirmado] IS NOT NULL AND [HttpIniciadoConfirmado]=0))");
+
+                            t.HasCheckConstraint("CK_IntentoBienvenida_Fechas", "DATEPART(TZOFFSET,[ReservadoEnUtc])=0 AND ([FinalizadoEnUtc] IS NULL OR (DATEPART(TZOFFSET,[FinalizadoEnUtc])=0 AND [FinalizadoEnUtc]>=[ReservadoEnUtc]))");
+
+                            t.HasCheckConstraint("CK_IntentoBienvenida_Identidad", "[Id]<>'00000000-0000-0000-0000-000000000000' AND [Ordinal] BETWEEN 1 AND 3 AND [LeaseGeneracion]>0 AND [PropietarioLeaseId]<>'00000000-0000-0000-0000-000000000000'");
+
+                            t.HasCheckConstraint("CK_IntentoBienvenida_Resultado", "([HttpStatus] IS NULL OR [HttpStatus] BETWEEN 100 AND 599) AND ([MotivoEntrega] IS NULL OR [MotivoEntrega]>=0)");
+                        });
                 });
 
             modelBuilder.Entity("Constia.Infrastructure.Habitos.InicializacionEstadoHabito", b =>
@@ -451,6 +697,15 @@ namespace Constia.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Constia.Domain.EventoBienvenida", b =>
+                {
+                    b.HasOne("Constia.Domain.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Constia.Domain.Habito", b =>
                 {
                     b.HasOne("Constia.Domain.CategoriaHabito", null)
@@ -504,6 +759,15 @@ namespace Constia.Infrastructure.Migrations
                         });
 
                     b.Navigation("DiasProgramados");
+                });
+
+            modelBuilder.Entity("Constia.Infrastructure.Bienvenida.IntentoBienvenida", b =>
+                {
+                    b.HasOne("Constia.Domain.EventoBienvenida", null)
+                        .WithMany()
+                        .HasForeignKey("EventoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Constia.Infrastructure.Habitos.SnapshotEstadoHabito", b =>

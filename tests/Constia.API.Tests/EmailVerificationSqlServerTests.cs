@@ -30,7 +30,7 @@ public sealed class EmailVerificationSqlServerTests
     private static async Task Init(EmailVerificationSqlDatabase d)
     {
         await using var db=d.CreateContext();
-        await db.Database.MigrateAsync();
+        await db.GetService<IMigrator>().MigrateAsync(Current);
     }
     private static async Task<(Usuario U,TokenVerificacion T,Guid Id)> Alta(EmailVerificationSqlDatabase d,Clock clock)
     {
