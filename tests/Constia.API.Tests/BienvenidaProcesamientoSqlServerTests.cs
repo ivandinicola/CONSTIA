@@ -32,12 +32,45 @@ public sealed class BienvenidaProcesamientoSqlServerTests
             await using var d=f.Db();await d.Database.MigrateAsync();
             var now=DateTimeOffset.UtcNow;
             var u=new Usuario("SQL C3B",email??$"{Guid.NewGuid():N}@example.invalid","hash-sintetico","Etc/UTC");
-            u.ConfirmarCorreo(now);var e=EventoBienvenida.CrearPendiente(u.Id,Epoca,u.Email,now,now);
-            d.Add(u);d.Add(e);await d.SaveChangesAsync();f.Id=e.Id;f.UsuarioId=u.Id;
+            // The historical trigger requires the first durable state to be Pending.
+            d.Add(u);await d.SaveChangesAsync();
+            await using(var insertado=f.Db())
+            {
+                var pendiente=await insertado.Set<Usuario>().AsNoTracking().SingleAsync(x=>x.Id==u.Id);
+                Assert.Equal(EstadoVerificacionCorreo.Pendiente,pendiente.EstadoVerificacionCorreo);
+                Assert.Null(pendiente.EmailVerificadoEnUtc);
+            }
+
+            EventoBienvenida e;
+            await using(var tx=await d.Database.BeginTransactionAsync())
+            {
+                u.ConfirmarCorreo(now);
+                e=EventoBienvenida.CrearPendiente(u.Id,Epoca,u.Email,now,now);
+                d.Add(e);await d.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            f.Id=e.Id;f.UsuarioId=u.Id;
             await d.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE dbo.ControlBienvenida SET CapturaHabilitada=1,EpocaCaptura={Epoca},
                   InicioCapturaEnUtc=TODATETIMEOFFSET(SYSUTCDATETIME(),'+00:00'),EnvioHabilitado=1 WHERE Id=1
-                """);return f;
+                """);
+            await using(var lectura=f.Db())
+            {
+                var usuario=await lectura.Set<Usuario>().AsNoTracking().SingleAsync(x=>x.Id==f.UsuarioId);
+                var evento=await lectura.Set<EventoBienvenida>().AsNoTracking().SingleAsync(x=>x.Id==f.Id);
+                Assert.Equal(EstadoVerificacionCorreo.Verificado,usuario.EstadoVerificacionCorreo);
+                Assert.Equal(now,usuario.EmailVerificadoEnUtc);Assert.Equal(u.Email,usuario.Email);
+                Assert.Equal(EstadoEventoBienvenida.Pendiente,evento.Estado);
+                Assert.Equal(usuario.Id,evento.UsuarioId);Assert.Equal(usuario.Email,evento.Destinatario);
+                Assert.Equal(Epoca,evento.EpocaCaptura);Assert.Equal(now,evento.ConfirmadoEnUtc);
+                Assert.Equal(now,evento.CapturadoEnUtc);Assert.Equal(now.AddHours(24),evento.ExpiraEnUtc);
+                Assert.Equal(now,evento.ProximaEjecucionEnUtc);Assert.Equal(0,evento.Reservas);
+                Assert.Null(evento.LeaseId);Assert.Null(evento.PayloadUtf8);
+                Assert.Empty(await lectura.Set<IntentoBienvenida>().AsNoTracking().ToArrayAsync());
+                var control=await lectura.Set<ControlBienvenida>().AsNoTracking().SingleAsync();
+                Assert.Equal(Epoca,control.EpocaCaptura);
+            }
+            return f;
         }
         public async Task<EventoBienvenida> Evento()
         {await using var d=Db();return await d.Set<EventoBienvenida>().AsNoTracking().SingleAsync(e=>e.Id==Id);}
@@ -62,18 +95,25 @@ public sealed class BienvenidaProcesamientoSqlServerTests
             for(var k=0;k<count;k++)
             {
                 var u=new Usuario("Fixture",$"{Guid.NewGuid():N}@example.invalid","hash","Etc/UTC");
+                d.Add(u);await d.SaveChangesAsync();
+                await using var tx=await d.Database.BeginTransactionAsync();
+                u.ConfirmarCorreo(reserved.AddHours(-1));
                 var e=EventoBienvenida.CrearPendiente(u.Id,Epoca,u.Email,reserved.AddHours(-1),reserved.AddHours(-1));
-                d.Add(u);d.Add(e);await d.SaveChangesAsync();
-                var id=Guid.NewGuid();var owner=Guid.NewGuid();var hash=System.Security.Cryptography.SHA256.HashData(new byte[]{1});
+                d.Add(e);await d.SaveChangesAsync();
+                var payload=new PreparadorPayloadBienvenida(Opciones.Perfil!).Preparar(e);
+                var hash=System.Security.Cryptography.SHA256.HashData(payload);
+                var id=Guid.NewGuid();var owner=Guid.NewGuid();
                 await d.Database.ExecuteSqlInterpolatedAsync($"""
                     UPDATE dbo.EventoBienvenida SET Estado=7,MotivoFinal=1,Reservas=1,PrimeraReservaEnUtc={reserved},
                       HorizonteHttpEnUtc=DATEADD(hour,23,{reserved}),FinalizadoEnUtc={reserved.AddMinutes(1)},
-                      ProximaEjecucionEnUtc=NULL,PayloadUtf8=0x01,PayloadSha256={hash},PerfilProveedorVersion={Opciones.Perfil!.Huella}
+                      ProximaEjecucionEnUtc=NULL,PayloadUtf8={payload},PayloadSha256={hash},PerfilProveedorVersion={Opciones.Perfil!.Huella},
+                      LeaseGeneracion=1,UltimoLeaseHastaUtc={reserved.AddSeconds(90)}
                     WHERE Id={e.Id};
                     INSERT dbo.IntentoBienvenida(Id,EventoId,Ordinal,ReservadoEnUtc,PropietarioLeaseId,LeaseGeneracion,
                       Estado,HttpIniciadoConfirmado,MotivoEntrega,HttpStatus,FinalizadoEnUtc)
                     VALUES({id},{e.Id},1,{reserved},{owner},1,3,1,4,422,{reserved.AddMinutes(1)});
                     """);
+                await tx.CommitAsync();
             }
         }
         public ValueTask DisposeAsync()=>Database.DisposeAsync();
@@ -109,7 +149,12 @@ public sealed class BienvenidaProcesamientoSqlServerTests
         await using var f=await F.Crear();await f.SembrarReservas(19);var t=await f.Tomar();
         await using var a=f.Db();await using var b=f.Db();
         var now=DateTimeOffset.UtcNow;var u=new Usuario("Concurrente",$"{Guid.NewGuid():N}@example.invalid","hash","Etc/UTC");
-        u.ConfirmarCorreo(now);a.Add(u);a.Add(EventoBienvenida.CrearPendiente(u.Id,Epoca,u.Email,now,now));await a.SaveChangesAsync();
+        a.Add(u);await a.SaveChangesAsync();
+        await using(var tx=await a.Database.BeginTransactionAsync())
+        {
+            u.ConfirmarCorreo(now);a.Add(EventoBienvenida.CrearPendiente(u.Id,Epoca,u.Email,now,now));
+            await a.SaveChangesAsync();await tx.CommitAsync();
+        }
         var t2=Assert.IsType<TrabajoBienvenida>(await f.Repo(b).AdquirirAsync(default));
         await f.Repo(a).CongelarAsync(t.Lease,new PreparadorPayloadBienvenida(Opciones.Perfil!).Preparar(t.Evento),Opciones.Perfil!.Huella,default);
         await f.Repo(b).CongelarAsync(t2.Lease,new PreparadorPayloadBienvenida(Opciones.Perfil!).Preparar(t2.Evento),Opciones.Perfil!.Huella,default);
