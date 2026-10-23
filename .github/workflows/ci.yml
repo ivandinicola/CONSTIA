@@ -52,7 +52,7 @@ jobs:
       - name: Test
         run: >-
           dotnet test --no-build --configuration Release
-          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests&FullyQualifiedName!~RegistrarCumplimientoSqlServerTests&FullyQualifiedName!~Temp005StateHistorySqlServerTests&FullyQualifiedName!~CategoriaHabitoSqlServerTests&FullyQualifiedName!~HabitoIconoSqlServerTests&FullyQualifiedName!~HabCat02SqlServerTests&FullyQualifiedName!~HabDate01SqlServerTests&FullyQualifiedName!~EmailVerificationSqlServerTests&FullyQualifiedName!~VerificacionCorreoC2SqlServerTests&FullyQualifiedName!~BienvenidaCapturaSqlServerTests"
+          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests&FullyQualifiedName!~RegistrarCumplimientoSqlServerTests&FullyQualifiedName!~Temp005StateHistorySqlServerTests&FullyQualifiedName!~CategoriaHabitoSqlServerTests&FullyQualifiedName!~HabitoIconoSqlServerTests&FullyQualifiedName!~HabCat02SqlServerTests&FullyQualifiedName!~HabDate01SqlServerTests&FullyQualifiedName!~EmailVerificationSqlServerTests&FullyQualifiedName!~VerificacionCorreoC2SqlServerTests&FullyQualifiedName!~BienvenidaCapturaSqlServerTests&FullyQualifiedName!~BienvenidaProcesamientoSqlServerTests"
 
       - name: Test TEMP-003 migration against disposable SQL Server
         env:
@@ -559,6 +559,124 @@ jobs:
         with:
           name: auth-email-01-c3-a-sql-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/auth-email-01-c3-a-results/*.trx
+          if-no-files-found: error
+          retention-days: 7
+
+
+      - name: Test AUTH-EMAIL-01-C3-B capture against disposable SQL Server
+        env:
+          CONSTIA_AUTHEMAIL01C3B_SQLSERVER_TESTS: "true"
+          CONSTIA_AUTHEMAIL01B_SQLSERVER_TESTS: "true"
+          CONSTIA_AUTHEMAIL01B_SQLSERVER_CONNECTION: "Server=127.0.0.1,1433;Initial Catalog=master;User Id=sa;Password=Constia_TEMP003_CI_Only!2026;Encrypt=False;TrustServerCertificate=True;Connect Timeout=5"
+          CONSTIA_AUTHEMAIL01B_CONTAINER_ID: ${{ job.services.sqlserver.id }}
+        run: |
+          set -euo pipefail
+          results_dir="$RUNNER_TEMP/auth-email-01-c3-b-results"
+          mkdir -p "$results_dir"
+          tests=(
+            S01_AdquisicionExclusiva
+            S02_LeaseVencidoNuevaGeneracion
+            S03_ReservaConcurrenteOrdinalUnico
+            S04_PresupuestoDiecinueveDosCompetidores
+            S05_MaximoTresReservas
+            S06_PropietarioAnteriorRechazado
+            S07_PayloadPerfilYHashTrasReinicio
+            S08_CommitCongelamientoIncierto
+            S09_CommitReservaIncierto
+            S10_CaidaAntesHttpNoInventaCerteza
+            S11_IncertidumbreDuranteHttp
+            S12_AceptacionConRespuestaPerdida
+            S13_CommitResultadoInciertoReconciliable
+            S14_HorizonteYExpiracionNoSeExtienden
+            S15_VentanaMovilNoConfundePresupuestoConPausa
+            S16_PausaProveedorDurable
+            S17_ApagadoImpideAutorizar
+            S18_RecuperacionConcurrenteUnSoloCierre
+            S19_VencimientoConEnvioApagado
+            S20_DestinatarioHistoricoNoAfectaCuenta
+            S21_MantenimientoRespetaLeaseActivo
+            S22_RetencionConservaDeduplicacion
+            S23_EpocaYEsquemaIncompatiblesCierran
+            S24_Rollback51040ConEvidencia
+            S25_FalloAntesCommitResultado_RecuperaReservaInciertaSinAceptacion
+            S26_CommitResultadoConRespuestaPerdida_NoReadquiereNiReenvia
+          )
+          test_failures=0
+          for test_name in "${tests[@]}"; do
+            if ! dotnet test tests/Constia.API.Tests/Constia.API.Tests.csproj \
+              --no-build --no-restore --configuration Release \
+              --filter "FullyQualifiedName=Constia.API.Tests.BienvenidaProcesamientoSqlServerTests.$test_name" \
+              --logger "trx;LogFileName=$test_name.trx" --results-directory "$results_dir"; then
+              test_failures=1
+            fi
+          done
+          python3 - "$results_dir" <<'PY'
+          import pathlib
+          import sys
+          import xml.etree.ElementTree as ET
+          ns = {"t": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+          expected = {
+              "S01_AdquisicionExclusiva",
+              "S02_LeaseVencidoNuevaGeneracion",
+              "S03_ReservaConcurrenteOrdinalUnico",
+              "S04_PresupuestoDiecinueveDosCompetidores",
+              "S05_MaximoTresReservas",
+              "S06_PropietarioAnteriorRechazado",
+              "S07_PayloadPerfilYHashTrasReinicio",
+              "S08_CommitCongelamientoIncierto",
+              "S09_CommitReservaIncierto",
+              "S10_CaidaAntesHttpNoInventaCerteza",
+              "S11_IncertidumbreDuranteHttp",
+              "S12_AceptacionConRespuestaPerdida",
+              "S13_CommitResultadoInciertoReconciliable",
+              "S14_HorizonteYExpiracionNoSeExtienden",
+              "S15_VentanaMovilNoConfundePresupuestoConPausa",
+              "S16_PausaProveedorDurable",
+              "S17_ApagadoImpideAutorizar",
+              "S18_RecuperacionConcurrenteUnSoloCierre",
+              "S19_VencimientoConEnvioApagado",
+              "S20_DestinatarioHistoricoNoAfectaCuenta",
+              "S21_MantenimientoRespetaLeaseActivo",
+              "S22_RetencionConservaDeduplicacion",
+              "S23_EpocaYEsquemaIncompatiblesCierran",
+              "S24_Rollback51040ConEvidencia",
+              "S25_FalloAntesCommitResultado_RecuperaReservaInciertaSinAceptacion",
+              "S26_CommitResultadoConRespuestaPerdida_NoReadquiereNiReenvia",
+          }
+          files = list(pathlib.Path(sys.argv[1]).glob("*.trx"))
+          if len(files) != 26:
+              raise SystemExit("C3-B requires exactly twenty-six independent TRX files.")
+          seen = set()
+          for file in files:
+              root = ET.parse(file).getroot()
+              units = root.findall("./t:TestDefinitions/t:UnitTest", ns)
+              results = root.findall("./t:Results/t:UnitTestResult", ns)
+              if len(units) != 1 or len(results) != 1:
+                  raise SystemExit("C3-B requires one test per TRX.")
+              method = units[0].find("./t:TestMethod", ns)
+              if (method is None
+                  or method.get("className") != "Constia.API.Tests.BienvenidaProcesamientoSqlServerTests"
+                  or method.get("name") not in expected or method.get("name") in seen
+                  or results[0].get("testId") != units[0].get("id")
+                  or results[0].get("outcome") != "Passed"):
+                  raise SystemExit("C3-B SQL result identity or outcome mismatch.")
+              seen.add(method.get("name"))
+              counters = root.find("./t:ResultSummary/t:Counters", ns)
+              required = {"total": 1, "executed": 1, "passed": 1, "failed": 0, "notExecuted": 0}
+              if counters is None or any(int(counters.get(k, -1)) != v for k, v in required.items()):
+                  raise SystemExit("C3-B SQL counters mismatch.")
+          if seen != expected:
+              raise SystemExit("Missing C3-B SQL cases.")
+          print("AUTH-EMAIL-01-C3-B SQL: 26 passed; 0 failed; 0 skipped.")
+          PY
+          if (( test_failures != 0 )); then exit 1; fi
+
+      - name: Upload C3-B SQL TRX evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: auth-email-01-c3-b-sql-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/auth-email-01-c3-b-results/*.trx
           if-no-files-found: error
           retention-days: 7
 

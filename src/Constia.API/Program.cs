@@ -113,6 +113,8 @@ Constia.API.Configuration.ResendC1ServiceCollectionExtensions.AddResendC1(builde
 
 Constia.API.Configuration.BienvenidaC3AServiceCollectionExtensions.AddBienvenidaC3A(builder.Services, builder.Configuration);
 
+Constia.API.Configuration.BienvenidaC3BServiceCollectionExtensions.AddBienvenidaC3B(builder.Services, builder.Configuration);
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
