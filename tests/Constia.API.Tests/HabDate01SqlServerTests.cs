@@ -7,6 +7,8 @@ using Constia.Infrastructure.Habitos;
 using Constia.Infrastructure.Usuarios;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Constia.API.Tests;
 
@@ -188,7 +190,7 @@ public sealed class HabDate01SqlServerTests
     private static async Task<(Guid Owner, Guid Historical)> SeedAsync(DisposableDatabase database)
     {
         await using var context = database.CreateContext();
-        await context.Database.MigrateAsync();
+        await context.GetService<IMigrator>().MigrateAsync("20261021062129_AddEmailVerification");
         var user = new Usuario("HAB-DATE-01", "habdate01@example.invalid", "test-hash",
             "America/Argentina/Buenos_Aires");
         var historical = HabitoHistorico.Crear(user, "Histórico", null,

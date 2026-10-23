@@ -52,7 +52,7 @@ jobs:
       - name: Test
         run: >-
           dotnet test --no-build --configuration Release
-          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests&FullyQualifiedName!~RegistrarCumplimientoSqlServerTests&FullyQualifiedName!~Temp005StateHistorySqlServerTests&FullyQualifiedName!~CategoriaHabitoSqlServerTests&FullyQualifiedName!~HabitoIconoSqlServerTests&FullyQualifiedName!~HabCat02SqlServerTests&FullyQualifiedName!~HabDate01SqlServerTests&FullyQualifiedName!~EmailVerificationSqlServerTests&FullyQualifiedName!~VerificacionCorreoC2SqlServerTests"
+          --filter "FullyQualifiedName!~Temp003MigrationSqlServerTests&FullyQualifiedName!~HabitoConcurrencySqlServerTests&FullyQualifiedName!~Temp004ConcurrencyMigrationSqlServerTests&FullyQualifiedName!~RegistrarCumplimientoSqlServerTests&FullyQualifiedName!~Temp005StateHistorySqlServerTests&FullyQualifiedName!~CategoriaHabitoSqlServerTests&FullyQualifiedName!~HabitoIconoSqlServerTests&FullyQualifiedName!~HabCat02SqlServerTests&FullyQualifiedName!~HabDate01SqlServerTests&FullyQualifiedName!~EmailVerificationSqlServerTests&FullyQualifiedName!~VerificacionCorreoC2SqlServerTests&FullyQualifiedName!~BienvenidaCapturaSqlServerTests"
 
       - name: Test TEMP-003 migration against disposable SQL Server
         env:
@@ -465,6 +465,100 @@ jobs:
         with:
           name: auth-email-01-c2-sql-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/auth-email-01-c2-results/*.trx
+          if-no-files-found: error
+          retention-days: 7
+
+
+      - name: Test AUTH-EMAIL-01-C3-A capture against disposable SQL Server
+        env:
+          CONSTIA_AUTHEMAIL01C3A_SQLSERVER_TESTS: "true"
+          CONSTIA_AUTHEMAIL01B_SQLSERVER_TESTS: "true"
+          CONSTIA_AUTHEMAIL01B_SQLSERVER_CONNECTION: "Server=127.0.0.1,1433;Initial Catalog=master;User Id=sa;Password=Constia_TEMP003_CI_Only!2026;Encrypt=False;TrustServerCertificate=True;Connect Timeout=5"
+          CONSTIA_AUTHEMAIL01B_CONTAINER_ID: ${{ job.services.sqlserver.id }}
+        run: |
+          set -euo pipefail
+          results_dir="$RUNNER_TEMP/auth-email-01-c3-a-results"
+          mkdir -p "$results_dir"
+          tests=(
+            Up_AgregaSoloOutboxVaciaYControlDesactivadoSinBackfill
+            Restricciones_ImponenUnicidadFkEstadosYCoherenciaDeCampos
+            PrimeraConfirmacion_PersisteUsuarioConsumoYEventoJuntos
+            ConfirmacionRepetida_NoCreaOtroEvento
+            ConfirmacionesConcurrentes_UnGanadorYUnEvento
+            ConfirmacionesInvalidasVencidasOReemplazadas_NoCapturan
+            FalloTrasSaveAntesDelCommit_RevierteTodo
+            CommitRealConRespuestaPerdida_ConservaEventoYNoDuplicaAlRepetir
+            CapturaDesactivada_ConfirmaConYSinEsquemaC3
+            EpocaDesalineadaOConfiguracionInvalida_NoPersisteConfirmacion
+            EsquemaIncompletoOControlAusente_NoPersisteConfirmacion
+            CambioDeEpoca_EsperaConfirmacionEnCurso
+            DownVacio_RestauraBConDatosPreviosIntactos
+            DownConEvidenciaOActivacion_Rechaza51040SinPerdidaParcial
+            Retencion_DepuraDatosPeroConservaDeduplicacion
+            Retencion_RespetaLeasesVentanasYPendientesNoVencidos
+          )
+          for test_name in "${tests[@]}"; do
+            dotnet test tests/Constia.API.Tests/Constia.API.Tests.csproj \
+              --no-build --no-restore --configuration Release \
+              --filter "FullyQualifiedName=Constia.API.Tests.BienvenidaCapturaSqlServerTests.$test_name" \
+              --logger "trx;LogFileName=$test_name.trx" --results-directory "$results_dir"
+          done
+          python3 - "$results_dir" <<'PY'
+          import pathlib
+          import sys
+          import xml.etree.ElementTree as ET
+          ns = {"t": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+          expected = {
+              "Up_AgregaSoloOutboxVaciaYControlDesactivadoSinBackfill",
+              "Restricciones_ImponenUnicidadFkEstadosYCoherenciaDeCampos",
+              "PrimeraConfirmacion_PersisteUsuarioConsumoYEventoJuntos",
+              "ConfirmacionRepetida_NoCreaOtroEvento",
+              "ConfirmacionesConcurrentes_UnGanadorYUnEvento",
+              "ConfirmacionesInvalidasVencidasOReemplazadas_NoCapturan",
+              "FalloTrasSaveAntesDelCommit_RevierteTodo",
+              "CommitRealConRespuestaPerdida_ConservaEventoYNoDuplicaAlRepetir",
+              "CapturaDesactivada_ConfirmaConYSinEsquemaC3",
+              "EpocaDesalineadaOConfiguracionInvalida_NoPersisteConfirmacion",
+              "EsquemaIncompletoOControlAusente_NoPersisteConfirmacion",
+              "CambioDeEpoca_EsperaConfirmacionEnCurso",
+              "DownVacio_RestauraBConDatosPreviosIntactos",
+              "DownConEvidenciaOActivacion_Rechaza51040SinPerdidaParcial",
+              "Retencion_DepuraDatosPeroConservaDeduplicacion",
+              "Retencion_RespetaLeasesVentanasYPendientesNoVencidos",
+          }
+          files = list(pathlib.Path(sys.argv[1]).glob("*.trx"))
+          if len(files) != 16:
+              raise SystemExit("C3-A requires exactly sixteen independent TRX files.")
+          seen = set()
+          for file in files:
+              root = ET.parse(file).getroot()
+              units = root.findall("./t:TestDefinitions/t:UnitTest", ns)
+              results = root.findall("./t:Results/t:UnitTestResult", ns)
+              if len(units) != 1 or len(results) != 1:
+                  raise SystemExit("C3-A requires one test per TRX.")
+              method = units[0].find("./t:TestMethod", ns)
+              if (method is None
+                  or method.get("className") != "Constia.API.Tests.BienvenidaCapturaSqlServerTests"
+                  or method.get("name") not in expected or method.get("name") in seen
+                  or results[0].get("testId") != units[0].get("id")
+                  or results[0].get("outcome") != "Passed"):
+                  raise SystemExit("C3-A SQL result identity or outcome mismatch.")
+              seen.add(method.get("name"))
+              counters = root.find("./t:ResultSummary/t:Counters", ns)
+              required = {"total": 1, "executed": 1, "passed": 1, "failed": 0, "notExecuted": 0}
+              if counters is None or any(int(counters.get(k, -1)) != v for k, v in required.items()):
+                  raise SystemExit("C3-A SQL counters mismatch.")
+          if seen != expected:
+              raise SystemExit("Missing C3-A SQL cases.")
+          print("AUTH-EMAIL-01-C3-A SQL: 16 passed; 0 failed; 0 skipped.")
+          PY
+
+      - name: Upload C3-A SQL TRX evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: auth-email-01-c3-a-sql-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/auth-email-01-c3-a-results/*.trx
           if-no-files-found: error
           retention-days: 7
 
