@@ -330,17 +330,40 @@ public sealed class BienvenidaCapturaSqlServerTests
         var clock = new Clock(); var a = await Alta(d, clock); var barrier = new ControlBarrier();
         await using var first = d.CreateContext(barrier);
         var confirmation = Repo(first, clock).ConfirmarAsync(a.Id, a.T.Hash, Password, Policy, default);
-        await barrier.Entered.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        var result = ResultadoConfirmacionCorreo.Invalido;
         try
         {
+            await barrier.Entered.Task.WaitAsync(TimeSpan.FromSeconds(15));
+            Assert.False(confirmation.IsCompleted);
+            Assert.NotNull(first.Database.CurrentTransaction);
+            Assert.Equal(System.Data.IsolationLevel.Serializable,
+                Microsoft.EntityFrameworkCore.Storage.DbContextTransactionExtensions
+                    .GetDbTransaction(first.Database.CurrentTransaction!).IsolationLevel);
             await using var other = d.CreateContext();
-            await other.Database.ExecuteSqlRawAsync("SET LOCK_TIMEOUT 1000");
             var next = Guid.NewGuid();
-            var ex = await Assert.ThrowsAsync<SqlException>(() => other.Database.ExecuteSqlInterpolatedAsync($"UPDATE dbo.ControlBienvenida SET EpocaCaptura={next} WHERE Id=1"));
+            // SET y UPDATE comparten un batch/sesion; restaurar tambien al propagar el error SQL.
+            var ex = await Assert.ThrowsAsync<SqlException>(() => other.Database.ExecuteSqlInterpolatedAsync($"""
+                DECLARE @previousLockTimeout int = @@LOCK_TIMEOUT;
+                BEGIN TRY
+                    SET LOCK_TIMEOUT 1000;
+                    UPDATE dbo.ControlBienvenida SET EpocaCaptura={next} WHERE Id=1;
+                    SET LOCK_TIMEOUT @previousLockTimeout;
+                END TRY
+                BEGIN CATCH
+                    SET LOCK_TIMEOUT @previousLockTimeout;
+                    THROW;
+                END CATCH
+                """));
             Assert.Equal(1222, ex.Number);
+            Assert.False(confirmation.IsCompleted);
         }
-        finally { barrier.Release.TrySetResult(); }
-        Assert.Equal(ResultadoConfirmacionCorreo.Confirmado, await confirmation);
+        finally
+        {
+            barrier.Release.TrySetResult();
+            // Observar siempre la tarea antes de disponer su contexto, incluso si falla una asercion.
+            result = await confirmation;
+        }
+        Assert.Equal(ResultadoConfirmacionCorreo.Confirmado, result);
         await using var verify = d.CreateContext();
         var epoch = Guid.NewGuid();
         Assert.Equal(1, await verify.Database.ExecuteSqlInterpolatedAsync($"UPDATE dbo.ControlBienvenida SET EpocaCaptura={epoch} WHERE Id=1"));
