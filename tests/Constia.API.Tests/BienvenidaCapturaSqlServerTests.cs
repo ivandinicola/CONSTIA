@@ -343,17 +343,22 @@ public sealed class BienvenidaCapturaSqlServerTests
             var next = Guid.NewGuid();
             // SET y UPDATE comparten un batch/sesion; restaurar tambien al propagar el error SQL.
             var ex = await Assert.ThrowsAsync<SqlException>(() => other.Database.ExecuteSqlInterpolatedAsync($"""
-                DECLARE @previousLockTimeout int = @@LOCK_TIMEOUT;
+                IF @@LOCK_TIMEOUT <> -1
+                BEGIN
+                    THROW 50000, 'S12 precondition failed: initial @@LOCK_TIMEOUT must be -1.', 1;
+                END;
                 BEGIN TRY
                     SET LOCK_TIMEOUT 1000;
                     UPDATE dbo.ControlBienvenida SET EpocaCaptura={next} WHERE Id=1;
-                    SET LOCK_TIMEOUT @previousLockTimeout;
+                    SET LOCK_TIMEOUT -1;
                 END TRY
                 BEGIN CATCH
-                    SET LOCK_TIMEOUT @previousLockTimeout;
+                    SET LOCK_TIMEOUT -1;
                     THROW;
                 END CATCH
                 """));
+            Assert.True(ex.Number != 50000,
+                "S12 precondition failed: initial @@LOCK_TIMEOUT must be -1.");
             Assert.Equal(1222, ex.Number);
             Assert.False(confirmation.IsCompleted);
         }
