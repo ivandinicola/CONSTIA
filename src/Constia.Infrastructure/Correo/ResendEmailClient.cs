@@ -27,71 +27,7 @@ public sealed class ResendEmailClient(HttpClient http, OpcionesResend opciones, 
             from = $"{mensaje.NombreRemitente} <{mensaje.Remitente}>",
             to = new[] { mensaje.Destinatario }, subject = mensaje.Asunto, html = mensaje.Html, text = mensaje.TextoPlano
         });
-        using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", opciones.ApiKey);
-        request.Headers.Add("Idempotency-Key", mensaje.ClaveIdempotencia);
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        request.Content = new ByteArrayContent(bytes);
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(opciones.RequestTimeoutSeconds), clock);
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
-        var iniciado = false;
-        try
-        {
-            linked.Token.ThrowIfCancellationRequested();
-            iniciado = true; // No presume conocer si el servidor recibió bytes.
-            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linked.Token);
-            var status = (int)response.StatusCode;
-            var espera = Espera(response);
-            if (response.Content.Headers.ContentLength is > MaxResponseBytes)
-                return Grande(status, espera);
-            await using var stream = await response.Content.ReadAsStreamAsync(linked.Token);
-            var buffer = new byte[MaxResponseBytes + 1];
-            var total = 0;
-            while (total < buffer.Length)
-            {
-                var n = await stream.ReadAsync(buffer.AsMemory(total), linked.Token);
-                if (n == 0) break;
-                total += n;
-            }
-            if (total > MaxResponseBytes) return Grande(status, espera);
-            return ClasificadorRespuestaResend.Clasificar(status, buffer.AsMemory(0, total), espera);
-        }
-        catch (OperationCanceledException)
-        {
-            return new(iniciado ? EstadoEntregaCorreo.ResultadoIncierto : EstadoEntregaCorreo.CanceladaAntesDelEnvio,
-                cancellationToken.IsCancellationRequested ? MotivoEntregaCorreo.Cancelacion : MotivoEntregaCorreo.Timeout,
-                intentoHttpIniciado: iniciado);
-        }
-        catch (HttpRequestException ex)
-        {
-            var (estado, motivo) = ex.HttpRequestError switch
-            {
-                HttpRequestError.NameResolutionError => (EstadoEntregaCorreo.FalloTemporal, MotivoEntregaCorreo.Dns),
-                HttpRequestError.SecureConnectionError => (EstadoEntregaCorreo.ProveedorNoDisponible, MotivoEntregaCorreo.Tls),
-                _ => (EstadoEntregaCorreo.ResultadoIncierto, MotivoEntregaCorreo.Red)
-            };
-            return new(estado, motivo, intentoHttpIniciado: iniciado);
-        }
-        catch (IOException)
-        {
-            return new(EstadoEntregaCorreo.ResultadoIncierto, MotivoEntregaCorreo.Red, intentoHttpIniciado: iniciado);
-        }
-    }
-
-    private static ResultadoEntregaCorreo Grande(int status, TimeSpan? espera) =>
-        new(EstadoEntregaCorreo.ResultadoIncierto, MotivoEntregaCorreo.RespuestaDemasiadoGrande,
-            httpStatus: status, esperaMinima: espera, intentoHttpIniciado: true);
-
-    private TimeSpan? Espera(HttpResponseMessage response)
-    {
-        var retry = response.Headers.RetryAfter;
-        if (retry?.Delta is TimeSpan delta) return delta >= TimeSpan.Zero ? delta : null;
-        if (retry?.Date is DateTimeOffset date)
-        {
-            var span = date - clock.GetUtcNow();
-            return span > TimeSpan.Zero ? span : TimeSpan.Zero;
-        }
-        return null;
+        return await new ResendHttpTransport(http, opciones, clock).EnviarAsync(
+            new SolicitudCorreoPreparada(mensaje.ClaveIdempotencia, bytes), cancellationToken);
     }
 }
