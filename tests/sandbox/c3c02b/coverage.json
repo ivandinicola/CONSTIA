@@ -1,0 +1,293 @@
+{
+  "base": "79923e86eb1ce450db40d538d55848eaebe7877c",
+  "prior_ci": {
+    "run": 50,
+    "url": "https://github.com/ivandinicola/CONSTIA/actions/runs/40040054685",
+    "dotnet": 1017,
+    "python": 10,
+    "reexecuted": false
+  },
+  "query_source_sha256": "6479151553bdc0bfa705e5d0d0b806264b56cc181f14b3a41f065777e05766e9",
+  "queries_sha256": "4fb171d55a27b2e62089e8eeb96d1f1fc0ffc0e4919a1ac8b2ef6a3304ffd1fd",
+  "query_blocks": [
+    "Q00.1",
+    "Q01.1",
+    "Q02.1",
+    "Q03.1",
+    "Q04.1",
+    "Q05.1",
+    "Q06.1",
+    "Q07.1",
+    "Q08.1",
+    "Q08.2",
+    "Q09.1",
+    "Q10.1",
+    "Q11.1",
+    "Q12.1",
+    "Q12.2",
+    "Q12.3",
+    "Q12.4",
+    "Q12.5",
+    "Q12.6",
+    "Q12.7",
+    "Q13.1",
+    "Q14.1"
+  ],
+  "test_methods": [
+    "CaptureMismatchHttpIsAtomicAndCoordinatedReopenPreservesLogin",
+    "SecondCoordinatorIsRejectedBeforeStartingWork",
+    "RestartWithChangedProfilePausesWithoutChangingFrozenBytes",
+    "RateLimitPersistsRetryAfterWithoutProviderPause",
+    "TenSecondExpiryMarginPreventsAcquisition",
+    "SqlLossBeforeAuthorizationNeverInvokesHandler",
+    "SqlLossAfterFakeHttpDoesNotAssumeAcceptedCommit",
+    "TwoRealStartsKeepDefaultsClosed",
+    "PartialConfigurationDoesNotReserveOrSend",
+    "MaintenanceWorkerDoesNotReserveOrSend",
+    "CrashBeforeReservationRecoversWithNewGeneration",
+    "CrashAfterReservationPreservesUncertaintyAndFrozenRequest",
+    "CooperativeStopPersistsUncertainHandlerResult",
+    "ForcedStopDuringHandlerRetainsDurableReservation",
+    "PauseAfterPermissionDoesNotRevokeExistingPermission",
+    "TlsFailurePausesDurablyWithoutSecondPermission",
+    "BudgetQueriesHandleTwentyExcessAndFutureReservations",
+    "QueryInventoryHas22ImmutableReadOnlyBlocks",
+    "All22QueriesHaveExpectedResultsAndDoNotMutateData",
+    "IsolationRejectsAbsentUnknownAndFullPhases",
+    "IsolationCompositionHasNoSqlWorkerCaptureOrRepository",
+    "IsolationBothNamedClientsUseSyntheticTransportOnly",
+    "PreflightRejectsSqlFieldsWrongStageAndAmbiguousReceivers",
+    "PreflightBindsCodePolicyActorLauncherAndPhase",
+    "ExecutableRejectsWorkerAndSqlCommandsBeforeEnvironmentOrIo",
+    "PrivateTopologyUsesOwnedSubnetRatherThan172Assumption",
+    "BothNamedClientsTerminateInSimulatedHandlers",
+    "ForeignDatabaseAndImageAreRejected",
+    "NonManualIdentityIsRejected",
+    "DefaultsAndPartialConfigurationKeepAdmissionClosed",
+    "FakeTransportHasNoNetworkFallback",
+    "RestrictedRolesDenyDdlAndSensitiveColumns"
+  ],
+  "expected_dotnet_total": 32,
+  "pure": 13,
+  "operational_sql_pending": 19,
+  "new_python_pure": 55,
+  "all_sql_executed": false,
+  "scenarios": [
+    {
+      "id": "E01",
+      "evidence": "TwoRealStartsKeepDefaultsClosed",
+      "status": "implemented_not_executed",
+      "procedure_pending": false
+    },
+    {
+      "id": "E02",
+      "evidence": "PartialConfigurationDoesNotReserveOrSend",
+      "status": "implemented_not_executed",
+      "procedure_pending": false
+    },
+    {
+      "id": "E03",
+      "evidence": "CaptureMismatchHttpIsAtomicAndCoordinatedReopenPreservesLogin",
+      "status": "implemented_not_executed",
+      "procedure_pending": false
+    },
+    {
+      "id": "E04",
+      "evidence": "CaptureMismatchHttpIsAtomicAndCoordinatedReopenPreservesLogin",
+      "status": "implemented_not_executed",
+      "procedure_pending": true
+    },
+    {
+      "id": "E05",
+      "evidence": "existing:A concurrent and repeated confirmations",
+      "status": "existing_CI50_evidence",
+      "procedure_pending": false
+    },
+    {
+      "id": "E06",
+      "evidence": "MaintenanceWorkerDoesNotReserveOrSend",
+      "status": "implemented_not_executed",
+      "procedure_pending": false
+    },
+    {
+      "id": "E07",
+      "evidence": "CrashBeforeReservationRecoversWithNewGeneration",
+      "status": "implemented_not_executed",
+      "procedure_pending": false
+    },
+    {
+      "id": "E08",
+      "evidence": "CrashAfterReservationPreservesUncertaintyAndFrozenRequest",
+      "status": "implemented_not_executed",
+      "procedure_pending": false
+    },
+    {
+      "id": "E09",
+      "evidence": "existing:S26",
+      "status": "existing_CI50_evidence",
+      "procedure_pending": false
+    },
+    {
+      "id": "E10",
+      "evidence": "existing:S25",
+      "status": "existing_CI50_evidence",
+      "procedure_pending": false
+    },
+    {
+      "id": "E11",
+      "evidence": "SqlLossBeforeAuthorizationNeverInvokesHandler",
+      "status": "implemented_not_executed",
+      "procedure_pending": false
+    },
+    {
+      "id": "E12",
+      "evidence": "SqlLossAfterFakeHttpDoesNotAssumeAcceptedCommit",
+      "status": "implemented_not_executed",
+      "procedure_pending": false
+    },
+    {
+      "id": "E13",
+      "evidence": "CooperativeStopPersistsUncertainHandlerResult",
+      "status": "implemented_not_executed",
+      "procedure_pending": true
+    },
+    {
+      "id": "E14",
+      "evidence": "ForcedStopDuringHandlerRetainsDurableReservation",
+      "status": "implemented_not_executed",
+      "procedure_pending": false
+    },
+    {
+      "id": "E15",
+      "evidence": "existing:S17",
+      "status": "existing_CI50_evidence",
+      "procedure_pending": false
+    },
+    {
+      "id": "E16",
+      "evidence": "PauseAfterPermissionDoesNotRevokeExistingPermission",
+      "status": "implemented_not_executed",
+      "procedure_pending": false
+    },
+    {
+      "id": "E17",
+      "evidence": "TlsFailurePausesDurablyWithoutSecondPermission; existing:S16 authorization/daily/monthly",
+      "status": "implemented_not_executed",
+      "procedure_pending": false
+    },
+    {
+      "id": "E18",
+      "evidence": "RateLimitPersistsRetryAfterWithoutProviderPause",
+      "status": "implemented_not_executed",
+      "procedure_pending": false
+    },
+    {
+      "id": "E19",
+      "evidence": "BudgetQueriesHandleTwentyExcessAndFutureReservations; existing:S04/S15",
+      "status": "implemented_not_executed",
+      "procedure_pending": false
+    },
+    {
+      "id": "E20",
+      "evidence": "existing:S05",
+      "status": "existing_CI50_evidence",
+      "procedure_pending": false
+    },
+    {
+      "id": "E21",
+      "evidence": "TenSecondExpiryMarginPreventsAcquisition; existing:S14",
+      "status": "implemented_not_executed",
+      "procedure_pending": false
+    },
+    {
+      "id": "E22",
+      "evidence": "existing:S06",
+      "status": "existing_CI50_evidence",
+      "procedure_pending": false
+    },
+    {
+      "id": "E23",
+      "evidence": "RestartWithChangedProfilePausesWithoutChangingFrozenBytes; existing:S07 and profile unit tests",
+      "status": "implemented_not_executed",
+      "procedure_pending": true
+    },
+    {
+      "id": "E24",
+      "evidence": "existing:S20 and A historical recipient",
+      "status": "existing_CI50_evidence",
+      "procedure_pending": false
+    },
+    {
+      "id": "E25",
+      "evidence": "existing:A retention and S21/S22",
+      "status": "existing_CI50_evidence",
+      "procedure_pending": false
+    },
+    {
+      "id": "E26",
+      "evidence": "All22QueriesHaveExpectedResultsAndDoNotMutateData",
+      "status": "implemented_not_executed",
+      "procedure_pending": false
+    },
+    {
+      "id": "E27",
+      "evidence": "RestrictedRolesDenyDdlAndSensitiveColumns",
+      "status": "implemented_not_executed",
+      "procedure_pending": false
+    },
+    {
+      "id": "E28",
+      "evidence": "existing:CI50 C1/C2 parity; no tracked product change",
+      "status": "existing_CI50_evidence",
+      "procedure_pending": false
+    },
+    {
+      "id": "E29",
+      "evidence": "SecondCoordinatorIsRejectedBeforeStartingWork; existing:S01/S03/S04",
+      "status": "implemented_not_executed",
+      "procedure_pending": true
+    },
+    {
+      "id": "E30",
+      "evidence": "sanitized_trx and whitelist process output; existing transport privacy",
+      "status": "implemented_not_executed",
+      "procedure_pending": true
+    }
+  ],
+  "pending_procedures": [
+    "E04 ingress suspension/concurrent drain on actual deployment",
+    "E13 actual orchestrator stop",
+    "E23 real provider account identity not tested with fake",
+    "E29 deployment instance inventory",
+    "E30 audit complete published artifacts"
+  ],
+  "approval": {
+    "B3_authorized": false,
+    "workflow_installation_on_main": false,
+    "production_activation": false
+  },
+  "b2b": {
+    "status": "implemented_for_independent_review_not_approved",
+    "H01": "main ref and launcher/code/build bindings; trusted bootstrap still blocked",
+    "H02": "durable exact-name ownership intent; bounded reconciliation; uncertain ownership never deleted",
+    "H03": "default local Docker context; namespace identity; strict rules; effective isolation unexecuted",
+    "H04": "recorded RFC1918 subnet/gateway/member validation, no fixed 172 assumption",
+    "H05": "allowlisted TRX, validated query report, final status only after verified cleanup; sticky failure and artifact hashes"
+  },
+  "b3b1": {
+    "phase": "isolation-only",
+    "status": "implemented_local_for_review_not_runtime_validated",
+    "dotnet_pure": 13,
+    "python_pure_including_historical": 65,
+    "operational_full_authorized": false,
+    "sql_blocks_executed": 0,
+    "new_identity": "PreflightIdentity without SQL fields",
+    "artifacts": [
+      "isolation.json",
+      "isolation-execution.json",
+      "isolation-sha256.json"
+    ],
+    "workflow_installed": false,
+    "real_execution": false
+  }
+}
