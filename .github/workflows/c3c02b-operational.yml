@@ -1,0 +1,94 @@
+name: C3-C-02B manual operational rehearsal
+on:
+  workflow_dispatch:
+    inputs:
+      code_sha:
+        description: Exact independently audited rehearsal commit (not an authorization)
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: constia-c3c02b-operational
+  cancel-in-progress: false
+env:
+  # Deliberately empty. Only a separately reviewed B3 launcher may install the exact approved SHA.
+  CONSTIA_B3_APPROVED_SHA: ''
+  # Policy values are installed only by a separately approved trusted launcher.
+  CONSTIA_B3_APPROVED_PHASE: isolation-only
+  C3C02B_PHASE: isolation-only
+  CONSTIA_B3_APPROVED_ACTOR_ID: ''
+  CONSTIA_B3_INVENTORY_SHA256: ''
+  CONSTIA_B3_INVENTORY: ''
+  CODE_SHA: ${{ inputs.code_sha }}
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Reject execution until B3 is independently authorized
+        env:
+          EVENT: ${{ github.event_name }}
+          REPOSITORY: ${{ github.repository }}
+          REVISION: ${{ github.sha }}
+          ATTEMPT: ${{ github.run_attempt }}
+          LAUNCHER_REF: ${{ github.ref }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_REVISION: ${{ github.workflow_sha }}
+          ACTOR_ID: ${{ github.actor_id }}
+        shell: python
+        run: |
+          import os, re, json, hashlib
+          expected = os.environ["CONSTIA_B3_APPROVED_SHA"]
+          valid = (
+              os.environ["EVENT"] == "workflow_dispatch"
+              and os.environ["REPOSITORY"] == "ivandinicola/CONSTIA"
+              and os.environ["ATTEMPT"] == "1"
+              and os.environ["LAUNCHER_REF"] == "refs/heads/main"
+              and os.environ["WORKFLOW_REF"] == "ivandinicola/CONSTIA/.github/workflows/c3c02b-operational.yml@refs/heads/main"
+              and os.environ["REVISION"] == os.environ["WORKFLOW_REVISION"]
+              and re.fullmatch("[0-9a-f]{40}", expected)
+              and re.fullmatch("[0-9a-f]{40}", os.environ["REVISION"])
+              and expected == os.environ["CODE_SHA"]
+              and os.environ["CONSTIA_B3_APPROVED_PHASE"] == "isolation-only"
+              and os.environ["C3C02B_PHASE"] == "isolation-only"
+              and re.fullmatch("[1-9][0-9]*", os.environ["CONSTIA_B3_APPROVED_ACTOR_ID"])
+              and os.environ["ACTOR_ID"] == os.environ["CONSTIA_B3_APPROVED_ACTOR_ID"]
+              and re.fullmatch("[0-9a-f]{64}", os.environ["CONSTIA_B3_INVENTORY_SHA256"])
+          )
+          if not valid:
+              raise SystemExit("B3 approval or trusted launcher identity missing")
+          table = json.loads(os.environ["CONSTIA_B3_INVENTORY"])
+          if not isinstance(table, dict) or len(table) != 17:
+              raise SystemExit("Reviewed inventory absent")
+          digest = hashlib.sha256(json.dumps(table, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+          if digest != os.environ["CONSTIA_B3_INVENTORY_SHA256"]:
+              raise SystemExit("Reviewed inventory digest differs")
+  sandbox:
+    needs: gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact reviewed revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, official actions repository
+        with:
+          ref: ${{ inputs.code_sha }}
+          persist-credentials: false
+      - name: Pure runner guard regressions
+        run: python3 -B -m unittest discover -s .github/scripts -p test_c3c02b_runner.py
+      - name: Execute isolation-only without SQL or workers
+        run: python3 -B .github/scripts/c3c02b_runner.py run --phase isolation-only
+      - name: Attempt identity-limited cleanup
+        if: always()
+        run: python3 -B .github/scripts/c3c02b_runner.py cleanup --phase isolation-only
+      - name: Upload allowlisted sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: c3c02b-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/c3c02b-public/isolation.json
+            ${{ runner.temp }}/c3c02b-public/isolation-execution.json
+            ${{ runner.temp }}/c3c02b-public/isolation-sha256.json
+          if-no-files-found: error
+          retention-days: 7
