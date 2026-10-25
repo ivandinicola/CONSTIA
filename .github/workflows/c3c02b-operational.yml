@@ -1,0 +1,308 @@
+# Trusted L candidate. H's workflow at the same path is never used as launcher code.
+name: C3-C trusted isolation launcher
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: constia-c3c02b-operational
+  cancel-in-progress: false
+env:
+  CODE_SHA: 5eb98f07728bfa8602930af04a286a21a78b6cf9
+  CONSTIA_B3_APPROVED_SHA: 5eb98f07728bfa8602930af04a286a21a78b6cf9
+  CONSTIA_B3_APPROVED_ACTOR_ID: '147414572'
+  CONSTIA_B3_INVENTORY_SHA256: 435d97ef9c715ad7b8198b27b534122cef8d71d485628528e902ae3366d496b6
+  CONSTIA_B3_APPROVED_PHASE: isolation-only
+  C3C02B_PHASE: isolation-only
+  # Suppress hooks, fsmonitor and checkout EOL transforms on this disposable runner only.
+  GIT_CONFIG_NOSYSTEM: '1'
+  GIT_CONFIG_GLOBAL: /dev/null
+  GIT_CONFIG_COUNT: '3'
+  GIT_CONFIG_KEY_0: core.hooksPath
+  GIT_CONFIG_VALUE_0: /dev/null
+  GIT_CONFIG_KEY_1: core.fsmonitor
+  GIT_CONFIG_VALUE_1: 'false'
+  GIT_CONFIG_KEY_2: core.autocrlf
+  GIT_CONFIG_VALUE_2: 'false'
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Read-only identity gate
+        shell: python3 -I -B {0}
+        env:
+          LAUNCHER_STAGE: gate
+          LAUNCHER_READ_TOKEN: ${{ github.token }}
+        run: &trusted_verifier |
+          # BEGIN TRUSTED PYTHON
+          import hashlib, io, json, os, pathlib, re, subprocess, urllib.request
+
+          H = "5eb98f07728bfa8602930af04a286a21a78b6cf9"
+          BASE = "79923e86eb1ce450db40d538d55848eaebe7877c"
+          TREE = "4bfc2c9331295db1ab395b46434b108817d1b37c"
+          D = "435d97ef9c715ad7b8198b27b534122cef8d71d485628528e902ae3366d496b6"
+          REPO = "ivandinicola/CONSTIA"
+          REF = REPO + "/.github/workflows/c3c02b-operational.yml@refs/heads/main"
+          ACTOR = "147414572"
+          TABLE = {
+              ".github/scripts/c3c02b_runner.py": "630049f69dd7ff4241f90b6541fa1a1dea6adfe34770743f3c3a9e9f821726de",
+              ".github/scripts/test_c3c02b_runner.py": "18bf565331829838661edf34c3ca2ab8b111ce275a552196a68c9b9dcacd2496",
+              ".github/workflows/c3c02b-operational.yml": "64474d003db5210f29c8b5bd5dbcc975b03297a083375410090ef02761986695",
+              "docs/operations/c3-c-02b.md": "c7d615eee315cb2239b3f754b82946eb7b1b8696ff18aef87f4d954a865ed992",
+              "tests/Constia.C3C02B.Tests/ConfirmationTests.cs": "7c6010d6efccf95fb6c1d333ecb293fe8af4e237e40020f69b10cb4791c5a6f8",
+              "tests/Constia.C3C02B.Tests/Constia.C3C02B.Tests.csproj": "e27aa509af240f3b4013509a1ceae61a0db01b81b25fc67d986808bddfe4a613",
+              "tests/Constia.C3C02B.Tests/DisposableSqlDatabase.cs": "e8b5f322639a4639df436172769864a7976a6392dd5c1c577611eb53d9ff555f",
+              "tests/Constia.C3C02B.Tests/OperationalTests.cs": "2c82a6784d5407b14a80f6f3c7db3fddd5cfb11851c0b4022e14f8e6c8f1d3c1",
+              "tests/Constia.C3C02B.Tests/QueriesTests.cs": "2d8f70bd1c1ec56ff0d0f29ad3f23fd56427683827f21d0d21e43e6415e85304",
+              "tests/Constia.C3C02B.Tests/SafetyTests.cs": "dcba6e7bfb0ccdd0080849f8ad873bd92e3a3c3ce78d85557ce86f9a8824b07c",
+              "tests/sandbox/c3c02b/Dockerfile": "a01fbb157445715943cd19855fa56f89b07484268ca94e18e907c583636219e9",
+              "tests/sandbox/c3c02b/coverage.json": "a6791f91f5c6a6654997025e2b71038161e24d4481141fdd01e24682f990fb81",
+              "tests/sandbox/c3c02b/queries.sql": "4fb171d55a27b2e62089e8eeb96d1f1fc0ffc0e4919a1ac8b2ef6a3304ffd1fd",
+              "tools/Constia.C3C02B.Harness/Constia.C3C02B.Harness.csproj": "26ea6e5223132a9caabf4366dbc8d525ef6f4f80aa2039c17d36db43d9b15ced",
+              "tools/Constia.C3C02B.Harness/Program.cs": "ff2e4bf27bf68b5546ec3c3bd61a36e1c2138b1e37cd364ce8d82efcafd43777",
+              "tools/Constia.C3C02B.Harness/SandboxIdentity.cs": "a99c19df1b8a59072114841f7bb730b810235bb58dc4c94db77163694480712d",
+              "tools/Constia.C3C02B.Harness/SimulatedResendHandler.cs": "9c2cfdea5f05e63733a3e71e11a7c6ea6d9ebc842cdf072893da9110f4f58b72"
+          }
+
+          class Unsafe(RuntimeError):
+              pass
+
+          def require(condition, message):
+              if not condition:
+                  raise Unsafe(message)
+
+          def validate_policy(table):
+              require(table == TABLE and len(table) == 17, "Inventory policy differs")
+              digest = hashlib.sha256(json.dumps(table, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+              require(digest == D, "Policy digest differs")
+
+          def validate_context(e, event, main_sha):
+              expected = dict(GITHUB_ACTIONS="true", RUNNER_ENVIRONMENT="github-hosted", RUNNER_OS="Linux",
+                              GITHUB_REPOSITORY=REPO, GITHUB_REPOSITORY_ID="1407527987",
+                              GITHUB_EVENT_NAME="workflow_dispatch", GITHUB_REF="refs/heads/main",
+                              GITHUB_WORKFLOW_REF=REF, GITHUB_ACTOR_ID=ACTOR, GITHUB_RUN_ATTEMPT="1",
+                              CODE_SHA=H, CONSTIA_B3_APPROVED_SHA=H, C3C02B_PHASE="isolation-only",
+                              CONSTIA_B3_APPROVED_PHASE="isolation-only", CONSTIA_B3_APPROVED_ACTOR_ID=ACTOR,
+                              CONSTIA_B3_INVENTORY_SHA256=D)
+              require(all(e.get(k) == v for k, v in expected.items()), "Launcher identity or policy differs")
+              require(re.fullmatch("[0-9a-f]{40}", e.get("GITHUB_SHA", "")) is not None, "Invalid L")
+              require(e["GITHUB_SHA"] == e.get("GITHUB_WORKFLOW_SHA") == main_sha, "L is not current main")
+              require(re.fullmatch("[1-9][0-9]*", e.get("GITHUB_RUN_ID", "")) is not None, "Invalid run")
+              require(isinstance(event, dict) and event.get("inputs") in (None, {}), "Inputs are forbidden")
+              forbidden = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy",
+                           "DOCKER_HOST", "DOCKER_CONTEXT", "RESEND_API_KEY", "SQLCONNSTR_DefaultConnection")
+              require(not any(e.get(k) for k in forbidden), "Inherited connections are forbidden")
+              validate_policy(TABLE)
+
+          def current_main():
+              # Only a GitHub-generated read token, scoped to this trusted step; never passed to H.
+              require(os.environ.get("GITHUB_API_URL") == "https://api.github.com", "Unexpected API")
+              request = urllib.request.Request("https://api.github.com/repos/" + REPO + "/git/ref/heads/main",
+                  headers={"Authorization": "Bearer " + os.environ["LAUNCHER_READ_TOKEN"],
+                           "Accept": "application/vnd.github+json"})
+              class NoRedirect(urllib.request.HTTPRedirectHandler):
+                  def redirect_request(self, *args, **kwargs):
+                      raise Unsafe("API redirects forbidden")
+              with urllib.request.build_opener(NoRedirect).open(request, timeout=10) as response:
+                  data = response.read(65537)
+              require(len(data) <= 65536, "API response too large")
+              return json.loads(data)["object"]["sha"]
+
+          def git(root, *args, data=None):
+              env = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_TERMINAL_PROMPT="0")
+              for key in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES"):
+                  env.pop(key, None)
+              try:
+                  result = subprocess.run(["git", "--no-pager", "-c", "core.hooksPath=" + os.devnull,
+                      "-c", "core.fsmonitor=false", "-c", "core.autocrlf=false", "-C", str(root), *args],
+                      input=data, capture_output=True, env=env, timeout=45, check=True)
+                  return result.stdout
+              except (subprocess.SubprocessError, OSError):
+                  raise Unsafe("Git verification failed") from None
+
+          def blob_bytes(root, ids):
+              stream = io.BytesIO(git(root, "cat-file", "--batch", data=("\n".join(ids) + "\n").encode()))
+              result = {}
+              for oid in ids:
+                  header = stream.readline().decode("ascii").strip().split()
+                  require(len(header) == 3 and header[:2] == [oid, "blob"], "Invalid blob object")
+                  raw = stream.read(int(header[2]))
+                  require(len(raw) == int(header[2]) and stream.read(1) == b"\n", "Truncated blob")
+                  result[oid] = raw
+              require(not stream.read(), "Unexpected batch output")
+              return result
+
+          def verify_checkout(root, h=H, base=BASE, tree=TREE, table=None):
+              # Parameters permit pure tests on throwaway repositories. Production calls use only fixed defaults.
+              table = TABLE if table is None else table
+              root = pathlib.Path(root)
+              require(root.is_dir() and not root.is_symlink(), "Checkout missing")
+              require(git(root, "rev-parse", "HEAD").decode().strip() == h, "Wrong checkout HEAD")
+              require(git(root, "rev-list", "--parents", "-n", "1", "HEAD").decode().split() == [h, base],
+                      "Wrong parent or commit count")
+              require(git(root, "rev-parse", "HEAD^{tree}").decode().strip() == tree, "Wrong tree")
+              entries = git(root, "diff-tree", "--no-commit-id", "--name-status", "-r", "-z", base, h).split(b"\0")
+              require(entries[-1] == b"", "Invalid diff")
+              pairs = list(zip(entries[:-1:2], entries[1:-1:2]))
+              require(len(entries[:-1]) % 2 == 0 and len(pairs) == len(table) and
+                      all(status == b"A" for status, path in pairs) and
+                      {path.decode("utf-8") for status, path in pairs} == set(table), "Unexpected changed paths")
+              listing = git(root, "ls-tree", "-r", "-z", h).split(b"\0")
+              tracked = {}
+              for item in filter(None, listing):
+                  header, path = item.split(b"\t", 1)
+                  mode, kind, oid = header.decode("ascii").split()
+                  rel = path.decode("utf-8")
+                  require(kind == "blob" and mode in ("100644", "100755"), "Symlink/submodule forbidden")
+                  require(not pathlib.PurePosixPath(rel).is_absolute() and ".." not in pathlib.PurePosixPath(rel).parts,
+                          "Unsafe tracked path")
+                  tracked[rel] = oid
+              raw_blobs = blob_bytes(root, list(dict.fromkeys(tracked.values())))
+              actual = set()
+              for directory, dirs, files in os.walk(root, followlinks=False):
+                  if pathlib.Path(directory) == root:
+                      dirs[:] = [d for d in dirs if d != ".git"]
+                  for name in dirs + files:
+                      require(not (pathlib.Path(directory) / name).is_symlink(), "Checkout symlink forbidden")
+                  for name in files:
+                      rel = (pathlib.Path(directory) / name).relative_to(root).as_posix()
+                      actual.add(rel)
+              require(actual == set(tracked), "Unexpected or missing physical paths")
+              for rel, oid in tracked.items():
+                  require((root / rel).read_bytes() == raw_blobs[oid], "Physical checkout differs from blob")
+              for rel, expected in table.items():
+                  require(hashlib.sha256(raw_blobs[tracked[rel]]).hexdigest() == expected, "Audited blob differs")
+              require(not git(root, "status", "--porcelain=v1", "--untracked-files=all").strip(), "Dirty checkout")
+              return True
+
+          def validate_artifacts(out, e):
+              out = pathlib.Path(out)
+              names = {"isolation.json", "isolation-execution.json", "isolation-sha256.json"}
+              require(out.is_dir() and not out.is_symlink(), "Evidence absent")
+              require({p.name for p in out.iterdir()} == names, "Artifact allowlist differs")
+              raw = {}
+              for name in names:
+                  p = out / name
+                  require(p.is_file() and not p.is_symlink() and p.stat().st_size <= 131072, "Unsafe artifact")
+                  raw[name] = p.read_bytes()
+                  text = raw[name].decode("utf-8")
+                  require(not re.search(r"(?i)bearer\s|re_[a-zA-Z0-9]{12}|password\s*[=:]|api[_-]?key\s*[=:]|[\w.+-]+@[\w.-]+\.[A-Za-z]{2}", text),
+                          "Sensitive artifact")
+              hashes = json.loads(raw["isolation-sha256.json"])
+              require(hashes == {n: hashlib.sha256(raw[n]).hexdigest() for n in names - {"isolation-sha256.json"}},
+                      "Artifact hashes differ")
+              report = json.loads(raw["isolation.json"])
+              final = json.loads(raw["isolation-execution.json"])
+              expected = dict(code_sha=H, policy_sha256=D, workflow_sha=e["GITHUB_WORKFLOW_SHA"],
+                              run_id=e["GITHUB_RUN_ID"], attempt="1", phase="isolation-only")
+              require(all(final.get(k) == v and report.get("identity", {}).get(k) == v for k, v in expected.items()),
+                      "Evidence run identity differs")
+              require(report["identity"].get("actor_id") == ACTOR and report["identity"].get("repository") == REPO and
+                      report["identity"].get("workflow_ref") == REF, "Evidence launcher differs")
+              require(final.get("status") == "passed" and all(final.get(k) is True for k in
+                      ("run_ok", "cleanup_verified", "evidence_complete")), "Run or cleanup unverified")
+              require(all(x.get("sql") == "not_applicable" and type(x.get("workers_started")) is int and
+                          x["workers_started"] == 0 and x.get("phase") == "isolation-only" for x in (report, final)),
+                      "Operational evidence forbidden")
+              return True
+
+          def main():
+              e = os.environ
+              validate_context(e, json.loads(pathlib.Path(e["GITHUB_EVENT_PATH"]).read_text()), current_main())
+              stage = e["LAUNCHER_STAGE"]
+              require(stage in ("gate", "approved", "verify", "evidence"), "Unknown launcher stage")
+              if stage != "gate":
+                  require(e.get("GATE_RESULT") == "success", "Prior identity gate absent")
+              if stage == "gate":
+                  print("Read-only gate: H=" + H + "; D=" + D + "; actor=" + ACTOR +
+                        "; phase=isolation-only; run=" + e["GITHUB_RUN_ID"] + "; L=" + e["GITHUB_SHA"])
+              elif stage == "verify":
+                  verify_checkout(pathlib.Path(e["GITHUB_WORKSPACE"]) / "harness")
+                  with open(e["GITHUB_ENV"], "a", encoding="utf-8") as f:
+                      f.write("CONSTIA_B3_INVENTORY=" + json.dumps(TABLE, sort_keys=True, separators=(",", ":")) + "\n")
+                  with open(e["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+                      f.write("verified=true\n")
+              elif stage == "evidence":
+                  validate_artifacts(pathlib.Path(e["RUNNER_TEMP"]) / "c3c02b-public", e)
+                  with open(e["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+                      f.write("safe=true\n")
+
+          if __name__ == "__main__":
+              try:
+                  main()
+              except Exception:
+                  # No arbitrary API/Git exception, payload or credential in logs.
+                  raise SystemExit("Trusted launcher failed closed; no authorization to continue") from None
+          # END TRUSTED PYTHON
+
+  isolation:
+    needs: gate
+    environment: constia-c3c-isolation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash --noprofile --norc -euo pipefail {0}
+    env:
+      GATE_RESULT: ${{ needs.gate.result }}
+    steps:
+      - name: Recheck trusted identity after approval
+        shell: python3 -I -B {0}
+        env:
+          LAUNCHER_STAGE: approved
+          LAUNCHER_READ_TOKEN: ${{ github.token }}
+        run: *trusted_verifier
+      - name: Checkout only H
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ivandinicola/CONSTIA
+          ref: 5eb98f07728bfa8602930af04a286a21a78b6cf9
+          path: harness
+          persist-credentials: false
+          fetch-depth: 2
+          fetch-tags: false
+          submodules: false
+          lfs: false
+          clean: false
+          set-safe-directory: false
+      - name: Verify H and every checkout byte from L
+        id: verified
+        if: ${{ success() && steps.checkout.outcome == 'success' }}
+        shell: python3 -I -B {0}
+        env:
+          LAUNCHER_STAGE: verify
+          LAUNCHER_READ_TOKEN: ${{ github.token }}
+        run: *trusted_verifier
+      - name: Pure regressions from verified H
+        working-directory: harness
+        run: python3 -I -B -m unittest discover -s .github/scripts -p test_c3c02b_runner.py
+      - name: Run only isolation
+        working-directory: harness
+        run: python3 -I -B .github/scripts/c3c02b_runner.py run --phase isolation-only
+      - name: Cleanup only verified H resources
+        if: ${{ always() && steps.verified.outputs.verified == 'true' }}
+        working-directory: harness
+        run: python3 -I -B .github/scripts/c3c02b_runner.py cleanup --phase isolation-only
+      - name: Validate allowlisted evidence from L
+        id: evidence
+        if: ${{ always() && steps.verified.outputs.verified == 'true' }}
+        shell: python3 -I -B {0}
+        env:
+          LAUNCHER_STAGE: evidence
+          LAUNCHER_READ_TOKEN: ${{ github.token }}
+        run: *trusted_verifier
+      - name: Upload only validated evidence
+        if: ${{ always() && steps.evidence.outputs.safe == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: c3c02b-isolation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/c3c02b-public/isolation.json
+            ${{ runner.temp }}/c3c02b-public/isolation-execution.json
+            ${{ runner.temp }}/c3c02b-public/isolation-sha256.json
+          if-no-files-found: error
+          include-hidden-files: false
+          overwrite: false
+          retention-days: 7
