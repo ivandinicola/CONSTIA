@@ -71,26 +71,21 @@ class SafetyTests(unittest.TestCase):
 
 
     def test_atomic_manifest_retains_previous_owner_on_failure(self):
-        import tempfile
-        from unittest.mock import patch
-        with tempfile.TemporaryDirectory() as d:
-            p=pathlib.Path(d)/'state.json';p.write_text('{"old":true}')
-            with patch.object(r,'state_path',return_value=p), patch.object(r.os,'replace',side_effect=OSError('synthetic')):
-                with self.assertRaises(OSError):r.save({'new':True})
-            self.assertEqual('{"old":true}',p.read_text())
+
+        def check(case):
+            p=r.state_path();p.write_bytes(b'FOREIGN')
+            with case.assertRaises(FileExistsError):r._admit_session(case.s)
+            case.assertEqual(b'FOREIGN',p.read_bytes());case.assertFalse(case.c.creation_attempted)
+        _with_protocol_fixture(check)
 
     def test_cleanup_rejects_foreign_container_before_mutation(self):
-        import tempfile,json
-        from unittest.mock import patch
-        with tempfile.TemporaryDirectory() as d:
-            p=pathlib.Path(d)/'state.json'
-            s=self.session()
-            s['planned']['app_id']={'kind':'container','name':r.resource_specs(s)['app_id'][1],'id':'d'*64,'phase':'owned'}
-            p.write_text(json.dumps(s))
-            with patch.object(r,'state_path',return_value=p), patch.object(r,'lookup',return_value={'Id':'d'*64,'Config':{'Labels':{'constia.owner':'other'}}}) as looked, patch.object(r,'command') as cmd:
-                with self.assertRaises(r.Unsafe):r.cleanup()
-                looked.assert_called_once_with('container','d'*64)
-                cmd.assert_not_called()
+
+        def check(case):
+            case.populate();case.witness()
+            case.objects[('container','1'*64)]['Config']['Labels']['constia.owner']='foreign'
+            case.assertNotEqual('verified',case.clean());case.assertEqual([],case.removals)
+            case.assertIn(('container','1'*64),case.objects)
+        _with_protocol_fixture(check)
 
     def test_external_network_fails_closed(self):
         from unittest.mock import patch
@@ -145,13 +140,17 @@ class SafetyTests(unittest.TestCase):
         with self.assertRaises(r.Unsafe):r.validate_queries([{'id':'Q00.1'}],['Q00.1'])
 
     def test_h02_uncertain_resources_need_planned_identity(self):
-        from unittest.mock import patch
-        s=self.session()
-        with patch.object(r,'save') as saved:
-            r.plan_resource(s,'network_id');saved.assert_called_once_with(s)
-        self.assertEqual('creating',s['planned']['network_id']['phase'])
-        self.assertEqual('c3c02b-'+s['nonce'],s['planned']['network_id']['name'])
-        with self.assertRaises(r.Unsafe):r.plan_resource(s,'unknown')
+
+        def check(case):
+            ctrl=r._admit_session(case.s)
+            m,_,_=r._read_manifest();case.assertEqual(5,len(m['resources']))
+            with case.assertRaises(r.Unsafe):r.plan_resource(case.s,'volume_id')
+            case.assertEqual(set(),ctrl.dispatched)
+            r.plan_resource(case.s,'network_id')
+            case.assertIn('network_id',ctrl.pending)
+            case.assertEqual(5,len(r._read_manifest()[0]['resources']))
+            case.assertEqual([],case.removals)
+        _with_protocol_fixture(check)
 
 
     def test_h01_gate_cannot_be_disabled_by_python_optimization(self):
@@ -174,53 +173,57 @@ class SafetyTests(unittest.TestCase):
         return s
 
     def test_h02_intent_precedes_creation_and_response_loss_is_reconciled(self):
+
         import subprocess
         from unittest.mock import patch
-        s=self.session()
-        volume='c3c02b-data-'+s['nonce']
-        owned={'Name':volume,'Driver':'local','Options':None,'Labels':s['labels']}
-        events=[]
-        def saved(state): events.append(('saved',state['planned'].get('volume_id',{}).get('phase')))
-        def lost(*args,**kwargs):
-            self.assertIn(('saved','creating'),events)
-            raise subprocess.TimeoutExpired(['docker'],1)
-        with patch.object(r,'save',side_effect=saved),patch.object(r,'command',side_effect=lost),patch.object(r,'lookup',return_value=owned):
-            with self.assertRaises(subprocess.TimeoutExpired):r.create_resource(s,'volume_id',['docker','volume','create',volume])
-        self.assertEqual('owned',s['planned']['volume_id']['phase'])
-        self.assertEqual(volume,s['planned']['volume_id']['id'])
+        def check(case):
+            case.populate(('network_id',));r._admit_session(case.s)
+            def lost(args,**kw):
+                case.assertEqual(5,len(r._read_manifest()[0]['resources']))
+                raise subprocess.TimeoutExpired(['synthetic'],1)
+            with patch.object(r,'command',side_effect=lost):
+                with case.assertRaises(subprocess.TimeoutExpired):r.create_resource(case.s,'network_id',['docker','network','create','synthetic'])
+            case.assertEqual('e'*64,case.s['network_id'])
+            r._freeze_producer(case.c);case.assertEqual('unresolved',case.c.session['producer_state'])
+            case.assertNotEqual('verified',case.clean())
+        _with_protocol_fixture(check)
 
     def test_h02_absent_after_timeout_remains_uncertain(self):
+
         import subprocess
         from unittest.mock import patch
-        s=self.session()
-        with patch.object(r,'save'),patch.object(r,'command',side_effect=subprocess.TimeoutExpired(['docker'],1)),patch.object(r,'lookup',return_value=None):
-            with self.assertRaises(subprocess.TimeoutExpired):r.create_resource(s,'volume_id',['docker','volume','create'])
-        self.assertEqual('uncertain',s['planned']['volume_id']['phase'])
-        with patch.object(r,'save'),patch.object(r,'lookup',return_value=None):
-            with self.assertRaises(r.Unsafe):r.reconcile_resource(s,'volume_id')
+        def check(case):
+            r._admit_session(case.s)
+            with patch.object(r,'command',side_effect=subprocess.TimeoutExpired(['synthetic'],1)):
+                with case.assertRaises(subprocess.TimeoutExpired):r.create_resource(case.s,'network_id',['docker','network','create','synthetic'])
+            r._freeze_producer(case.c)
+            case.assertEqual('unresolved',case.c.session['producer_state'])
+            case.assertNotEqual('verified',case.clean());case.assertEqual([],case.removals)
+        _with_protocol_fixture(check)
 
     def test_h02_matching_name_with_foreign_labels_is_not_owned(self):
         from unittest.mock import patch
         s=self.session()
-        with patch.object(r,'save'):r.plan_resource(s,'volume_id')
+        _legacy_plan_fixture(s,'volume_id')
         obj={'Name':r.resource_specs(s)['volume_id'][1],'Driver':'local','Options':None,'Labels':{'constia.owner':'elsewhere'}}
         with self.assertRaises(r.Unsafe):r.verify_owned(s,'volume_id',obj)
         obj['Labels']=s['labels'];obj['Options']={'device':'/host/data','o':'bind'}
         with self.assertRaises(r.Unsafe):r.verify_owned(s,'volume_id',obj)
 
     def test_h02_cleanup_failure_is_not_success(self):
-        import json,tempfile
+
         from unittest.mock import patch
-        s=self.session()
-        with patch.object(r,'save'):r.plan_resource(s,'volume_id')
-        volume=r.resource_specs(s)['volume_id'][1]
-        s['planned']['volume_id'].update(id=volume,phase='owned')
-        obj={'Name':volume,'Driver':'local','Options':None,'Labels':s['labels']}
-        with tempfile.TemporaryDirectory() as d:
-            p=pathlib.Path(d)/'state.json';p.write_text(json.dumps(s))
-            with patch.object(r,'state_path',return_value=p),patch.object(r,'save'),patch.object(r,'lookup',return_value=obj),patch.object(r,'command',side_effect=r.Unsafe('synthetic')):
-                with self.assertRaises(r.Unsafe):r.cleanup()
-        self.assertEqual('failed',r.final_status(True,False,True))
+        def check(case):
+            case.populate(('network_id',));case.witness();actual=case.engine_command
+            def command(args,**kw):
+                if 'rm' in args:raise OSError('PRIVATE_SECRET')
+                return actual(args,**kw)
+            with patch.object(r,'command',side_effect=command):
+                case.assertEqual('failed',case.clean())
+            case.assertEqual('CLEANUP_FAILED',case.c.operation_failure['code'])
+            case.assertTrue(case.objects)
+        _with_protocol_fixture(check)
+
 
     def test_h03_rule_construction_and_namespace_binding(self):
         v4,v6=r.firewall_snapshot('10.8.0.2')
@@ -300,21 +303,14 @@ class SafetyTests(unittest.TestCase):
             with self.assertRaises(r.Unsafe):r.require_local_engine()
 
     def test_h02_successful_exact_cleanup_is_idempotent(self):
-        import json,tempfile
-        from unittest.mock import patch
-        s=self.session()
-        with patch.object(r,'save'):r.plan_resource(s,'volume_id')
-        volume=r.resource_specs(s)['volume_id'][1]
-        s['planned']['volume_id'].update(id=volume,phase='owned')
-        obj={'Name':volume,'Driver':'local','Options':None,'Labels':s['labels']}
-        with tempfile.TemporaryDirectory() as d:
-            p=pathlib.Path(d)/'state.json';p.write_text(json.dumps(s))
-            with patch.object(r,'state_path',return_value=p),patch.object(r,'lookup',side_effect=[obj,None]),patch.object(r,'command',return_value='') as cmd:
-                self.assertTrue(r.cleanup())
-                cmd.assert_called_once_with(['docker','volume','rm',volume])
-            recorded=json.loads(p.read_text());self.assertTrue(recorded['cleanup_complete'])
-            with patch.object(r,'state_path',return_value=p),patch.object(r,'lookup',return_value=None),patch.object(r,'command') as cmd:
-                self.assertTrue(r.cleanup());cmd.assert_not_called()
+
+        def check(case):
+            case.populate(('network_id',));case.witness()
+            case.assertEqual('verified',case.clean())
+            case.assertEqual([['docker','network','rm','e'*64]],case.removals)
+            n=len(case.queries);case.assertEqual('verified',case.clean())
+            case.assertEqual(1,len(case.removals));case.assertGreater(len(case.queries),n)
+        _with_protocol_fixture(check)
 
     def test_h04_network_requires_exact_ipam_and_membership(self):
         from unittest.mock import patch
@@ -328,19 +324,15 @@ class SafetyTests(unittest.TestCase):
         with patch.object(r,'inspect',return_value=bad),self.assertRaises(r.Unsafe):r.network(s)
 
     def test_h05_cleanup_failure_does_not_publish_passed_or_upgrade_failure(self):
-        import json,tempfile,os
+
         from unittest.mock import patch
-        with tempfile.TemporaryDirectory() as d:
-            root=pathlib.Path(d);out=root/'c3c02b-public';out.mkdir()
-            private=root/'journal.json';s=self.session();s['cleanup_complete']=False;private.write_text(json.dumps(s))
-            for name in ('operational.trx','query-blocks.json'): (out/name).write_text('{}')
-            (out/'identity-and-isolation.json').write_text('{"status":"evidence_complete_cleanup_pending"}')
-            env={'RUNNER_TEMP':d,'GITHUB_RUN_ID':'123','CODE_SHA':'a'*40,'GITHUB_WORKFLOW_SHA':'b'*40}
-            with patch.dict(os.environ,env,clear=True),patch.object(r,'state_path',return_value=private):
-                self.assertEqual('failed',r.publish_execution(True,False,'run'))
-                self.assertEqual('failed',json.loads((out/'identity-and-isolation.json').read_text())['status'])
-                s['cleanup_complete']=True;private.write_text(json.dumps(s))
-                self.assertEqual('failed',r.publish_execution(False,True,'cleanup'))
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            p=pathlib.Path(directory)/'isolation-execution.json';p.write_bytes(b'{"status":"failed"}')
+            with patch.object(r,'public_directory',return_value=p.parent):
+                for run_ok,cleanup_ok in ((True,False),(False,True),(True,True)):
+                    with self.assertRaises(r.Unsafe):r.publish_execution(run_ok,cleanup_ok,'cleanup')
+            self.assertEqual(b'{"status":"failed"}',p.read_bytes())
 
 
     def test_h05_arbitrary_trx_nodes_are_not_copied(self):
@@ -357,23 +349,22 @@ class SafetyTests(unittest.TestCase):
             self.assertNotIn('PrivateNode',target.read_text())
 
     def test_h05_modified_published_artifact_invalidates_cleanup_report(self):
-        import json,tempfile,os
-        from unittest.mock import patch
-        with tempfile.TemporaryDirectory() as d:
-            root=pathlib.Path(d);out=root/'c3c02b-public';out.mkdir()
-            private=root/'journal.json';s=self.session();s['cleanup_complete']=True;private.write_text(json.dumps(s))
-            for name in ('operational.trx','query-blocks.json'):(out/name).write_text('{}')
-            (out/'identity-and-isolation.json').write_text('{}')
-            env={'RUNNER_TEMP':d,'GITHUB_RUN_ID':'123','CODE_SHA':'a'*40,'GITHUB_WORKFLOW_SHA':'b'*40}
-            with patch.dict(os.environ,env,clear=True),patch.object(r,'state_path',return_value=private):
-                self.assertEqual('passed',r.publish_execution(True,True,'run'))
-                (out/'operational.trx').write_text('changed-after-validation')
-                self.assertEqual('failed',r.publish_execution(False,True,'cleanup'))
+
+        import json
+        def check(case):
+            case.witness()
+            primary=r.make_diagnostic('cleanup_primary',case.c,case.c.witness_sha256)
+            r.write_diagnostic('isolation-cleanup-primary.json',primary)
+            p=r.diagnostic_directory()/'isolation-execution.json'
+            original=json.loads(p.read_text());original['first_failure']=dict(stage='git_head',code='GIT_REJECTED',reason='HEAD_MISMATCH')
+            p.write_text(json.dumps(original))
+            with case.assertRaises(r.Unsafe):r.read_diagnostic('isolation-cleanup-primary.json')
+        _with_protocol_fixture(check)
 
     def test_h02_replaced_recorded_id_is_rejected(self):
         from unittest.mock import patch
         s=self.session()
-        with patch.object(r,'save'):r.plan_resource(s,'network_id')
+        _legacy_plan_fixture(s,'network_id')
         s['planned']['network_id'].update(id='d'*64,phase='owned')
         obj={'Id':'e'*64,'Name':s['network_name'],'Internal':True,'Driver':'bridge','Labels':s['labels']}
         with self.assertRaises(r.Unsafe):r.verify_owned(s,'network_id',obj)
@@ -384,13 +375,13 @@ class SafetyTests(unittest.TestCase):
         from unittest.mock import patch
         name='c3c02b-'+'c'*32
         missing=subprocess.CompletedProcess([],1,stdout=b'[]',stderr=('Error response from daemon: network '+name+' not found').encode())
-        with patch.object(r.subprocess,'run',return_value=missing) as called:
+        with patch.object(r,'_bounded_docker',return_value=missing) as called:
             self.assertIsNone(r.lookup('network',name))
-            self.assertEqual(['docker','--context','default','network','inspect',name],called.call_args.args[0])
+            self.assertEqual(['docker','network','inspect',name],called.call_args.args[0])
         broken=subprocess.CompletedProcess([],1,stdout=b'',stderr=b'Cannot connect to daemon')
-        with patch.object(r.subprocess,'run',return_value=broken),self.assertRaises(r.Unsafe):r.lookup('network',name)
+        with patch.object(r,'_bounded_docker',return_value=broken),self.assertRaises(r.Unsafe):r.lookup('network',name)
         ambiguous=subprocess.CompletedProcess([],0,stdout=json.dumps([{'Id':'d'*64},{'Id':'e'*64}]).encode(),stderr=b'')
-        with patch.object(r.subprocess,'run',return_value=ambiguous),self.assertRaises(r.Unsafe):r.lookup('network',name)
+        with patch.object(r,'_bounded_docker',return_value=ambiguous),self.assertRaises(r.Unsafe):r.lookup('network',name)
 
 class IsolationPhaseTests(unittest.TestCase):
     def environment(self):
@@ -468,7 +459,7 @@ class IsolationPhaseTests(unittest.TestCase):
     def test_new_peer_ownership_can_be_verified_before_its_id_is_saved(self):
         s=SafetyTests().session();s.update(phase='isolation-only',network_id='e'*64,app_image_id='sha256:'+'d'*64)
         from unittest.mock import patch
-        with patch.object(r,'save'):r.plan_resource(s,'peer_id')
+        _legacy_plan_fixture(s,'peer_id')
         obj={'Id':'2'*64,'Name':'/'+r.resource_specs(s)['peer_id'][1],'Image':s['app_image_id'],
              'Config':{'Labels':s['labels'],'Env':[]},'Mounts':[],
              'HostConfig':{'NetworkMode':s['network_name'],'ReadonlyRootfs':True,'CapDrop':['ALL'],
@@ -587,17 +578,1296 @@ class IsolationPhaseTests(unittest.TestCase):
             rules.assert_called_once();net.assert_called_once()
 
     def test_isolation_publisher_requires_complete_evidence_and_cleanup(self):
-        import os,tempfile,json
+
+        # B8/B9 schema2 candidates never certify L2 publication, even with positive inputs.
+        for run_ok,cleanup_ok in ((True,True),(False,True),(True,False)):
+            with self.assertRaises(r.Unsafe):r.publish_isolation(run_ok,cleanup_ok,'run')
+
+
+
+class H2DiagnosticTests(unittest.TestCase):
+    def test_contract_is_versioned_and_has_three_immutable_records(self):
+        self.assertTrue(hasattr(r, 'DIAGNOSTIC_FILES'), 'H2 diagnostic contract is missing')
+        self.assertEqual({'isolation-execution.json', 'isolation-cleanup-primary.json',
+                          'isolation-cleanup-final.json'}, set(r.DIAGNOSTIC_FILES))
+        self.assertEqual(2, r.DIAGNOSTIC_SCHEMA)
+
+    def environment(self, directory):
+        e = IsolationPhaseTests().environment()
+        e['RUNNER_TEMP'] = str(directory)
+        return e
+
+    def context(self):
+        return r.DiagnosticContext()
+
+    def execution(self):
+        return r.make_diagnostic('execution', self.context())
+
+    def test_every_diagnostic_pair_is_fixed_and_unexpected_text_is_rejected(self):
+        import tempfile, os
         from unittest.mock import patch
-        for include,clean,expected in [(True,True,'passed'),(False,True,'failed'),(True,False,'failed')]:
-            with tempfile.TemporaryDirectory() as d:
-                out=pathlib.Path(d)/'c3c02b-public';out.mkdir()
-                e=self.environment();e['RUNNER_TEMP']=d
-                s=SafetyTests().session();s.update(phase='isolation-only',cleanup_complete=clean,policy_sha256='f'*64,workflow_sha='b'*40,actor_id='1234')
-                state=pathlib.Path(d)/'journal.json';state.write_text(json.dumps(s))
-                if include:(out/'isolation.json').write_text(json.dumps(self.report()))
-                with patch.dict(os.environ,e,clear=True),patch.object(r,'state_path',return_value=state):
-                    self.assertEqual(expected,r.publish_isolation(True,True,'run'))
-                    if expected=='failed':self.assertEqual('failed',r.publish_isolation(False,True,'cleanup'))
+        with tempfile.TemporaryDirectory() as d, patch.dict(os.environ, self.environment(d), clear=True):
+            for stage, code, reason in r.DIAGNOSTIC_CATALOG:
+                c = self.context()
+                c.fail(stage, code, reason)
+                rec = r.make_diagnostic('execution', c)
+                r.validate_diagnostic(rec)
+                self.assertEqual(dict(stage=stage, code=code, reason=reason), rec['first_failure'])
+            for values in [('secret', 'AUTH_REJECTED', 'POLICY'), ('authorization', 'Bearer secret', 'POLICY'),
+                           ('authorization', 'AUTH_REJECTED', 'private@example.invalid')]:
+                with self.subTest(values=values), self.assertRaises(r.Unsafe):
+                    self.context().fail(*values)
+
+    def test_first_failure_survives_cleanup_and_unexpected_exceptions_are_not_copied(self):
+        import tempfile, os, io, contextlib
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as d, patch.dict(os.environ, self.environment(d), clear=True):
+            c = self.context()
+            token = r.ACTIVE_DIAGNOSTIC.set(c)
+            try:
+                with self.assertRaises(OSError):
+                    r.diagnostic_call('git_head', lambda: (_ for _ in ()).throw(OSError('Bearer PRIVATE_SECRET')))
+                first = copy.deepcopy(c.first_failure)
+                c.cleaning = True
+                with self.assertRaises(RuntimeError):
+                    r.diagnostic_call('cleanup', lambda: (_ for _ in ()).throw(RuntimeError('private@example.invalid')))
+                self.assertEqual(first, c.first_failure)
+                self.assertIsNotNone(c.operation_failure)
+                self.assertNotIn('PRIVATE_SECRET', str(r.make_diagnostic('execution', c)))
+            finally:
+                r.ACTIVE_DIAGNOSTIC.reset(token)
+
+    def test_records_are_exclusive_bounded_and_hash_linked(self):
+        import tempfile, os, json, hashlib
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as d, patch.dict(os.environ, self.environment(d), clear=True):
+            rec = self.execution()
+            digest = r.write_diagnostic('isolation-execution.json', rec)
+            self.assertEqual(digest, hashlib.sha256((r.diagnostic_directory()/'isolation-execution.json').read_bytes()).hexdigest())
+            with self.assertRaises(FileExistsError):
+                r.write_diagnostic('isolation-execution.json', rec)
+            self.assertEqual(rec, r.read_diagnostic('isolation-execution.json'))
+            extra = copy.deepcopy(rec); extra['token'] = 'PRIVATE_SECRET'
+            with self.assertRaises(r.Unsafe): r.validate_diagnostic(extra)
+            with self.assertRaises(r.Unsafe): r.write_diagnostic('../escape.json', rec)
+            path = r.diagnostic_directory()/'isolation-execution.json'
+            for data in [b'{"schema":1,"schema":1}', b'{', b'x'*(r.MAX_DIAGNOSTIC_BYTES+1)]:
+                path.write_bytes(data)
+                with self.assertRaises((r.Unsafe, ValueError)): r.read_diagnostic(path.name)
+
+    def test_candidate_cannot_claim_L2_validation_or_contradict_creation(self):
+        import tempfile, os
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as d, patch.dict(os.environ, self.environment(d), clear=True):
+            rec = self.execution()
+            for key, value in [('evidence','complete_validated'), ('schema',1), ('phase','operational-full'),
+                               ('creation_attempted', 'false'), ('execution','completed')]:
+                bad = copy.deepcopy(rec); bad[key] = value
+                with self.subTest(key=key), self.assertRaises(r.Unsafe): r.validate_diagnostic(bad)
+
+    def test_partial_write_is_never_replaced_or_validated(self):
+        import tempfile, os
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as d, patch.dict(os.environ, self.environment(d), clear=True):
+            rec = self.execution()
+            with patch.object(r.os, 'fsync', side_effect=OSError('PRIVATE_SECRET')):
+                with self.assertRaises(OSError): r.write_diagnostic('isolation-execution.json', rec)
+            self.assertFalse((r.diagnostic_directory()/'isolation-execution.json').exists())
+            r.write_diagnostic('isolation-execution.json', rec)
+            self.assertEqual(rec, r.read_diagnostic('isolation-execution.json'))
+
+    def test_cleanup_without_execution_is_uncertain_and_cannot_invent_absence(self):
+        import tempfile, os, io, contextlib
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as d, patch.dict(os.environ, self.environment(d), clear=True), \
+             patch.object(r.sys,'argv',['runner','cleanup','--phase','isolation-only']), \
+             patch.object(r.subprocess,'run',side_effect=AssertionError('Native process forbidden')):
+            with contextlib.redirect_stderr(io.StringIO()): self.assertEqual(1, r.main())
+            rec = r.read_diagnostic('isolation-cleanup-final.json')
+            self.assertEqual('uncertain', rec['cleanup'])
+            self.assertIsNone(rec['execution'])
+            self.assertIsNone(rec['creation_attempted'])
+
+    def test_synthetic_failure_before_dispatch_is_not_applicable_only_with_proof(self):
+        import tempfile, os, io, contextlib
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as d, patch.dict(os.environ,self.environment(d),clear=True):
+            def fail(phase):
+                r.diagnostic_reject('git_head', 'GIT_REJECTED', 'HEAD_MISMATCH')
+            with patch.object(r,'run_isolation',side_effect=fail), patch.object(r.sys,'argv',['runner','run','--phase','isolation-only']), \
+                 patch.object(r.subprocess,'run',side_effect=AssertionError('Native process forbidden')),contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(1,r.main())
+            original=(r.diagnostic_directory()/'isolation-execution.json').read_bytes()
+            primary=r.read_diagnostic('isolation-cleanup-primary.json')
+            self.assertEqual('failed_before_creation',primary['execution'])
+            self.assertEqual('not_applicable',primary['cleanup'])
+            self.assertEqual('this_invocation_no_dispatch',primary['cleanup_scope'])
+            with patch.object(r.sys,'argv',['runner','cleanup','--phase','isolation-only']),contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(0,r.main())
+            self.assertEqual(original,(r.diagnostic_directory()/'isolation-execution.json').read_bytes())
+            final=r.read_diagnostic('isolation-cleanup-final.json')
+            self.assertEqual(primary['first_failure'],final['first_failure'])
+            with patch.object(r.sys,'argv',['runner','cleanup','--phase','isolation-only']),contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(1,r.main())
+
+    def test_diagnostics_reject_symlink_file(self):
+        import tempfile, os
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as d, patch.dict(os.environ,self.environment(d),clear=True):
+            target=pathlib.Path(d)/'target';target.write_text('{}')
+            link=r.diagnostic_directory()/'isolation-execution.json'
+            try: link.symlink_to(target)
+            except OSError as ex:
+                if getattr(ex,'winerror',None)==1314: self.skipTest('Windows symlink privilege unavailable (1314)')
+                raise
+            with self.assertRaises(r.Unsafe): r.read_diagnostic(link.name)
+
+    def test_diagnostics_reject_symlink_directory(self):
+        import tempfile, os
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as d, patch.dict(os.environ,self.environment(d),clear=True):
+            target=pathlib.Path(d)/'target';target.mkdir()
+            link=pathlib.Path(d)/'c3c02b-diagnostics'
+            try: link.symlink_to(target,target_is_directory=True)
+            except OSError as ex:
+                if getattr(ex,'winerror',None)==1314: self.skipTest('Windows symlink privilege unavailable (1314)')
+                raise
+            with self.assertRaises(r.Unsafe): r.diagnostic_directory()
+
+
+
+class H2SyntheticIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        import tempfile, os, json, hashlib
+        from contextlib import ExitStack
+        from unittest.mock import patch
+        self.tmp=tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root=pathlib.Path(self.tmp.name)/'source';self.root.mkdir()
+        self.rt=pathlib.Path(self.tmp.name)/'runtime';self.rt.mkdir()
+        table={}
+        for rel in r.INVENTORY_PATHS:
+            path=self.root/rel;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(b'reviewed')
+            table[rel]=hashlib.sha256(b'reviewed').hexdigest()
+        self.e=IsolationPhaseTests().environment()
+        self.e.update(RUNNER_TEMP=str(self.rt),CONSTIA_B3_INVENTORY=json.dumps(table),
+                      CONSTIA_B3_INVENTORY_SHA256=hashlib.sha256(json.dumps(table,sort_keys=True,separators=(',',':')).encode()).hexdigest())
+        self.stack=ExitStack();self.addCleanup(self.stack.close)
+        self.stack.enter_context(patch.dict(os.environ,self.e,clear=True))
+        self.stack.enter_context(patch.object(r,'__file__',str(self.root/'.github/scripts/c3c02b_runner.py')))
+        self.native=self.stack.enter_context(patch.object(r.subprocess,'run',side_effect=AssertionError('Native process forbidden')))
+        self.popen=self.stack.enter_context(patch.object(r.subprocess,'Popen',side_effect=AssertionError('Native process forbidden')))
+        self.command=self.stack.enter_context(patch.object(r,'command',side_effect=self.fake_command))
+        self.build=self.stack.enter_context(patch.object(r,'build_preflight_image',side_effect=AssertionError('Build boundary forbidden')))
+        self.addCleanup(self.native.assert_not_called)
+        self.addCleanup(self.popen.assert_not_called)
+        import subprocess
+        def empty_query(args,**kw):
+            if args[2]=='ls':return subprocess.CompletedProcess(args,0,b'',b'')
+            return subprocess.CompletedProcess(args,1,b'[]',('Error: No such object: '+args[3]).encode())
+        self.stack.enter_context(patch.object(r,'_bounded_docker',side_effect=empty_query))
+
+    def fake_command(self,args,**kwargs):
+        import json
+        if args[0]=='git' and args[-2:]==['rev-parse','HEAD']:return self.e['CODE_SHA']
+        if args[0]=='git' and args[-2:]==['status','--porcelain']:return ''
+        if args==['docker','context','inspect','default']:
+            return json.dumps([{'Endpoints':{'docker':{'Host':'unix:///var/run/docker.sock'}}}])
+        raise AssertionError('Unexpected synthetic command')
+
+    def invoke(self,operation='run'):
+        import io,contextlib
+        from unittest.mock import patch
+        stream=io.StringIO()
+        with patch.object(r.sys,'argv',['runner',operation,'--phase','isolation-only']),contextlib.redirect_stderr(stream):
+            code=r.main()
+        self.assertNotIn('PRIVATE_SECRET',stream.getvalue())
+        self.assertNotIn('private@example.invalid',stream.getvalue())
+        return code
+
+    def journal(self):
+        s=SafetyTests().session()
+        s.update(phase='isolation-only',policy_sha256=self.e['CONSTIA_B3_INVENTORY_SHA256'],
+                 workflow_sha=self.e['GITHUB_WORKFLOW_SHA'],actor_id=self.e['GITHUB_ACTOR_ID'])
+        return s
+
+    def original(self):
+        return r.read_diagnostic('isolation-execution.json')
+
+    def test_real_head_guard_identifies_mismatch(self):
+        self.command.side_effect=lambda args,**kw:'c'*40
+        self.assertEqual(1,self.invoke())
+        self.assertEqual('HEAD_MISMATCH',self.original()['first_failure']['reason'])
+        self.build.assert_not_called()
+
+    def test_real_worktree_guard_identifies_dirty(self):
+        self.command.side_effect=lambda args,**kw:self.e['CODE_SHA'] if args[-1]=='HEAD' else ' M file.cs'
+        self.assertEqual(1,self.invoke())
+        self.assertEqual('DIRTY',self.original()['first_failure']['reason'])
+        self.build.assert_not_called()
+
+    def test_real_inventory_guard_identifies_modified_bytes(self):
+        (self.root/r.INVENTORY_PATHS[0]).write_bytes(b'changed')
+        self.assertEqual(1,self.invoke())
+        self.assertEqual('INVENTORY_REJECTED',self.original()['first_failure']['code'])
+        self.build.assert_not_called()
+
+    def test_real_engine_guard_identifies_endpoint_rejection(self):
+        fake=self.fake_command
+        self.command.side_effect=lambda args,**kw:'[]' if args[0]=='docker' else fake(args,**kw)
+        self.assertEqual(1,self.invoke())
+        self.assertEqual('ENGINE_REJECTED',self.original()['first_failure']['code'])
+        self.build.assert_not_called()
+
+    def test_real_git_oserror_is_fixed_and_private_message_is_not_emitted(self):
+        self.command.side_effect=OSError('PRIVATE_SECRET private@example.invalid')
+        self.assertEqual(1,self.invoke())
+        self.assertEqual('GIT_REJECTED',self.original()['first_failure']['code'])
+
+    def test_matching_preexisting_journal_is_not_mistaken_for_no_resources(self):
+        import json
+        r.state_path().write_text(json.dumps(self.journal()))
+        self.assertEqual(1,self.invoke())
+        self.assertEqual('PREEXISTING',self.original()['first_failure']['reason'])
+        primary=r.read_diagnostic('isolation-cleanup-primary.json')
+        self.assertEqual('uncertain',primary['cleanup'])
+        self.assertEqual('unknown',primary['cleanup_scope'])
+
+    def test_foreign_journal_is_never_adopted(self):
+        import json
+        journal=self.journal();journal['workflow_sha']='c'*40
+        raw=json.dumps(journal);r.state_path().write_text(raw)
+        self.assertEqual(1,self.invoke())
+        self.assertEqual(raw,r.state_path().read_text())
+        self.assertEqual('uncertain',r.read_diagnostic('isolation-cleanup-primary.json')['cleanup'])
+
+    def test_truncated_journal_remains_uncertain(self):
+        r.state_path().write_text('{"schema":')
+        self.assertEqual(1,self.invoke('cleanup'))
+        final=r.read_diagnostic('isolation-cleanup-final.json')
+        self.assertIsNone(final['creation_attempted'])
+        self.assertEqual('uncertain',final['cleanup'])
+        self.assertEqual('JOURNAL_REJECTED',final['operation_failure']['code'])
+
+    def test_initial_journal_persistence_failure_does_not_dispatch_creation(self):
+
+        from unittest.mock import patch
+        actual=r._publish_immutable_record_fd
+        def publish(path,*args):
+            if pathlib.Path(path)==r.state_path():raise OSError('PRIVATE_SECRET')
+            return actual(path,*args)
+        with patch.object(r,'_publish_immutable_record_fd',side_effect=publish):
+            self.assertEqual(1,self.invoke())
+        self.assertEqual('JOURNAL_WRITE_FAILED',self.original()['first_failure']['code'])
+        self.assertFalse(self.original()['creation_attempted']);self.build.assert_not_called()
+
+    def test_intent_write_failure_precedes_dispatch(self):
+
+        from unittest.mock import patch
+        actual=r._publish_immutable_record_fd
+        def publish(path,*args):
+            if pathlib.Path(path)==r.state_path():raise OSError('PRIVATE_SECRET')
+            return actual(path,*args)
+        with patch.object(r,'_publish_immutable_record_fd',side_effect=publish):
+            self.assertEqual(1,self.invoke())
+        self.assertEqual('failed_before_creation',self.original()['execution'])
+        self.assertFalse(self.original()['creation_attempted'])
+        self.assertFalse(any(call.args[0][:2]==['docker','build'] for call in self.command.call_args_list))
+
+    def test_response_loss_after_dispatch_preserves_first_failure_and_uncertainty(self):
+        import subprocess
+        from unittest.mock import patch
+        fake=self.fake_command
+        def command(args,**kwargs):
+            if args[:2]==['docker','build']:raise subprocess.TimeoutExpired(['synthetic'],1)
+            return fake(args,**kwargs)
+        self.command.side_effect=command
+        self.build.side_effect=lambda root,s,la:r.create_resource(s,'app_image_id',['docker','build','synthetic'])
+        with patch.object(r,'lookup',return_value=None):
+            self.assertEqual(1,self.invoke())
+        original=self.original();primary=r.read_diagnostic('isolation-cleanup-primary.json')
+        self.assertEqual('failed_after_creation_attempt',original['execution'])
+        self.assertTrue(original['creation_attempted'])
+        self.assertEqual('RESOURCE_UNVERIFIED',original['first_failure']['code'])
+        self.assertEqual(original['first_failure'],primary['first_failure'])
+        self.assertEqual('uncertain',primary['cleanup'])
+
+    def test_corrupt_execution_does_not_skip_cleanup_or_invent_success(self):
+        from unittest.mock import patch
+        self.command.side_effect=lambda args,**kw:'c'*40
+        self.assertEqual(1,self.invoke())
+        path=r.diagnostic_directory()/'isolation-execution.json';path.write_text('{"unexpected":true}')
+        with patch.object(r,'_cleanup_diagnostic',wraps=r._cleanup_diagnostic) as cleanup:
+            self.assertEqual(1,self.invoke('cleanup'));cleanup.assert_called_once()
+        final=r.read_diagnostic('isolation-cleanup-final.json')
+        self.assertIsNone(final['execution'])
+        self.assertEqual('uncertain',final['cleanup'])
+
+    def test_hash_binding_rejects_changed_original_and_foreign_identity(self):
+        import json
+        self.command.side_effect=lambda args,**kw:'c'*40
+        self.assertEqual(1,self.invoke())
+        p=r.diagnostic_directory()/'isolation-execution.json'
+        rec=json.loads(p.read_text());rec['identity']['run_id']='999';p.write_text(json.dumps(rec))
+        with self.assertRaises(r.Unsafe):r.read_diagnostic('isolation-cleanup-primary.json')
+
+    def test_absent_and_corrupt_proof_are_never_L2_validated(self):
+        c=r.DiagnosticContext()
+        r._candidate_proof(c)
+        self.assertEqual('absent',c.proof_state)
+        (r.public_directory()/'isolation.json').write_text('{"private":"PRIVATE_SECRET"}')
+        r._candidate_proof(c)
+        self.assertEqual('invalid',c.proof_state)
+        self.assertEqual('incomplete',c.evidence)
+
+    def test_unexpected_artifact_and_symlink_root_checks_fail_closed(self):
+        (r.diagnostic_directory()/'unexpected.json').write_text('{}')
+        with self.assertRaises(r.Unsafe):r.diagnostic_directory()
+
+    def test_every_observed_stage_failure_maps_to_fixed_diagnostic(self):
+        import contextlib,io
+        for stage,(code,reason) in r._DIAGNOSTIC_DEFAULTS.items():
+            with self.subTest(stage=stage):
+                c=r.DiagnosticContext();active=r.ACTIVE_DIAGNOSTIC.set(c)
+                try:
+                    with contextlib.redirect_stderr(io.StringIO()),self.assertRaises(OSError):
+                        r.diagnostic_call(stage,lambda:(_ for _ in ()).throw(OSError('PRIVATE_SECRET')))
+                    self.assertEqual(dict(stage=stage,code=code,reason=reason),c.first_failure)
+                finally:r.ACTIVE_DIAGNOSTIC.reset(active)
+
+    def test_cleanup_failed_remove_is_distinct_from_uncertain_lookup(self):
+
+        from unittest.mock import patch
+        def check(case):
+            case.populate(('network_id',));case.witness();actual=case.engine_command
+            def command(args,**kw):
+                if 'rm' in args:raise OSError('PRIVATE_SECRET')
+                return actual(args,**kw)
+            with patch.object(r,'command',side_effect=command):case.assertEqual('failed',case.clean())
+            record=r.make_diagnostic('cleanup_final',case.c,case.c.witness_sha256)
+            r.write_diagnostic('isolation-cleanup-final.json',record)
+            case.assertEqual('CLEANUP_FAILED',r.read_diagnostic('isolation-cleanup-final.json')['operation_failure']['code'])
+        _with_protocol_fixture(check)
+
+
+
+    def test_successful_synthetic_execution_is_only_candidate_evidence(self):
+        import json
+        def simulated(phase):
+            c=r.ACTIVE_DIAGNOSTIC.get();c.creation_attempted=True
+            _simulate_manifest_dispatch(self.journal())
+            report=IsolationPhaseTests().report()
+            report['identity']['policy_sha256']=self.e['CONSTIA_B3_INVENTORY_SHA256']
+            (r.public_directory()/'isolation.json').write_text(json.dumps(report))
+        self.build.side_effect=None
+        from unittest.mock import patch
+        with patch.object(r,'run_isolation',side_effect=simulated):
+            self.assertEqual(0,self.invoke())
+        original=self.original()
+        self.assertEqual('completed',original['execution'])
+        self.assertEqual('candidate_valid',original['proof_state'])
+        self.assertEqual('incomplete',original['evidence'])
+        self.assertEqual('verified',r.read_diagnostic('isolation-cleanup-primary.json')['cleanup'])
+        self.assertEqual(0,self.invoke('cleanup'))
+        self.assertEqual('completed',r.read_diagnostic('isolation-cleanup-final.json')['execution'])
+
+    def test_false_cleanup_result_cannot_certify_cleanup(self):
+        from unittest.mock import patch
+        self.command.side_effect=lambda args,**kw:'c'*40
+        with patch.object(r,'cleanup',return_value=False):
+            self.assertEqual(1,self.invoke())
+        self.assertNotEqual('not_applicable',r.read_diagnostic('isolation-cleanup-primary.json')['cleanup'])
+        self.assertNotEqual('verified',r.read_diagnostic('isolation-cleanup-primary.json')['cleanup'])
+
+    def test_existing_execution_blocks_repeat_run_before_dispatch(self):
+        from unittest.mock import patch
+        self.command.side_effect=lambda args,**kw:'c'*40
+        self.assertEqual(1,self.invoke())
+        original=(r.diagnostic_directory()/'isolation-execution.json').read_bytes()
+        with patch.object(r,'run_isolation',side_effect=AssertionError('Repeat run forbidden')) as run:
+            self.assertEqual(1,self.invoke());run.assert_not_called()
+        self.assertEqual(original,(r.diagnostic_directory()/'isolation-execution.json').read_bytes())
+
+
+
+    def test_creation_error_precedes_failed_reconciliation_persistence(self):
+
+        import subprocess
+        from unittest.mock import patch
+        def check(case):
+            r._admit_session(case.s);actual=r._observe_session;events=[]
+            def observe(state):
+                events.append(True)
+                if len(events)>1:raise OSError('PRIVATE_SECRET')
+                return actual(state)
+            with patch.object(r,'_observe_session',side_effect=observe),patch.object(r,'command',side_effect=subprocess.TimeoutExpired(['synthetic'],1)):
+                with case.assertRaises(subprocess.TimeoutExpired):r.create_resource(case.s,'network_id',['docker','network','create','synthetic'])
+            case.assertTrue(case.c.creation_attempted)
+            case.assertEqual('RESOURCE_UNVERIFIED',case.c.first_failure['code'])
+        _with_protocol_fixture(check)
+
+    def test_corrupt_primary_does_not_erase_valid_execution_or_create_bad_binding(self):
+        self.command.side_effect=lambda args,**kw:'c'*40
+        self.assertEqual(1,self.invoke())
+        original=self.original()
+        (r.diagnostic_directory()/'isolation-cleanup-primary.json').write_text('{')
+        self.assertEqual(1,self.invoke('cleanup'))
+        final=r.read_diagnostic('isolation-cleanup-final.json')
+        self.assertEqual(original['execution'],final['execution'])
+        self.assertEqual(original['creation_attempted'],final['creation_attempted'])
+        self.assertEqual(original['first_failure'],final['first_failure'])
+
+    def test_previous_journal_observation_cannot_become_not_applicable(self):
+        import json
+        r.state_path().write_text(json.dumps(self.journal()))
+        self.assertEqual(1,self.invoke())
+        r.state_path().unlink()
+        self.assertEqual(1,self.invoke('cleanup'))
+        final=r.read_diagnostic('isolation-cleanup-final.json')
+        self.assertEqual('uncertain',final['cleanup'])
+        self.assertNotEqual('not_applicable',final['cleanup'])
+
+    def test_deleted_proof_is_not_reused_as_current_candidate(self):
+        import json
+        from unittest.mock import patch
+        def simulated(phase):
+            r.ACTIVE_DIAGNOSTIC.get().creation_attempted=True
+            _simulate_manifest_dispatch(self.journal())
+            report=IsolationPhaseTests().report()
+            report['identity']['policy_sha256']=self.e['CONSTIA_B3_INVENTORY_SHA256']
+            (r.public_directory()/'isolation.json').write_text(json.dumps(report))
+        with patch.object(r,'run_isolation',side_effect=simulated):
+            self.assertEqual(0,self.invoke())
+        (r.public_directory()/'isolation.json').unlink()
+        self.invoke('cleanup')
+        final=r.read_diagnostic('isolation-cleanup-final.json')
+        self.assertNotEqual('candidate_valid',final['proof_state'])
+        self.assertIsNone(final['proof_sha256'])
+
+
+
+    def test_cleanup_reads_primary_content_and_hash_in_one_snapshot(self):
+        from unittest.mock import patch
+        self.command.side_effect=lambda args,**kw:'c'*40
+        self.assertEqual(1,self.invoke())
+        with patch.object(r,'_read_diagnostic',wraps=r._read_diagnostic) as read:
+            self.assertEqual(0,self.invoke('cleanup'))
+        names=[call.args[0] for call in read.call_args_list]
+        self.assertEqual(1,names.count('isolation-cleanup-primary.json'))
+        self.assertLessEqual(names.count('isolation-execution.json'),2)
+
+
+
+    def test_symlink_journal_observation_never_proves_non_adoption(self):
+        from unittest.mock import patch
+        c=r.DiagnosticContext();active=r.ACTIVE_DIAGNOSTIC.set(c)
+        try:
+            with patch.object(r,'_no_link',return_value=False):
+                with self.assertRaises(r.Unsafe):r._empty_journal()
+            self.assertTrue(c.journal_seen)
+        finally:r.ACTIVE_DIAGNOSTIC.reset(active)
+
+    def test_diagnostic_directory_failure_is_not_reported_as_authorization_rejection(self):
+        import io,contextlib
+        from unittest.mock import patch
+        (r.diagnostic_directory()/'unexpected.json').write_text('{}')
+        stream=io.StringIO()
+        with patch.object(r.sys,'argv',['runner','run','--phase','isolation-only']),contextlib.redirect_stderr(stream):
+            self.assertEqual(1,r.main())
+        self.assertIn('EVIDENCE_INVALID',stream.getvalue())
+        self.assertNotIn('AUTH_REJECTED',stream.getvalue())
+
+
+
+class B3RegressionTests(unittest.TestCase):
+    setUp = H2SyntheticIntegrationTests.setUp
+    fake_command = H2SyntheticIntegrationTests.fake_command
+    invoke = H2SyntheticIntegrationTests.invoke
+    journal = H2SyntheticIntegrationTests.journal
+    original = H2SyntheticIntegrationTests.original
+
+    def test_b3_journal_disappears_inside_cleanup_is_uncertain(self):
+        from unittest.mock import patch
+        def check(case):
+            case.populate(('network_id',));case.witness()
+            actual=r.cleanup
+            def vanished(*args,**kwargs):
+                r.state_path().unlink()
+                return actual(*args,**kwargs)
+            with patch.object(r,'cleanup',side_effect=vanished) as attempt:
+                status=case.clean()
+            attempt.assert_called_once()
+            case.assertEqual('uncertain',status)
+            case.assertTrue(case.c.journal_seen)
+            case.assertIsNotNone(case.c.operation_failure)
+            case.assertEqual([],case.removals)
+            case.assertTrue(case.objects)
+        _with_protocol_fixture(check)
+
+    def broken_channel_case(self, error):
+        import io,json,contextlib
+        from unittest.mock import patch
+        class Broken:
+            def write(self,text):raise error
+            def flush(self):pass
+        def simulated(phase):
+            _simulate_manifest_dispatch(self.journal())
+        with patch.object(r,'run_isolation',side_effect=simulated), \
+             patch.object(r,'_candidate_proof',side_effect=OSError('PRIVATE_SECRET')), \
+             patch.object(r,'_cleanup_diagnostic',wraps=r._cleanup_diagnostic) as cleanup, \
+             patch.object(r.sys,'argv',['runner','run','--phase',r.ISOLATION]), \
+             patch.object(r.sys,'stderr',Broken()):
+            try:result=r.main()
+            except Exception as ex:self.fail('Diagnostic emission escaped: '+type(ex).__name__)
+        self.assertEqual(1,result)
+        cleanup.assert_called_once()
+        rec=self.original()
+        self.assertEqual('EVIDENCE_INVALID',rec['first_failure']['code'])
+        self.assertEqual('completed',rec['execution'])
+        self.assertNotIn('PRIVATE_SECRET',str(rec))
+
+    def test_b3_broken_pipe_does_not_skip_cleanup(self):
+        self.broken_channel_case(BrokenPipeError('PRIVATE_SECRET'))
+
+    def test_b3_oserror_logging_does_not_skip_cleanup(self):
+        self.broken_channel_case(OSError('PRIVATE_SECRET'))
+
+    def test_b3_ownership_failure_precedes_later_persistence_failure(self):
+
+        from unittest.mock import patch
+        def check(case):
+            r._admit_session(case.s)
+            foreign=dict(Id='sha256:'+'e'*64,RepoTags=[r.resource_specs(case.s)['app_image_id'][1]],Config=dict(Labels={'constia.owner':'foreign'}))
+            with patch.object(r,'command',return_value='sha256:'+'e'*64),patch.object(r,'lookup',return_value=foreign):
+                with case.assertRaises(r.Unsafe):r.create_resource(case.s,'app_image_id',['docker','build','synthetic'])
+            r._freeze_producer(case.c)
+            first=copy.deepcopy(case.c.first_failure)
+            case.c.execution='failed_after_creation_attempt'
+            with patch.object(r,'write_diagnostic',side_effect=OSError('PRIVATE_SECRET')):
+                case.assertIsNone(r._try_write_diagnostic('isolation-execution.json',r.make_diagnostic('execution',case.c),case.c))
+            case.assertTrue(case.c.creation_attempted);case.assertEqual(first,case.c.first_failure)
+            case.assertEqual('RESOURCE_UNVERIFIED',first['code'])
+        _with_protocol_fixture(check)
+
+    def seed_linked_records(self, contradictory=False):
+        import copy,hashlib
+        c=r.DiagnosticContext();c.execution='failed_before_creation'
+        c.first_failure=dict(stage='git_head',code='GIT_REJECTED',reason='HEAD_MISMATCH')
+        original=r.make_diagnostic('execution',c)
+        execution_hash=r.write_diagnostic('isolation-execution.json',original)
+        primary=r.make_diagnostic('cleanup_primary',c,execution_hash)
+        if contradictory:
+            primary['first_failure']=dict(stage='git_status',code='GIT_REJECTED',reason='DIRTY')
+        primary_hash=r.write_diagnostic('isolation-cleanup-primary.json',primary)
+        final=r.make_diagnostic('cleanup_final',c,execution_hash,primary_hash)
+        r.write_diagnostic('isolation-cleanup-final.json',final)
+
+    def test_b3_final_rejects_semantically_invalid_primary_with_correct_hash(self):
+        self.seed_linked_records(contradictory=True)
+        with self.assertRaises(r.Unsafe):r.read_diagnostic('isolation-cleanup-primary.json')
+        with self.assertRaises(r.Unsafe):r.read_diagnostic('isolation-cleanup-final.json')
+
+    def test_b3_final_accepts_valid_primary_chain(self):
+        self.seed_linked_records()
+        final=r.read_diagnostic('isolation-cleanup-final.json')
+        self.assertEqual('HEAD_MISMATCH',final['first_failure']['reason'])
+
+    def seed_partial_publication(self):
+        from unittest.mock import patch
+        original_write=r.write_diagnostic
+        def write(name,record):
+            if name=='isolation-execution.json':raise OSError('PRIVATE_SECRET')
+            return original_write(name,record)
+        self.command.side_effect=lambda args,**kw:'c'*40
+        with patch.object(r,'write_diagnostic',side_effect=write):
+            self.assertEqual(1,self.invoke())
+        return r.read_diagnostic('isolation-cleanup-primary.json')
+
+    def test_b3_final_recovers_available_first_failure_and_unavailable_state(self):
+        primary=self.seed_partial_publication()
+        self.assertEqual('unavailable',primary['evidence'])
+        self.assertFalse((r.diagnostic_directory()/'isolation-execution.json').exists())
+        before=(r.diagnostic_directory()/'isolation-cleanup-primary.json').read_bytes()
+        self.invoke('cleanup')
+        final=r.read_diagnostic('isolation-cleanup-final.json')
+        self.assertEqual(primary['first_failure'],final['first_failure'])
+        self.assertEqual(primary['execution'],final['execution'])
+        self.assertEqual(primary['creation_attempted'],final['creation_attempted'])
+        self.assertEqual('unavailable',final['evidence'])
+        self.assertEqual(before,(r.diagnostic_directory()/'isolation-cleanup-primary.json').read_bytes())
+
+    def test_b3_corrupt_primary_is_not_used_as_recovered_snapshot(self):
+        self.seed_partial_publication()
+        (r.diagnostic_directory()/'isolation-cleanup-primary.json').write_text('{"schema":1,"schema":1}')
+        self.assertEqual(1,self.invoke('cleanup'))
+        final=r.read_diagnostic('isolation-cleanup-final.json')
+        self.assertIsNone(final['execution'])
+        self.assertIsNone(final['first_failure'])
+        self.assertIsNone(final['primary_sha256'])
+        self.assertEqual('EVIDENCE_INVALID',final['operation_failure']['code'])
+
+
+
+# B4JournalBindingTests: mutable-generation fixtures replaced by schema3 protocol coverage R01-R24.
+
+
+# B5JournalPersistenceTests: mutable-generation fixtures replaced by schema3 protocol coverage R01-R24.
+
+
+# B6JournalConsistencyTests: mutable-generation fixtures replaced by schema3 protocol coverage R01-R24.
+
+
+class B9RedRegressionTests(unittest.TestCase):
+    setUp = H2SyntheticIntegrationTests.setUp
+    fake_command = H2SyntheticIntegrationTests.fake_command
+    journal = H2SyntheticIntegrationTests.journal
+
+    def test_R01_legacy_tail_loss_after_restart_never_certifies(self):
+        import json,hashlib,contextlib,io,importlib.util
+        from unittest.mock import patch
+        s=self.journal();p=r.state_path();p.write_text(json.dumps(s))
+        owned=copy.deepcopy(s);owned['network_id']='e'*64
+        owned['planned']['network_id']=dict(kind='network',name=s['network_name'],phase='owned',id='e'*64)
+        # Lost v1/v2 leave the actual old anchor, while a resource remains alive.
+        c=r.DiagnosticContext();c.execution='failed_after_creation_attempt';c.creation_attempted=True
+        c.journal_seen=True;c.journal_state='valid'
+        c.first_failure=dict(stage='connectivity',code='CONNECTIVITY_UNVERIFIED',reason='CHECK_FAILED')
+        r.write_diagnostic('isolation-execution.json',r.make_diagnostic('execution',c))
+        spec=importlib.util.spec_from_file_location('fresh_b9',pathlib.Path(__file__).with_name('c3c02b_runner.py'))
+        fresh=importlib.util.module_from_spec(spec);spec.loader.exec_module(fresh)
+        with _model_publication(fresh),patch.object(fresh.sys,'argv',['runner','cleanup','--phase','isolation-only']), \
+             patch.object(fresh,'lookup',return_value={'Id':'e'*64}),patch.object(fresh,'command',return_value=''), \
+             patch.object(fresh.subprocess,'run',side_effect=AssertionError('No native processes')), \
+             contextlib.redirect_stderr(io.StringIO()):
+            fresh.main()
+            result=fresh.read_diagnostic('isolation-cleanup-final.json')
+        self.assertNotEqual('verified',result['cleanup'])
+
+    def test_R13_published_hash_never_refers_to_substituted_bytes(self):
+        import hashlib
+        from unittest.mock import patch
+        c=r.DiagnosticContext();record=r.make_diagnostic('execution',c);actual=r.os.link
+        foreign=b'FOREIGN_SYNTHETIC_EVIDENCE';injected=[]
+        def replace(source,target,**kw):
+            source=pathlib.Path(source);source.unlink();source.write_bytes(foreign);injected.append(source)
+            return actual(source,target,**kw)
+        error=None;digest=None
+        try:
+            with patch.object(r.os,'link',side_effect=replace):
+                digest=r.write_diagnostic('isolation-execution.json',record)
+        except (r.Unsafe,OSError):error=True
+        path=r.diagnostic_directory()/'isolation-execution.json'
+        self.assertTrue(error or digest==hashlib.sha256(path.read_bytes()).hexdigest())
+
+    def test_R16_failed_publication_never_unlinks_substituted_temporary(self):
+        from unittest.mock import patch
+        c=r.DiagnosticContext();record=r.make_diagnostic('execution',c);injected=[]
+        foreign=b'FOREIGN_SYNTHETIC_EVIDENCE'
+        def replace(source,target,**kw):
+            source=pathlib.Path(source);source.unlink();source.write_bytes(foreign);injected.append(source)
+            raise OSError('synthetic failure')
+        with patch.object(r.os,'link',side_effect=replace):
+            with self.assertRaises((r.Unsafe,OSError)):
+                r.write_diagnostic('isolation-execution.json',record)
+        self.assertTrue(injected[0].exists())
+        self.assertEqual(foreign,injected[0].read_bytes())
+
+
+# Native-boundary simulation ONLY in this test file. No production switch.
+class _WindowsPublicationModel:
+    storage = None
+    def __init__(self,module,path):
+        self.module=module;self.path=pathlib.Path(path);self.backings={}
+        self.bound=(self.path.stat().st_dev,self.path.stat().st_ino)
+    def __enter__(self):return self
+    def __exit__(self,*unused):pass
+    def check(self):
+        st=self.path.lstat()
+        if self.path.is_symlink() or (st.st_dev,st.st_ino)!=self.bound:raise self.module.Unsafe('Test directory changed')
+        if self.path.name=='c3c02b-diagnostics' and any(p.name not in self.module.DIAGNOSTIC_FILES for p in self.path.iterdir()):
+            raise self.module.Unsafe('Unexpected test diagnostic')
+    def anonymous(self):
+        import os,tempfile
+        fd,name=tempfile.mkstemp(dir=self.storage);os.close(fd);pathlib.Path(name).unlink()
+        fd=os.open(name,os.O_RDWR|os.O_CREAT|os.O_EXCL|os.O_TEMPORARY|os.O_BINARY,0o600)
+        self.backings[fd]=pathlib.Path(name)
+        return fd
+    def stat_fd(self,fd):
+        import os,types
+        st=os.fstat(fd)
+        if fd not in self.backings:return st
+        fields={k:getattr(st,k) for k in dir(st) if k.startswith('st_')}
+        fields['st_nlink']=0
+        return types.SimpleNamespace(**fields)
+    def link(self,fd,name):
+        import os
+        source=self.backings[fd];original=os.fstat(fd)
+        os.link(source,self.path/name,follow_symlinks=False)
+        # This fixture models the native link, never a production fallback.
+        now=source.lstat()
+        if (now.st_dev,now.st_ino)==(original.st_dev,original.st_ino):
+            source.unlink();self.backings.pop(fd)
+    def sync(self):pass
+    def stat_name(self,name):return (self.path/name).lstat()
+
+_TEST_NATIVE_STACK=None
+def _model_publication(module):
+    import contextlib,os
+    from unittest.mock import patch
+    @contextlib.contextmanager
+    def model():
+        if os.name!='nt' or not hasattr(module,'_publication_directory'):
+            yield;return
+        with patch.object(module,'_publication_directory',side_effect=lambda p:_WindowsPublicationModel(module,p)):
+            yield
+    return model()
+
+def setUpModule():
+    import contextlib,tempfile,os
+    global _TEST_NATIVE_STACK
+    if os.name=='nt' and hasattr(r,'_publication_directory'):
+        _TEST_NATIVE_STACK=contextlib.ExitStack()
+        _WindowsPublicationModel.storage=_TEST_NATIVE_STACK.enter_context(tempfile.TemporaryDirectory())
+        _TEST_NATIVE_STACK.enter_context(_model_publication(r))
+
+def tearDownModule():
+    if _TEST_NATIVE_STACK is not None:_TEST_NATIVE_STACK.close()
+
+
+@unittest.skipUnless(r.sys.platform=='linux','Native Linux filesystem gate pending on Windows')
+class B9NativePublicationGateTests(unittest.TestCase):
+    setUp=H2SyntheticIntegrationTests.setUp
+    fake_command=H2SyntheticIntegrationTests.fake_command
+
+    def test_native_anonymous_link_hash_inode_and_descriptor_close(self):
+        import hashlib,os
+        from unittest.mock import patch
+        seen=[];actual=r._LinuxPublicationDirectory.anonymous
+        def anonymous(directory):
+            fd=actual(directory);self.assertEqual(0,os.fstat(fd).st_nlink);seen.append(fd);return fd
+        with patch.object(r._LinuxPublicationDirectory,'anonymous',anonymous):
+            digest=r.write_diagnostic('isolation-execution.json',r.make_diagnostic('execution',r.DiagnosticContext()))
+        p=r.diagnostic_directory()/'isolation-execution.json'
+        self.assertEqual(digest,hashlib.sha256(p.read_bytes()).hexdigest());self.assertEqual(1,p.stat().st_nlink)
+        for fd in seen:
+            with self.assertRaises(OSError):os.fstat(fd)
+
+    def test_native_existing_destination_is_preserved(self):
+        p=r.diagnostic_directory()/'isolation-execution.json';p.write_bytes(b'FOREIGN')
+        with self.assertRaises(FileExistsError):r.write_diagnostic(p.name,r.make_diagnostic('execution',r.DiagnosticContext()))
+        self.assertEqual(b'FOREIGN',p.read_bytes())
+
+    def test_native_short_writes_are_completed(self):
+        from unittest.mock import patch
+        actual=r.os.write
+        with patch.object(r.os,'write',side_effect=lambda fd,data:actual(fd,data[:7])):
+            digest=r.write_diagnostic('isolation-execution.json',r.make_diagnostic('execution',r.DiagnosticContext()))
+        import hashlib
+        self.assertEqual(digest,hashlib.sha256((r.diagnostic_directory()/'isolation-execution.json').read_bytes()).hexdigest())
+
+    def test_native_file_sync_failure_closes_anonymous_fd(self):
+        import os
+        from unittest.mock import patch
+        seen=[];actual=r._LinuxPublicationDirectory.anonymous
+        def anonymous(directory):
+            fd=actual(directory);seen.append(fd);return fd
+        with patch.object(r._LinuxPublicationDirectory,'anonymous',anonymous),patch.object(r.os,'fsync',side_effect=OSError('synthetic')):
+            with self.assertRaises(OSError):r.write_diagnostic('isolation-execution.json',r.make_diagnostic('execution',r.DiagnosticContext()))
+        self.assertFalse((r.diagnostic_directory()/'isolation-execution.json').exists())
+        for fd in seen:
+            with self.assertRaises(OSError):os.fstat(fd)
+
+    def test_native_failed_link_preserves_foreign_named_temporary(self):
+        from unittest.mock import patch
+        old=r.diagnostic_directory()/'.isolation-execution.json.tmp'
+        def link(directory,fd,name):
+            old.write_bytes(b'FOREIGN');raise OSError('synthetic')
+        with patch.object(r._LinuxPublicationDirectory,'link',link):
+            with self.assertRaises(OSError):r.write_diagnostic('isolation-execution.json',r.make_diagnostic('execution',r.DiagnosticContext()))
+        self.assertEqual(b'FOREIGN',old.read_bytes())
+
+    def test_native_directory_sync_failure_never_deletes_published_file(self):
+        from unittest.mock import patch
+        out=r.diagnostic_directory()
+        with patch.object(r._LinuxPublicationDirectory,'sync',side_effect=OSError('synthetic')):
+            with self.assertRaises(OSError):r.write_diagnostic('isolation-execution.json',r.make_diagnostic('execution',r.DiagnosticContext()))
+        self.assertTrue((out/'isolation-execution.json').is_file())
+
+
+class B9ProtocolTests(unittest.TestCase):
+    setUpBase=H2SyntheticIntegrationTests.setUp
+    fake_command=H2SyntheticIntegrationTests.fake_command
+    journal=H2SyntheticIntegrationTests.journal
+    def setUp(self):
+        import contextlib
+        from unittest.mock import patch
+        self.setUpBase()
+        self.objects={};self.removals=[];self.queries=[];self.enumeration_override=None
+        self.command.side_effect=self.engine_command
+        self.query_patch=self.stack.enter_context(patch.object(r,'_bounded_docker',side_effect=self.engine_query))
+        self.c=r.DiagnosticContext();token=r.ACTIVE_DIAGNOSTIC.set(self.c)
+        self.addCleanup(r.ACTIVE_DIAGNOSTIC.reset,token)
+        self.s=self.journal()
+
+    def engine_command(self,args,**kw):
+        import copy
+        if args[:1]==['docker'] and 'rm' in args:
+            self.removals.append(args)
+            kind=args[1];identifier=args[-1]
+            self.objects.pop((kind,identifier),None)
+            if kind=='container':
+                for (k,_),obj in self.objects.items():
+                    if k=='network':obj['Containers'].pop(identifier,None)
+            return ''
+        return self.fake_command(args,**kw)
+
+    def engine_query(self,args,**kw):
+        import subprocess,json
+        self.queries.append(list(args));kind=args[1]
+        if args[2]=='ls':
+            self.assertIn('label=constia.owner=c3c02b',args)
+            self.assertIn('label=constia.run='+self.e['GITHUB_RUN_ID'],args)
+            self.assertFalse(any('constia.sha=' in x or 'constia.nonce=' in x for x in args))
+            if self.enumeration_override is not None:
+                ids=self.enumeration_override.get(kind,[])
+            else:
+                ids=[]
+                for (k,identifier),obj in self.objects.items():
+                    lab=obj.get('Config',{}).get('Labels',{}) if k in ('image','container') else obj.get('Labels',{})
+                    if k==kind and lab.get('constia.owner')=='c3c02b' and lab.get('constia.run')==self.e['GITHUB_RUN_ID']:
+                        ids.append(identifier)
+            return subprocess.CompletedProcess(args,0,('\n'.join(ids)).encode(),b'')
+        self.assertEqual('inspect',args[2]);query=args[3];found=[]
+        for (k,identifier),obj in self.objects.items():
+            if k==kind and (identifier==query or (query in obj.get('RepoTags',[]) if k=='image' else obj.get('Name','').lstrip('/')==query)):
+                found.append(obj)
+        if not found:return subprocess.CompletedProcess(args,1,b'[]',('Error: No such object: '+query).encode())
+        return subprocess.CompletedProcess(args,0,json.dumps(found).encode(),b'')
+
+    def populate(self,roles=('app_image_id','network_id','app_id','peer_id','denied_id')):
+        import copy
+        names=r.resource_specs(self.s);lab=r.labels(self.s)
+        image='sha256:'+'a'*64;network='e'*64
+        rows={
+            'app_image_id':dict(Id=image,RepoTags=[names['app_image_id'][1]],Config=dict(Labels=lab.copy())),
+            'network_id':dict(Id=network,Name=names['network_id'][1],Labels=lab.copy(),Internal=True,Driver='bridge',
+                              EnableIPv6=False,IPAM=dict(Config=[dict(Subnet='172.31.240.0/28',Gateway='172.31.240.1')]),Containers={})}
+        for n,key in enumerate(('app_id','peer_id','denied_id'),1):
+            identifier=str(n)*64;ip='172.31.240.'+str(n+1)
+            rows[key]=dict(Id=identifier,Name='/'+names[key][1],Image=image,Config=dict(Labels=lab.copy(),Env=[]),
+                HostConfig=dict(Privileged=False,Binds=None,ReadonlyRootfs=True,NetworkMode=names['network_id'][1],
+                    CapDrop=['ALL'],CapAdd=None,PortBindings={},SecurityOpt=['no-new-privileges'],PidMode='private',IpcMode='private'),
+                Mounts=[dict(Type='tmpfs')],NetworkSettings=dict(Networks={
+                    names['network_id'][1]:dict(NetworkID=network,IPAddress=ip)}))
+            if key in roles:rows['network_id']['Containers'][identifier]=dict(Name=names[key][1],IPv4Address=ip+'/28',IPv6Address='')
+        self.rows=rows
+        for key in roles:self.objects[(names[key][0],rows[key]['Id'])]=copy.deepcopy(rows[key])
+
+    def witness(self,state='quiescent'):
+        self.ctrl=r._admit_session(self.s)
+        if state!='no_dispatch':
+            roles=[key for key in r.resource_specs(self.s) if key in getattr(self,'rows',{}) and
+                   (r.resource_specs(self.s)[key][0],self.rows[key]['Id']) in self.objects] or ['network_id']
+            for key in roles:
+                self.ctrl.begin(self.s,key)
+                if state!='unresolved':self.ctrl.acknowledge(key)
+        r._freeze_producer(self.c)
+        if state=='unknown':self.c.session['producer_state']='unknown'
+        self.c.execution='failed_after_creation_attempt' if self.c.creation_attempted else 'failed_before_creation'
+        self.c.first_failure=dict(stage='connectivity',code='CONNECTIVITY_UNVERIFIED',reason='CHECK_FAILED')
+
+        self.c.witness_sha256=r.write_diagnostic('isolation-execution.json',r.make_diagnostic('execution',self.c))
+        return self.ctrl
+
+    def clean(self):
+        import io,contextlib
+        with contextlib.redirect_stderr(io.StringIO()) as output:r._cleanup_diagnostic(self.c)
+        self.assertNotIn('PRIVATE_SECRET',output.getvalue())
+        return self.c.cleanup
+
+    def fresh_case(self,callback):
+        case=B9ProtocolTests('test_R03_missing_or_wrong_binding')
+        case.setUp()
+        try:callback(case)
+        finally:case.doCleanups()
+
+    def test_R01_restart_does_not_lose_potential_resources(self):
+        import importlib.util,contextlib,io
+        from unittest.mock import patch
+        self.populate(('network_id',));self.witness()
+        # Legacy hints disappear; schema3 remains complete.
+        p=r.state_path();hint=p.with_name(p.name+'.legacy.v0001.json');hint.write_text('{}');hint.unlink()
+        spec=importlib.util.spec_from_file_location('fresh_protocol',pathlib.Path(__file__).with_name('c3c02b_runner.py'))
+        fresh=importlib.util.module_from_spec(spec);spec.loader.exec_module(fresh)
+        with _model_publication(fresh),patch.object(fresh,'_bounded_docker',side_effect=self.engine_query), \
+             patch.object(fresh,'command',side_effect=self.engine_command),patch.object(fresh.sys,'argv',['runner','cleanup','--phase','isolation-only']), \
+             contextlib.redirect_stderr(io.StringIO()):
+            code=fresh.main();final=fresh.read_diagnostic('isolation-cleanup-final.json')
+        self.assertEqual(0,code);self.assertEqual('verified',final['cleanup'])
+        self.assertEqual([],list(self.objects));self.assertTrue(self.queries)
+        self.assertEqual([['docker','network','rm','e'*64]],self.removals)
+        self.assertEqual(self.c.first_failure,final['first_failure'])
+
+    def test_R02_partial_hint_loss_cannot_shrink_universe(self):
+        self.populate(('app_image_id','network_id'));self.witness()
+        p=r.state_path();p.with_name(p.name+'.legacy.v0001.json').write_text('partial legacy observation')
+        self.assertEqual('verified',self.clean());self.assertEqual(2,len(self.removals))
+        manifest,_,_=r._read_manifest();self.assertEqual(5,len(manifest['resources']))
+
+    def test_R03_missing_or_wrong_binding(self):
+        import json
+        def scenario(case,kind):
+            case.populate(('network_id',));case.witness()
+            if kind=='missing_manifest':r.state_path().unlink()
+            elif kind=='missing_witness':(r.diagnostic_directory()/'isolation-execution.json').unlink()
+            elif kind=='truncated':r.state_path().write_text('{')
+            elif kind=='nonce':
+                m,_,_=r._read_manifest();m['nonce']='a'*32;r.state_path().write_text(json.dumps(m))
+            else:case.c.session['manifest_sha256']='b'*64
+            case.assertNotEqual('verified',case.clean());case.assertEqual([],case.removals)
+        for kind in ('missing_manifest','missing_witness','truncated','nonce','digest'):
+            with self.subTest(case=kind):self.fresh_case(lambda case:scenario(case,kind))
+
+    def test_R04_query_error_is_not_absence(self):
+        self.populate(('network_id',));self.witness()
+        self.query_patch.side_effect=OSError('PRIVATE_SECRET')
+        self.assertNotEqual('verified',self.clean());self.assertEqual([],self.removals)
+        self.assertTrue(self.objects)
+
+    def test_R05_reserved_names_find_objects_omitted_by_listing(self):
+        self.populate(('network_id',));self.witness();self.enumeration_override={}
+        self.assertEqual('verified',self.clean());self.assertEqual(1,len(self.removals))
+        self.assertTrue(any(x[2]=='inspect' and x[3]==self.s['network_name'] for x in self.queries))
+
+    def test_R06_excess_malformed_and_failed_enumerations_reject(self):
+        import subprocess
+        def scenario(case,mode):
+            case.populate(('network_id',));case.witness()
+            if mode=='excess':case.enumeration_override={'network':[str(n)*64 for n in range(1,7)]}
+            else:
+                case.query_patch.side_effect=lambda args,**kw:subprocess.CompletedProcess(args,1 if mode=='failed' else 0,b'not-a-full-id',b'')
+            case.assertNotEqual('verified',case.clean());case.assertEqual([],case.removals)
+        for mode in ('excess','malformed','failed'):
+            with self.subTest(mode=mode):self.fresh_case(lambda case:scenario(case,mode))
+
+    def test_R07_original_ownership_and_configuration_guards_remain(self):
+        def scenario(case,field):
+            case.populate();case.witness();obj=case.objects[('container','1'*64)]
+            if field=='labels':obj['Config']['Labels']['constia.sha']='f'*40
+            elif field=='mount':obj['HostConfig']['Binds']=['/host:/host']
+            elif field=='caps':obj['HostConfig']['CapDrop']=[]
+            elif field=='image':obj['Image']='sha256:'+'f'*64
+
+            elif field=='network':obj['NetworkSettings']['Networks'][case.s['network_name']]['NetworkID']='f'*64
+            else:obj['HostConfig']['PortBindings']={'80/tcp':[{'HostPort':'80'}]}
+            case.assertNotEqual('verified',case.clean());case.assertEqual([],case.removals)
+        for field in ('labels','mount','caps','image','network','port'):
+            with self.subTest(field=field):self.fresh_case(lambda case:scenario(case,field))
+
+    def test_R08_bindings_are_rebuilt_only_from_owned_objects(self):
+        self.populate();self.witness()
+        self.assertNotIn('app_image_id',self.s)
+        self.assertEqual('verified',self.clean());self.assertEqual(5,len(self.removals))
+        self.assertEqual({},self.objects)
+
+    def test_R09_closed_producer_cannot_dispatch(self):
+        self.witness();before=list(self.command.call_args_list)
+        with self.assertRaises(r.Unsafe):r.create_resource(self.s,'network_id',['docker','network','create','forbidden'])
+        self.assertEqual(before,self.command.call_args_list)
+        self.assertFalse(self.ctrl.active)
+
+    def test_R10_unresolved_never_improves_after_empty_list_or_late_creation(self):
+        self.witness('unresolved')
+        self.assertNotEqual('verified',self.clean())
+        self.populate(('network_id',))
+        self.assertNotEqual('verified',self.clean())
+        self.assertEqual('unresolved',self.c.session['producer_state'])
+        self.assertFalse(self.ctrl.active)
+
+    def test_R11_connectivity_failure_can_have_verified_bounded_cleanup(self):
+        self.populate();self.witness()
+        self.assertEqual('verified',self.clean())
+        self.assertEqual('CONNECTIVITY_UNVERIFIED',self.c.first_failure['code'])
+        self.assertEqual('managed_session_resources',self.c.cleanup_scope)
+        self.assertEqual(5,len(self.removals))
+
+    def test_R12_repeated_cleanup_rechecks_absence_without_repeating_remove(self):
+        self.populate(('network_id',));self.witness()
+        self.assertEqual('verified',self.clean());count=len(self.queries)
+        self.assertEqual('verified',self.clean());self.assertEqual(1,len(self.removals))
+        self.assertGreater(len(self.queries),count)
+
+    def test_R13_no_named_temporary_cleanup_operation(self):
+        from unittest.mock import patch
+        record=r.make_diagnostic('execution',r.DiagnosticContext())
+        cls=_WindowsPublicationModel if r.sys.platform!='linux' else r._LinuxPublicationDirectory
+        actual=cls.anonymous
+        def anonymous(directory):
+            fd=actual(directory)
+            blocker=patch.object(r.os,'unlink',side_effect=AssertionError('Production unlink forbidden'))
+            blocker.start();self.addCleanup(blocker.stop)
+            return fd
+        with patch.object(cls,'anonymous',anonymous),patch.object(r.os,'write',side_effect=OSError('synthetic')):
+            with self.assertRaises(OSError):r.write_diagnostic('isolation-execution.json',record)
+        self.assertFalse((r.diagnostic_directory()/'isolation-execution.json').exists())
+
+    def test_R14_existing_destination_is_never_replaced(self):
+        p=r.diagnostic_directory()/'isolation-execution.json';p.write_bytes(b'FOREIGN')
+        with self.assertRaises(FileExistsError):r.write_diagnostic(p.name,r.make_diagnostic('execution',r.DiagnosticContext()))
+        self.assertEqual(b'FOREIGN',p.read_bytes())
+
+    def test_R15_short_writes_publish_exact_descriptor_bytes(self):
+        import hashlib
+        from unittest.mock import patch
+        actual=r.os.write
+        with patch.object(r.os,'write',side_effect=lambda fd,data:actual(fd,data[:11])):
+            digest=r.write_diagnostic('isolation-execution.json',r.make_diagnostic('execution',r.DiagnosticContext()))
+        self.assertEqual(digest,hashlib.sha256((r.diagnostic_directory()/'isolation-execution.json').read_bytes()).hexdigest())
+
+    def test_R16_file_directory_sync_and_read_failures_never_return_hash(self):
+        from unittest.mock import patch
+        def scenario(case,stage):
+            record=r.make_diagnostic('execution',r.DiagnosticContext())
+            if stage=='file':context=patch.object(r.os,'fsync',side_effect=OSError('synthetic'))
+            elif stage=='read':context=patch.object(r.os,'read',side_effect=OSError('synthetic'))
+            else:
+                cls=_WindowsPublicationModel if r.sys.platform!='linux' else r._LinuxPublicationDirectory
+                context=patch.object(cls,'sync',side_effect=OSError('synthetic'))
+            with context:
+                with case.assertRaises(OSError):r.write_diagnostic('isolation-execution.json',record)
+        for stage in ('file','read','directory'):
+            with self.subTest(stage=stage):self.fresh_case(lambda case:scenario(case,stage))
+
+    def test_R17_publication_descriptors_are_closed(self):
+        import os
+        from unittest.mock import patch
+        cls=_WindowsPublicationModel if r.sys.platform!='linux' else r._LinuxPublicationDirectory
+        actual=cls.anonymous;seen=[]
+        def anonymous(directory):
+
+            fd=actual(directory);self.assertFalse(os.get_inheritable(fd));seen.append(fd);return fd
+        with patch.object(cls,'anonymous',anonymous):
+            r.write_diagnostic('isolation-execution.json',r.make_diagnostic('execution',r.DiagnosticContext()))
+        for fd in seen:
+            with self.assertRaises(OSError):os.fstat(fd)
+
+    def test_publication_directory_attempts_all_closes_after_one_error(self):
+        from unittest.mock import patch
+        directory=r._LinuxPublicationDirectory.__new__(r._LinuxPublicationDirectory)
+        directory.fds=[101,102,103]
+        attempted=[]
+        def close(fd):
+            attempted.append(fd)
+            if fd==103:raise OSError('synthetic close failure')
+        with patch.object(r.os,'close',side_effect=close):
+            with self.assertRaises(OSError):directory.close()
+        self.assertEqual([103,102,101],attempted)
+        self.assertEqual([],directory.fds)
+
+    def test_bounded_query_closes_pipes_even_when_reaping_fails(self):
+        import io,subprocess
+        from unittest.mock import Mock,patch
+        process=Mock()
+        process.stdout=io.BytesIO();process.stderr=io.BytesIO()
+        process.poll.return_value=None
+        process.wait.side_effect=subprocess.TimeoutExpired('synthetic',2)
+        with patch.object(r.sys,'platform','linux'),patch.object(r.subprocess,'Popen',return_value=process), \
+             patch('selectors.DefaultSelector',side_effect=OSError('synthetic')):
+            with self.assertRaises(Exception):
+                _NATIVE_BOUNDED_QUERY(['docker','network','ls'])
+        self.assertTrue(process.stdout.closed)
+        self.assertTrue(process.stderr.closed)
+
+    def test_bounded_query_rejects_output_excess_and_timeouts(self):
+        import types
+        from unittest.mock import Mock,patch
+        for mode in ('bytes','no_events','deadline'):
+            with self.subTest(mode=mode):
+                process=Mock();process.stdout.fileno.return_value=101;process.stderr.fileno.return_value=102
+                process.poll.return_value=0
+                selector=Mock()
+                selector.__enter__=Mock(return_value=selector)
+                selector.__exit__=Mock(return_value=False)
+                selector.get_map.return_value={101:True,102:True}
+                selector.select.return_value=[] if mode=='no_events' else [(types.SimpleNamespace(fileobj=process.stdout),1)]
+                times=[0,16] if mode=='deadline' else [0,1]
+                with patch.object(r.sys,'platform','linux'),patch.object(r.subprocess,'Popen',return_value=process), \
+                     patch('selectors.DefaultSelector',return_value=selector),patch.object(r.os,'set_blocking'), \
+                     patch.object(r.os,'read',return_value=b'X'*9),patch('time.monotonic',side_effect=times):
+                    with self.assertRaises(r.Unsafe):_NATIVE_BOUNDED_QUERY(['docker','network','ls'],limit=8)
+                process.stdout.close.assert_called_once()
+                process.stderr.close.assert_called_once()
+
+    def test_R18_schema_session_transitive_binding_and_no_L2_claim(self):
+        self.witness()
+        primary=r.make_diagnostic('cleanup_primary',self.c,self.c.witness_sha256)
+        primary['session']['nonce']='a'*32
+        r.write_diagnostic('isolation-cleanup-primary.json',primary)
+        with self.assertRaises(r.Unsafe):r.read_diagnostic('isolation-cleanup-primary.json')
+        for key,value in (('schema',1),('evidence','complete_validated')):
+            record=r.make_diagnostic('execution',self.c);record[key]=value
+            with self.assertRaises(r.Unsafe):r.validate_diagnostic(record)
+
+    def test_R19_stderr_failure_does_not_skip_cleanup_or_leak_exception(self):
+        import json,io,contextlib
+        from unittest.mock import patch
+        class Broken:
+            def write(self,*unused):raise BrokenPipeError()
+        def fail(phase):
+            self.c=r.ACTIVE_DIAGNOSTIC.get();self.s=self.journal();self.populate()
+            self.witness()
+            # witness() already emits execution; remove only this fixture artifact
+            # so main exercises its own immutable publication.
+            (r.diagnostic_directory()/'isolation-execution.json').unlink()
+            raise OSError('PRIVATE_SECRET')
+        # Use a separate run context; no pre-existing session.
+        with patch.object(r,'run_isolation',side_effect=fail),patch.object(r.sys,'argv',['runner','run','--phase','isolation-only']), \
+             patch.object(r.sys,'stderr',Broken()):
+            code=r.main()
+        self.assertEqual(1,code);self.assertEqual(5,len(self.removals))
+        for p in r.diagnostic_directory().iterdir():self.assertNotIn('PRIVATE_SECRET',p.read_text())
+
+    def test_manifest_replacement_immediately_before_remove_preserves_resource(self):
+        from unittest.mock import patch
+        self.populate(('network_id',));self.witness()
+        actual=r.verify_owned;calls=[]
+        def verify(*args):
+            result=actual(*args);calls.append(result)
+            if len(calls)==2:
+                p=r.state_path();p.write_bytes(p.read_bytes()+b' ')
+            return result
+        with patch.object(r,'verify_owned',side_effect=verify):
+            self.assertEqual('uncertain',self.clean())
+        self.assertEqual(2,len(calls))
+        self.assertEqual([],self.removals)
+        self.assertTrue(self.objects)
+
+    def test_closed_unresolved_producer_cannot_accept_a_late_ack(self):
+        self.witness('unresolved')
+        with self.assertRaises(r.Unsafe):self.ctrl.acknowledge('network_id')
+        self.assertEqual('unresolved',self.ctrl.freeze())
+        self.assertEqual('unresolved',self.c.session['producer_state'])
+
+    def test_corrupted_descriptor_bytes_are_not_published(self):
+        from unittest.mock import patch
+        actual=r.os.write
+        with patch.object(r.os,'write',side_effect=lambda fd,data:actual(fd,b'X'+data[1:])):
+            with self.assertRaises(r.Unsafe):
+                r.write_diagnostic('isolation-execution.json',r.make_diagnostic('execution',r.DiagnosticContext()))
+        self.assertFalse((r.diagnostic_directory()/'isolation-execution.json').exists())
+
+    def test_post_link_association_failure_preserves_foreign_destination(self):
+        from unittest.mock import patch
+        cls=_WindowsPublicationModel if r.sys.platform!='linux' else r._LinuxPublicationDirectory
+        actual=cls.stat_name
+        def switched(directory,name):
+            p=directory.path/name;p.unlink();p.write_bytes(b'FOREIGN')
+            return actual(directory,name)
+        with patch.object(cls,'stat_name',switched):
+            with self.assertRaises(r.Unsafe):
+                r.write_diagnostic('isolation-execution.json',r.make_diagnostic('execution',r.DiagnosticContext()))
+        self.assertEqual(b'FOREIGN',(r.diagnostic_directory()/'isolation-execution.json').read_bytes())
+
+    def test_resource_appearing_during_final_absence_prevents_verified(self):
+        from unittest.mock import patch
+        self.populate(('network_id',));self.witness()
+        actual=r._discover_session;calls=[]
+        def discover(*args):
+            calls.append(True)
+            if len(calls)==2:self.populate(('network_id',))
+            return actual(*args)
+        with patch.object(r,'_discover_session',side_effect=discover):
+            self.assertEqual('uncertain',self.clean())
+        self.assertEqual(2,len(calls))
+        self.assertTrue(self.objects)
+
+    def test_identical_manifest_bytes_on_replaced_inode_cannot_authorize_remove(self):
+        self.populate(('network_id',));self.witness()
+        p=r.state_path();raw=p.read_bytes();inode=p.stat().st_ino
+        replacement=p.with_name(p.name+'.replacement');replacement.write_bytes(raw);replacement.replace(p)
+        self.assertNotEqual(inode,p.stat().st_ino)
+        self.assertEqual('uncertain',self.clean())
+        self.assertEqual([],self.removals);self.assertTrue(self.objects)
+        self.assertEqual(raw,p.read_bytes())
+
+    def test_descriptor_directory_parent_replacement_is_rejected(self):
+        import stat,types
+        from unittest.mock import patch
+        directory=r._LinuxPublicationDirectory.__new__(r._LinuxPublicationDirectory)
+        directory.edges=[(101,'protected',102)];directory.path=pathlib.Path('/sample')
+        opened=types.SimpleNamespace(st_mode=stat.S_IFDIR|0o700,st_dev=1,st_ino=11)
+        replacement=types.SimpleNamespace(st_mode=stat.S_IFDIR|0o700,st_dev=1,st_ino=12)
+        with patch.object(r.os,'stat',return_value=replacement),patch.object(r.os,'fstat',return_value=opened):
+            with self.assertRaises(r.Unsafe):directory.check()
+
+    def test_R21_environment_cannot_enable_native_backend_on_windows(self):
+        if r.sys.platform!='linux':
+            with self.assertRaises(r.Unsafe):r._LinuxPublicationDirectory(self.root)
+        else:
+            with r._LinuxPublicationDirectory(pathlib.Path(self.e['RUNNER_TEMP'])) as d:self.assertIsNotNone(d.fd)
+
+    def test_R22_write_failure_is_not_an_execution_approval(self):
+        from unittest.mock import patch
+        import contextlib,io
+        actual=r.write_diagnostic
+        def run(phase):
+            self.c=r.ACTIVE_DIAGNOSTIC.get();self.s=self.journal();self.populate(('network_id',))
+            self.ctrl=r._admit_session(self.s)
+            self.ctrl.begin(self.s,'network_id');self.ctrl.acknowledge('network_id')
+        def write(name,record):
+            if name=='isolation-cleanup-primary.json':raise OSError('synthetic')
+            return actual(name,record)
+        with patch.object(r,'run_isolation',side_effect=run),patch.object(r,'write_diagnostic',side_effect=write), \
+             patch.object(r.sys,'argv',['runner','run','--phase','isolation-only']),contextlib.redirect_stderr(io.StringIO()):
+            code=r.main()
+        self.assertEqual(1,code)
+        original=r.read_diagnostic('isolation-execution.json')
+        self.assertNotEqual('complete_validated',original['evidence'])
+
+    def test_R23_cache_is_outside_scope_but_extra_labelled_image_blocks(self):
+        def scenario(case,extra):
+            case.populate(('network_id',));case.witness()
+            labels=r.labels(case.s) if extra else {}
+            case.objects[('image','sha256:'+'f'*64)]=dict(Id='sha256:'+'f'*64,RepoTags=['base-cache'],Config=dict(Labels=labels))
+            result=case.clean()
+            if extra:case.assertNotEqual('verified',result);case.assertEqual([],case.removals)
+            else:case.assertEqual('verified',result);case.assertEqual(1,len(case.removals))
+            case.assertIn(('image','sha256:'+'f'*64),case.objects)
+        for extra in (False,True):
+            with self.subTest(extra=extra):self.fresh_case(lambda case:scenario(case,extra))
+
+    def test_R24_other_revision_nonce_and_run_are_classified_without_deletion(self):
+        def scenario(case,field):
+            case.populate(('network_id',));case.witness()
+            obj=copy.deepcopy(case.objects[('network','e'*64)]);obj['Id']='f'*64;obj['Name']='other-session'
+            obj['Labels'][field]='999' if field=='constia.run' else ('f'*40 if field=='constia.sha' else 'a'*32)
+            case.objects[('network','f'*64)]=obj
+            result=case.clean()
+            if field=='constia.run':
+                case.assertEqual('verified',result);case.assertEqual(1,len(case.removals))
+            else:case.assertNotEqual('verified',result);case.assertEqual([],case.removals)
+            case.assertIn(('network','f'*64),case.objects)
+        for field in ('constia.sha','constia.nonce','constia.run'):
+
+            with self.subTest(field=field):self.fresh_case(lambda case:scenario(case,field))
+
+
+
+
+def _legacy_plan_fixture(s,key):
+    kind,name=r.resource_specs(s)[key]
+    s['planned'][key]=dict(kind=kind,name=name,id=None,phase='creating')
+
+def _with_protocol_fixture(callback):
+    case=B9ProtocolTests('test_R03_missing_or_wrong_binding')
+    case.setUp()
+    try:callback(case)
+    finally:case.doCleanups()
+
+def _simulate_manifest_dispatch(s):
+    ctrl=r._admit_session(s)
+    ctrl.begin(s,'network_id');ctrl.acknowledge('network_id')
+
+_NATIVE_BOUNDED_QUERY = r._bounded_docker
 
 if __name__ == '__main__': unittest.main()
