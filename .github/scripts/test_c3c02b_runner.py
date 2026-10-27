@@ -1260,17 +1260,38 @@ class B9RedRegressionTests(unittest.TestCase):
         self.assertTrue(error or digest==hashlib.sha256(path.read_bytes()).hexdigest())
 
     def test_R16_failed_publication_never_unlinks_substituted_temporary(self):
+        import contextlib, errno, os
         from unittest.mock import patch
-        c=r.DiagnosticContext();record=r.make_diagnostic('execution',c);injected=[]
-        foreign=b'FOREIGN_SYNTHETIC_EVIDENCE'
-        def replace(source,target,**kw):
-            source=pathlib.Path(source);source.unlink();source.write_bytes(foreign);injected.append(source)
-            raise OSError('synthetic failure')
-        with patch.object(r.os,'link',side_effect=replace):
-            with self.assertRaises((r.Unsafe,OSError)):
+        class InjectedLinkFailure(OSError): pass
+        c=r.DiagnosticContext();record=r.make_diagnostic('execution',c)
+        directory_path=r.diagnostic_directory()
+        foreign_path=directory_path/'.isolation-execution.json.tmp'
+        foreign=b'FOREIGN_SYNTHETIC_EVIDENCE';injected=[];descriptors=[]
+        expected=InjectedLinkFailure('synthetic publication failure')
+        original=r._publication_directory
+        @contextlib.contextmanager
+        def fail_publication(path):
+            with original(path) as directory:
+                def fail_link(fd,name):
+                    self.assertEqual('isolation-execution.json',name)
+                    os.fstat(fd)  # The real anonymous descriptor must still be open.
+                    descriptors.extend([fd,*getattr(directory,'fds',[])])
+                    with foreign_path.open('xb') as output:output.write(foreign)
+                    injected.append(foreign_path)
+                    raise expected
+                with patch.object(directory,'link',side_effect=fail_link):
+                    yield directory
+        with patch.object(r,'_publication_directory',side_effect=fail_publication):
+            with self.assertRaises(InjectedLinkFailure) as caught:
                 r.write_diagnostic('isolation-execution.json',record)
-        self.assertTrue(injected[0].exists())
-        self.assertEqual(foreign,injected[0].read_bytes())
+        self.assertIs(expected,caught.exception)
+        self.assertEqual([foreign_path],injected)
+        self.assertTrue(descriptors)
+        for fd in descriptors:
+            with self.assertRaises(OSError) as closed:os.fstat(fd)
+            self.assertEqual(errno.EBADF,closed.exception.errno)
+        self.assertEqual(foreign,foreign_path.read_bytes())
+        self.assertFalse((directory_path/'isolation-execution.json').exists())
 
 
 # Native-boundary simulation ONLY in this test file. No production switch.
