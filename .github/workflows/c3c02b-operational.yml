@@ -1,4 +1,4 @@
-# Trusted L candidate. H's workflow at the same path is never used as launcher code.
+# Trusted L2 candidate. H's workflow at the same path is never used as launcher code.
 name: C3-C trusted isolation launcher
 on:
   workflow_dispatch:
@@ -8,10 +8,10 @@ concurrency:
   group: constia-c3c02b-operational
   cancel-in-progress: false
 env:
-  CODE_SHA: 5eb98f07728bfa8602930af04a286a21a78b6cf9
-  CONSTIA_B3_APPROVED_SHA: 5eb98f07728bfa8602930af04a286a21a78b6cf9
+  CODE_SHA: 62543ba874eb4d080ca68913d72dac944417ad7f
+  CONSTIA_B3_APPROVED_SHA: 62543ba874eb4d080ca68913d72dac944417ad7f
   CONSTIA_B3_APPROVED_ACTOR_ID: '147414572'
-  CONSTIA_B3_INVENTORY_SHA256: 435d97ef9c715ad7b8198b27b534122cef8d71d485628528e902ae3366d496b6
+  CONSTIA_B3_INVENTORY_SHA256: b31273e6cb9f4177e32cba0c09af254b73db1ee22c862ffd8043bcca564489a4
   CONSTIA_B3_APPROVED_PHASE: isolation-only
   C3C02B_PHASE: isolation-only
   # Suppress hooks, fsmonitor and checkout EOL transforms on this disposable runner only.
@@ -36,16 +36,39 @@ jobs:
           LAUNCHER_READ_TOKEN: ${{ github.token }}
         run: &trusted_verifier |
           # BEGIN TRUSTED PYTHON
-          import hashlib, io, json, os, pathlib, re, subprocess, urllib.request
+          import hashlib, io, json, os, pathlib, re, subprocess, urllib.request, stat, sys, tempfile, ipaddress
 
-          H = "5eb98f07728bfa8602930af04a286a21a78b6cf9"
+          H = "62543ba874eb4d080ca68913d72dac944417ad7f"
+          PARENT = "5eb98f07728bfa8602930af04a286a21a78b6cf9"
+          PARENT_TREE = "4bfc2c9331295db1ab395b46434b108817d1b37c"
+          CHANGED = (".github/scripts/c3c02b_runner.py", ".github/scripts/test_c3c02b_runner.py")
+          SDK_IMAGE = "mcr.microsoft.com/dotnet/sdk@sha256:8dd1a57fe6b7b8b1b357635db67e272c2f9e9d76d1dd0a32711c4c33c57d7b43"
           BASE = "79923e86eb1ce450db40d538d55848eaebe7877c"
-          TREE = "4bfc2c9331295db1ab395b46434b108817d1b37c"
-          D = "435d97ef9c715ad7b8198b27b534122cef8d71d485628528e902ae3366d496b6"
+          TREE = "7e1b5989d29e07f53aa2c12e70dd04b5d0e8d4b5"
+          D = "b31273e6cb9f4177e32cba0c09af254b73db1ee22c862ffd8043bcca564489a4"
           REPO = "ivandinicola/CONSTIA"
           REF = REPO + "/.github/workflows/c3c02b-operational.yml@refs/heads/main"
           ACTOR = "147414572"
           TABLE = {
+              ".github/scripts/c3c02b_runner.py": "a278e398a93646bba0f3dc867912c6375bbf42ac51b954a329fe4dc2153e8635",
+              ".github/scripts/test_c3c02b_runner.py": "5a383d497ac63c61004acf7dc1a9aacfc711f5bd28f238aa624b13506841ea12",
+              ".github/workflows/c3c02b-operational.yml": "64474d003db5210f29c8b5bd5dbcc975b03297a083375410090ef02761986695",
+              "docs/operations/c3-c-02b.md": "c7d615eee315cb2239b3f754b82946eb7b1b8696ff18aef87f4d954a865ed992",
+              "tests/Constia.C3C02B.Tests/ConfirmationTests.cs": "7c6010d6efccf95fb6c1d333ecb293fe8af4e237e40020f69b10cb4791c5a6f8",
+              "tests/Constia.C3C02B.Tests/Constia.C3C02B.Tests.csproj": "e27aa509af240f3b4013509a1ceae61a0db01b81b25fc67d986808bddfe4a613",
+              "tests/Constia.C3C02B.Tests/DisposableSqlDatabase.cs": "e8b5f322639a4639df436172769864a7976a6392dd5c1c577611eb53d9ff555f",
+              "tests/Constia.C3C02B.Tests/OperationalTests.cs": "2c82a6784d5407b14a80f6f3c7db3fddd5cfb11851c0b4022e14f8e6c8f1d3c1",
+              "tests/Constia.C3C02B.Tests/QueriesTests.cs": "2d8f70bd1c1ec56ff0d0f29ad3f23fd56427683827f21d0d21e43e6415e85304",
+              "tests/Constia.C3C02B.Tests/SafetyTests.cs": "dcba6e7bfb0ccdd0080849f8ad873bd92e3a3c3ce78d85557ce86f9a8824b07c",
+              "tests/sandbox/c3c02b/Dockerfile": "a01fbb157445715943cd19855fa56f89b07484268ca94e18e907c583636219e9",
+              "tests/sandbox/c3c02b/coverage.json": "a6791f91f5c6a6654997025e2b71038161e24d4481141fdd01e24682f990fb81",
+              "tests/sandbox/c3c02b/queries.sql": "4fb171d55a27b2e62089e8eeb96d1f1fc0ffc0e4919a1ac8b2ef6a3304ffd1fd",
+              "tools/Constia.C3C02B.Harness/Constia.C3C02B.Harness.csproj": "26ea6e5223132a9caabf4366dbc8d525ef6f4f80aa2039c17d36db43d9b15ced",
+              "tools/Constia.C3C02B.Harness/Program.cs": "ff2e4bf27bf68b5546ec3c3bd61a36e1c2138b1e37cd364ce8d82efcafd43777",
+              "tools/Constia.C3C02B.Harness/SandboxIdentity.cs": "a99c19df1b8a59072114841f7bb730b810235bb58dc4c94db77163694480712d",
+              "tools/Constia.C3C02B.Harness/SimulatedResendHandler.cs": "9c2cfdea5f05e63733a3e71e11a7c6ea6d9ebc842cdf072893da9110f4f58b72"
+          }
+          HISTORICAL_TABLE = {
               ".github/scripts/c3c02b_runner.py": "630049f69dd7ff4241f90b6541fa1a1dea6adfe34770743f3c3a9e9f821726de",
               ".github/scripts/test_c3c02b_runner.py": "18bf565331829838661edf34c3ca2ab8b111ce275a552196a68c9b9dcacd2496",
               ".github/workflows/c3c02b-operational.yml": "64474d003db5210f29c8b5bd5dbcc975b03297a083375410090ef02761986695",
@@ -133,21 +156,32 @@ jobs:
               require(not stream.read(), "Unexpected batch output")
               return result
 
-          def verify_checkout(root, h=H, base=BASE, tree=TREE, table=None):
-              # Parameters permit pure tests on throwaway repositories. Production calls use only fixed defaults.
-              table = TABLE if table is None else table
-              root = pathlib.Path(root)
-              require(root.is_dir() and not root.is_symlink(), "Checkout missing")
-              require(git(root, "rev-parse", "HEAD").decode().strip() == h, "Wrong checkout HEAD")
-              require(git(root, "rev-list", "--parents", "-n", "1", "HEAD").decode().split() == [h, base],
-                      "Wrong parent or commit count")
-              require(git(root, "rev-parse", "HEAD^{tree}").decode().strip() == tree, "Wrong tree")
-              entries = git(root, "diff-tree", "--no-commit-id", "--name-status", "-r", "-z", base, h).split(b"\0")
-              require(entries[-1] == b"", "Invalid diff")
+          def diff_paths(root, old, new, status, paths):
+              entries = git(root, "diff-tree", "--no-commit-id", "--name-status", "-r", "-z", old, new).split(b"\0")
+              require(entries[-1] == b"" and len(entries[:-1]) % 2 == 0, "Invalid diff")
               pairs = list(zip(entries[:-1:2], entries[1:-1:2]))
-              require(len(entries[:-1]) % 2 == 0 and len(pairs) == len(table) and
-                      all(status == b"A" for status, path in pairs) and
-                      {path.decode("utf-8") for status, path in pairs} == set(table), "Unexpected changed paths")
+              require(len(pairs) == len(paths) and all(s == status.encode() for s, _ in pairs) and
+                      {p.decode("utf-8") for _, p in pairs} == set(paths), "Unexpected changed paths")
+
+          def verify_checkout(root, h=H, base=BASE, tree=TREE, table=None, parent=PARENT,
+                              parent_tree=PARENT_TREE, historical_table=None, changes=CHANGED):
+              # Only tests pass alternative identities. Production always calls fixed defaults.
+              table = TABLE if table is None else table
+              historical_table = HISTORICAL_TABLE if historical_table is None else historical_table
+              root = pathlib.Path(root)
+              require(root.is_dir() and not root.is_symlink() and not root.is_junction(), "Checkout missing")
+              require(git(root, "rev-parse", "HEAD").decode().strip() == h, "Wrong checkout HEAD")
+              require(git(root, "rev-list", "--parents", "-n", "1", h).decode().split() == [h, parent], "Wrong H2 parent")
+              require(git(root, "rev-list", "--parents", "-n", "1", parent).decode().split() == [parent, base], "Wrong historical chain")
+              require(git(root, "rev-parse", h + "^{tree}").decode().strip() == tree, "Wrong tree")
+              require(git(root, "rev-parse", parent + "^{tree}").decode().strip() == parent_tree, "Wrong historical tree")
+              diff_paths(root, base, parent, "A", historical_table)
+              diff_paths(root, parent, h, "M", changes)
+              require(set(table) == set(historical_table), "Inventory paths differ")
+              history_ids = {p: git(root, "rev-parse", parent + ":" + p).decode().strip() for p in historical_table}
+              history = blob_bytes(root, list(dict.fromkeys(history_ids.values())))
+              require(all(hashlib.sha256(history[history_ids[p]]).hexdigest() == digest
+                          for p, digest in historical_table.items()), "Historical inventory differs")
               listing = git(root, "ls-tree", "-r", "-z", h).split(b"\0")
               tracked = {}
               for item in filter(None, listing):
@@ -155,8 +189,8 @@ jobs:
                   mode, kind, oid = header.decode("ascii").split()
                   rel = path.decode("utf-8")
                   require(kind == "blob" and mode in ("100644", "100755"), "Symlink/submodule forbidden")
-                  require(not pathlib.PurePosixPath(rel).is_absolute() and ".." not in pathlib.PurePosixPath(rel).parts,
-                          "Unsafe tracked path")
+                  require(not pathlib.PurePosixPath(rel).is_absolute() and ".." not in pathlib.PurePosixPath(rel).parts
+                          and "\\" not in rel and ":" not in rel, "Unsafe tracked path")
                   tracked[rel] = oid
               raw_blobs = blob_bytes(root, list(dict.fromkeys(tracked.values())))
               actual = set()
@@ -164,76 +198,522 @@ jobs:
                   if pathlib.Path(directory) == root:
                       dirs[:] = [d for d in dirs if d != ".git"]
                   for name in dirs + files:
-                      require(not (pathlib.Path(directory) / name).is_symlink(), "Checkout symlink forbidden")
+                      p = pathlib.Path(directory) / name
+                      require(not p.is_symlink() and not p.is_junction(), "Checkout symlink forbidden")
                   for name in files:
-                      rel = (pathlib.Path(directory) / name).relative_to(root).as_posix()
-                      actual.add(rel)
+                      actual.add((pathlib.Path(directory) / name).relative_to(root).as_posix())
               require(actual == set(tracked), "Unexpected or missing physical paths")
               for rel, oid in tracked.items():
                   require((root / rel).read_bytes() == raw_blobs[oid], "Physical checkout differs from blob")
-              for rel, expected in table.items():
-                  require(hashlib.sha256(raw_blobs[tracked[rel]]).hexdigest() == expected, "Audited blob differs")
+              require(all(p in tracked and hashlib.sha256(raw_blobs[tracked[p]]).hexdigest() == digest
+                          for p, digest in table.items()), "Audited blob differs")
               require(not git(root, "status", "--porcelain=v1", "--untracked-files=all").strip(), "Dirty checkout")
               return True
 
-          def validate_artifacts(out, e):
-              out = pathlib.Path(out)
-              names = {"isolation.json", "isolation-execution.json", "isolation-sha256.json"}
-              require(out.is_dir() and not out.is_symlink(), "Evidence absent")
-              require({p.name for p in out.iterdir()} == names, "Artifact allowlist differs")
-              raw = {}
-              for name in names:
-                  p = out / name
-                  require(p.is_file() and not p.is_symlink() and p.stat().st_size <= 131072, "Unsafe artifact")
-                  raw[name] = p.read_bytes()
-                  text = raw[name].decode("utf-8")
-                  require(not re.search(r"(?i)bearer\s|re_[a-zA-Z0-9]{12}|password\s*[=:]|api[_-]?key\s*[=:]|[\w.+-]+@[\w.-]+\.[A-Za-z]{2}", text),
-                          "Sensitive artifact")
-              hashes = json.loads(raw["isolation-sha256.json"])
-              require(hashes == {n: hashlib.sha256(raw[n]).hexdigest() for n in names - {"isolation-sha256.json"}},
-                      "Artifact hashes differ")
-              report = json.loads(raw["isolation.json"])
-              final = json.loads(raw["isolation-execution.json"])
-              expected = dict(code_sha=H, policy_sha256=D, workflow_sha=e["GITHUB_WORKFLOW_SHA"],
-                              run_id=e["GITHUB_RUN_ID"], attempt="1", phase="isolation-only")
-              require(all(final.get(k) == v and report.get("identity", {}).get(k) == v for k, v in expected.items()),
-                      "Evidence run identity differs")
-              require(report["identity"].get("actor_id") == ACTOR and report["identity"].get("repository") == REPO and
-                      report["identity"].get("workflow_ref") == REF, "Evidence launcher differs")
-              require(final.get("status") == "passed" and all(final.get(k) is True for k in
-                      ("run_ok", "cleanup_verified", "evidence_complete")), "Run or cleanup unverified")
-              require(all(x.get("sql") == "not_applicable" and type(x.get("workers_started")) is int and
-                          x["workers_started"] == 0 and x.get("phase") == "isolation-only" for x in (report, final)),
-                      "Operational evidence forbidden")
-              return True
+
+
+          # L2 validates H2's wire contract independently; it never imports H2's validators.
+          DIAGNOSTIC_FILES = {"isolation-execution.json": "execution",
+                              "isolation-cleanup-primary.json": "cleanup_primary",
+                              "isolation-cleanup-final.json": "cleanup_final"}
+          CATALOG = frozenset({
+              ("cli","INPUT_REJECTED","INVALID"),("authorization","AUTH_REJECTED","POLICY"),
+              ("git_head","GIT_REJECTED","QUERY_FAILED"),("git_head","GIT_REJECTED","HEAD_MISMATCH"),
+              ("git_status","GIT_REJECTED","QUERY_FAILED"),("git_status","GIT_REJECTED","DIRTY"),
+              ("inventory","INVENTORY_REJECTED","INVALID"),("journal_check","JOURNAL_REJECTED","PREEXISTING"),
+              ("journal_check","JOURNAL_REJECTED","INVALID"),("journal_write","JOURNAL_WRITE_FAILED","IO_FAILED"),
+              ("engine_context","ENGINE_REJECTED","CONTEXT_OR_QUERY"),("build_context","BUILD_CONTEXT_FAILED","PREPARATION"),
+              *((s,"RESOURCE_UNVERIFIED","UNCONFIRMED") for s in ("resource_image","resource_network","resource_app","resource_peer","resource_denied")),
+              ("isolation_setup","ISOLATION_UNVERIFIED","CHECK_FAILED"),("connectivity","CONNECTIVITY_UNVERIFIED","CHECK_FAILED"),
+              ("cleanup","CLEANUP_UNVERIFIED","UNKNOWN"),("cleanup_remove","CLEANUP_FAILED","REMOVE_FAILED"),
+              ("evidence","EVIDENCE_INVALID","INVALID"),("evidence_write","EVIDENCE_WRITE_FAILED","IO_FAILED"),
+              ("unexpected","UNEXPECTED_FAILURE","UNCLASSIFIED")})
+          STAGES = frozenset(x[0] for x in CATALOG)
+          PRODUCERS = frozenset(("no_dispatch","quiescent","unresolved","unknown"))
+          OUTCOMES = frozenset(("success","failure","cancelled","skipped"))
+          RECORD_FIELDS = frozenset("schema kind phase identity session last_completed_stage first_failure operation_failure execution creation_attempted journal_state journal_seen cleanup cleanup_scope evidence proof_state proof_sha256 execution_sha256 primary_sha256".split())
+
+          def exact_keys(value, keys):
+              require(type(value) is dict and set(value) == set(keys), "JSON fields differ")
+
+          def digest(value, nullable=False):
+              return (nullable and value is None) or (type(value) is str and re.fullmatch("[0-9a-f]{64}",value) is not None)
+
+          def fixed_failure(value):
+              require(value is None or (type(value) is dict and set(value) == {"stage","code","reason"} and
+                      all(type(v) is str for v in value.values()) and tuple(value[k] for k in ("stage","code","reason")) in CATALOG),
+                      "Unknown diagnostic code")
+
+          # Emission roles traced in H2 62543ba8; the shared catalog is not a reachability matrix.
+          FIRST_PRE_MANIFEST = frozenset({
+              ("git_head","GIT_REJECTED","QUERY_FAILED"),("git_head","GIT_REJECTED","HEAD_MISMATCH"),
+              ("git_status","GIT_REJECTED","QUERY_FAILED"),("git_status","GIT_REJECTED","DIRTY"),
+              ("inventory","INVENTORY_REJECTED","INVALID"),
+              ("journal_check","JOURNAL_REJECTED","PREEXISTING"),("journal_check","JOURNAL_REJECTED","INVALID"),
+              ("journal_write","JOURNAL_WRITE_FAILED","IO_FAILED"),("engine_context","ENGINE_REJECTED","CONTEXT_OR_QUERY"),
+              ("evidence","EVIDENCE_INVALID","INVALID")})
+          FIRST_WITH_MANIFEST = frozenset({
+              ("build_context","BUILD_CONTEXT_FAILED","PREPARATION"),
+              *((stage,"RESOURCE_UNVERIFIED","UNCONFIRMED") for stage in
+                ("resource_image","resource_network","resource_app","resource_peer","resource_denied")),
+              ("isolation_setup","ISOLATION_UNVERIFIED","CHECK_FAILED"),
+              ("connectivity","CONNECTIVITY_UNVERIFIED","CHECK_FAILED"),
+              ("evidence","EVIDENCE_INVALID","INVALID"),("evidence_write","EVIDENCE_WRITE_FAILED","IO_FAILED")})
+          FIRST_BEFORE_DISPATCH = FIRST_PRE_MANIFEST | frozenset({
+              ("build_context","BUILD_CONTEXT_FAILED","PREPARATION"),("resource_image","RESOURCE_UNVERIFIED","UNCONFIRMED")})
+          CLEANUP_UNKNOWN = ("cleanup","CLEANUP_UNVERIFIED","UNKNOWN")
+          CLEANUP_REMOVE = ("cleanup_remove","CLEANUP_FAILED","REMOVE_FAILED")
+          JOURNAL_INVALID = ("journal_check","JOURNAL_REJECTED","INVALID")
+          EVIDENCE_INVALID = ("evidence","EVIDENCE_INVALID","INVALID")
+          CLEANUP_OPERATIONS = frozenset((CLEANUP_UNKNOWN,CLEANUP_REMOVE,JOURNAL_INVALID,EVIDENCE_INVALID))
+
+          EARLY_PREDECESSORS = {
+              ("git_head","GIT_REJECTED","QUERY_FAILED"):{"evidence","git_head"},
+              ("git_head","GIT_REJECTED","HEAD_MISMATCH"):{"git_head"},
+              ("git_status","GIT_REJECTED","QUERY_FAILED"):{"git_head","git_status"},
+              ("git_status","GIT_REJECTED","DIRTY"):{"git_status"},
+              ("inventory","INVENTORY_REJECTED","INVALID"):{"git_status","inventory"},
+              ("journal_check","JOURNAL_REJECTED","PREEXISTING"):{"inventory"},
+              JOURNAL_INVALID:{"inventory","journal_check"},
+              ("journal_write","JOURNAL_WRITE_FAILED","IO_FAILED"):{"engine_context","journal_write"},
+              ("engine_context","ENGINE_REJECTED","CONTEXT_OR_QUERY"):{"journal_check","engine_context"},
+              EVIDENCE_INVALID:{"authorization","evidence"}}
+
+          BOUND_PREDECESSORS = {
+              ("build_context","BUILD_CONTEXT_FAILED","PREPARATION"):{"journal_write","resource_image","build_context"},
+              ("resource_image","RESOURCE_UNVERIFIED","UNCONFIRMED"):{"journal_write","resource_image"},
+              ("resource_network","RESOURCE_UNVERIFIED","UNCONFIRMED"):{"build_context","resource_network"},
+              ("resource_app","RESOURCE_UNVERIFIED","UNCONFIRMED"):{"isolation_setup","resource_app"},
+              ("resource_peer","RESOURCE_UNVERIFIED","UNCONFIRMED"):{"resource_app","resource_peer"},
+              ("resource_denied","RESOURCE_UNVERIFIED","UNCONFIRMED"):{"resource_peer","resource_denied"},
+              ("isolation_setup","ISOLATION_UNVERIFIED","CHECK_FAILED"):{"resource_network","resource_denied","isolation_setup","connectivity"},
+              ("connectivity","CONNECTIVITY_UNVERIFIED","CHECK_FAILED"):{"isolation_setup","connectivity","evidence_write"},
+              EVIDENCE_INVALID:{"isolation_setup","evidence","connectivity"},
+              ("evidence_write","EVIDENCE_WRITE_FAILED","IO_FAILED"):{"evidence","evidence_write","connectivity"}}
+
+          def failure_key(value):
+              fixed_failure(value)
+              return None if value is None else tuple(value[k] for k in ("stage","code","reason"))
+
+          def validate_execution_failure(execution, creation, failure, producer, bound=None):
+              key=failure_key(failure)
+              if bound is None:bound=creation is True or key not in FIRST_PRE_MANIFEST
+              require(execution in ("failed_before_creation","failed_after_creation_attempt","completed"),"Execution snapshot unavailable")
+              require(creation is (execution!="failed_before_creation"),"Execution/creation mismatch")
+              require(producer in (("quiescent","unresolved") if creation else ("no_dispatch","unresolved")),"Producer not closed consistently")
+              require(producer!="unresolved" or bound is not False,"Unbound producer unresolved")
+              require(not creation or bound is not False,"Dispatch without admitted manifest")
+              if execution=="completed":
+                  # Candidate-proof validation runs after completed; cleanup never writes first_failure.
+                  require(producer=="quiescent" and key in (None,EVIDENCE_INVALID),"Completed execution has contradictory first failure/producer")
+              else:
+                  require(key is not None,"Failed execution lost first failure")
+                  allowed=FIRST_PRE_MANIFEST if bound is False else FIRST_WITH_MANIFEST if bound is True else FIRST_PRE_MANIFEST|FIRST_WITH_MANIFEST
+                  before_dispatch=(FIRST_BEFORE_DISPATCH-FIRST_PRE_MANIFEST) if bound else FIRST_PRE_MANIFEST
+                  require(key in allowed and (creation or key in before_dispatch),"First failure outside emission phase")
+                  require(producer!="unresolved" or creation or key in FIRST_WITH_MANIFEST,"Unresolved producer predates admission")
+
+          def validate_execution_stage(execution, creation, failure, last, bound=None):
+              key=failure_key(failure)
+              if bound is None:bound=creation is True or key not in FIRST_PRE_MANIFEST
+              if execution=="completed":
+                  require(last=="connectivity","Completed execution lacks receiver-stop stage")
+              else:
+                  require(not bound or creation or last=="journal_write","Pre-dispatch snapshot includes later resource stage")
+                  require(last in (BOUND_PREDECESSORS if bound else EARLY_PREDECESSORS)[key],
+                          "First failure has incompatible completed stage")
+
+          def validate_failure_context(record, kind):
+              bound=record["session"]["nonce"] is not None
+              validate_execution_failure(record["execution"],record["creation_attempted"],record["first_failure"],
+                                         record["session"]["producer_state"],bound)
+              operation=failure_key(record["operation_failure"])
+              # Successful diagnostic write precedes P; F starts from a new authorized context.
+              allowed_stages=(STAGES-{"cli","unexpected","cleanup","cleanup_remove"}) if kind=="execution" else (
+                  {"evidence_write","cleanup","cleanup_remove"} if kind=="cleanup_primary" else {"authorization","cleanup","cleanup_remove"})
+              require(record["last_completed_stage"] in allowed_stages,"Completed stage outside snapshot time")
+              if kind=="execution":
+                  validate_execution_stage(record["execution"],record["creation_attempted"],record["first_failure"],record["last_completed_stage"],bound)
+                  require(operation is None and record["cleanup"]=="uncertain" and record["cleanup_scope"]=="unknown",
+                          "Execution snapshot contains later cleanup")
+                  require(not bound or record["journal_state"]=="valid" and record["journal_seen"] is True,
+                          "Admitted execution lacks journal observation")
+                  require(record["proof_state"]!="unavailable","Execution imports later proof failure")
+                  require(record["proof_state"]!="invalid" or record["first_failure"] is not None,"Candidate failure lost first failure")
+                  if not bound:
+                      require(record["last_completed_stage"] in EARLY_PREDECESSORS[failure_key(record["first_failure"])],
+                              "Early failure has a later completed stage")
+                      key=failure_key(record["first_failure"]);stage=key[0]
+                      journal=record["journal_state"];seen=record["journal_seen"];last=record["last_completed_stage"]
+                      if stage=="engine_context":
+                          require(journal=="absent" and seen is False,"Engine failure journal differs")
+                      elif key==("journal_check","JOURNAL_REJECTED","PREEXISTING"):
+                          require(journal=="preexisting" and seen is True,"Preexisting failure journal differs")
+                      elif key==JOURNAL_INVALID:
+                          require((last=="journal_check" and journal=="absent" and seen is False) or
+                                  (last=="inventory" and journal=="unknown" and type(seen) is bool),"Journal check failure state differs")
+                      elif stage=="journal_write":
+                          require((last=="engine_context" and journal=="write_failed" and type(seen) is bool) or
+                                  (last=="journal_write" and journal=="absent" and seen is False),"Journal publication failure state differs")
+                      else:
+                          require(journal=="unknown" and seen is False,"Early failure claims later journal state")
+                  if record["execution"]=="completed" and record["first_failure"] is not None:
+                      require(record["proof_state"]=="invalid" or record["proof_state"]=="absent" and record["evidence"]=="unavailable",
+                              "Completed first failure lacks failed candidate")
+                  return
+              if operation is None:
+                  require(record["cleanup"] in ("verified","not_applicable"),"Cleanup uncertainty lacks observed failure")
+                  expected_stage="cleanup" if record["cleanup"]=="verified" else "evidence_write" if kind=="cleanup_primary" else "authorization"
+                  require(record["last_completed_stage"]==expected_stage,"Cleanup completion stage differs")
+                  return
+              allowed=CLEANUP_OPERATIONS if kind=="cleanup_final" else frozenset((CLEANUP_UNKNOWN,CLEANUP_REMOVE)) | (frozenset((JOURNAL_INVALID,)) if not bound else frozenset())
+              require(operation in allowed,"Operation failure outside emission phase")
+              require(record["cleanup_scope"]=="unknown","Failed cleanup has certified scope")
+              if operation==CLEANUP_REMOVE:
+                  require(bound and record["cleanup"]=="failed" and record["journal_state"]=="valid" and record["journal_seen"] is True
+                          and record["last_completed_stage"]!="cleanup",
+                          "Removal failure state differs")
+              else:
+                  require(record["cleanup"]=="uncertain","Cleanup failure state differs")
+                  if operation==JOURNAL_INVALID:
+                      require(record["journal_state"]=="invalid" and record["last_completed_stage"]==("evidence_write" if kind=="cleanup_primary" else "authorization"),
+                              "Journal failure state differs")
+                  elif operation==CLEANUP_UNKNOWN:
+                      require(record["journal_state"] in (("valid",) if bound or kind=="cleanup_final" else ("valid","absent","write_failed")),"Cleanup fallback state differs")
+                  elif operation==EVIDENCE_INVALID:
+                      require(bound and record["proof_state"] in ("invalid","unavailable") and record["journal_state"] in ("valid","invalid"),
+                              "Evidence operation lacks candidate revalidation")
+
+          def expected_identity(e):
+              return dict(repository=REPO,run_id=e["GITHUB_RUN_ID"],attempt="1",code_sha=H,
+                          workflow_sha=e["GITHUB_WORKFLOW_SHA"],policy_sha256=D)
+
+          def strict_json(raw):
+              def pairs(items):
+                  out = {}
+                  for key,value in items:
+                      require(key not in out, "Duplicate JSON key")
+                      out[key] = value
+                  return out
+              def invalid(_):raise Unsafe("Nonfinite JSON")
+              try:return json.loads(raw.decode("utf-8"),object_pairs_hook=pairs,parse_constant=invalid)
+              except (ValueError,UnicodeError,TypeError):raise Unsafe("Invalid JSON") from None
+
+          def fingerprint(row):
+              return (row.st_dev,row.st_ino,row.st_size,row.st_mtime_ns,row.st_ctime_ns if sys.platform=="linux" else None)
+
+          def safe_directory(path):
+              path = pathlib.Path(path)
+              require(path.is_absolute() and path.is_dir() and
+                      all(not p.is_symlink() and not p.is_junction() for p in (path,*path.parents)), "Evidence absent or linked")
+              return path
+
+          def safe_read(path, maximum):
+              path=pathlib.Path(path);safe_directory(path.parent)
+              require(not path.is_symlink() and not path.is_junction() and path.is_file(), "Unsafe artifact")
+              fd=os.open(path,os.O_RDONLY|getattr(os,"O_BINARY",0)|getattr(os,"O_NOFOLLOW",0)|getattr(os,"O_NONBLOCK",0))
+              try:
+                  before=os.fstat(fd)
+                  require(stat.S_ISREG(before.st_mode) and before.st_nlink==1 and before.st_size<=maximum, "Unsafe artifact")
+                  data=bytearray()
+                  while len(data)<=maximum:
+                      part=os.read(fd,min(4096,maximum+1-len(data)))
+                      if not part:break
+                      data.extend(part)
+                  after=os.fstat(fd)
+                  require(len(data)<=maximum and fingerprint(before)==fingerprint(after)==fingerprint(path.lstat()), "Artifact changed")
+                  return bytes(data)
+              finally:os.close(fd)
+
+          def read_set(path, names, maximum=8192):
+              path=safe_directory(path);before=fingerprint(path.stat())
+              require({p.name for p in path.iterdir()}==set(names), "Artifact allowlist differs")
+              raw={n:safe_read(path/n,maximum) for n in sorted(names)}
+              require(before==fingerprint(path.stat()) and {p.name for p in path.iterdir()}==set(names), "Artifact directory changed")
+              return raw
+
+          def validate_record(record, kind, e):
+              exact_keys(record,RECORD_FIELDS)
+              require(type(record["schema"]) is int and record["schema"]==2 and record["kind"]==kind and record["phase"]=="isolation-only",
+                      "Diagnostic schema differs")
+              exact_keys(record["identity"],expected_identity(e))
+              require(record["identity"]==expected_identity(e), "Diagnostic identity differs")
+              s=record["session"];exact_keys(s,("nonce","manifest_sha256","producer_state"))
+              require(type(s["producer_state"]) is str and s["producer_state"] in PRODUCERS, "Unknown producer")
+              require((s["nonce"] is None)==(s["manifest_sha256"] is None), "Incomplete session")
+              require(s["nonce"] is None or (type(s["nonce"]) is str and re.fullmatch("[0-9a-f]{32}",s["nonce"]) is not None and digest(s["manifest_sha256"])), "Invalid session")
+              require(s["producer_state"] not in ("quiescent","unresolved") or s["nonce"] is not None, "Unbound producer")
+              for key in ("first_failure","operation_failure"):fixed_failure(record[key])
+              require(record["last_completed_stage"] is None or record["last_completed_stage"] in STAGES, "Unknown stage")
+              require(record["execution"] in (None,"not_started","failed_before_creation","failed_after_creation_attempt","completed"), "Unknown execution")
+              for key in ("creation_attempted","journal_seen"):require(record[key] is None or type(record[key]) is bool, "Invalid boolean")
+              require(record["execution"] not in ("completed","failed_after_creation_attempt") or record["creation_attempted"] is True, "Creation mismatch")
+              require(record["execution"] not in ("not_started","failed_before_creation") or record["creation_attempted"] is False, "Creation mismatch")
+              require(s["producer_state"]!="no_dispatch" or record["creation_attempted"] is not True, "Producer mismatch")
+              for key,values in {
+                  "journal_state":("unknown","absent","preexisting","valid","invalid","write_failed"),
+                  "cleanup":("not_applicable","verified","uncertain","failed"),
+                  "cleanup_scope":("unknown","this_invocation_no_dispatch","managed_session_resources"),
+                  "evidence":("incomplete","unavailable"),"proof_state":("absent","candidate_valid","invalid","unavailable")}.items():
+                  require(type(record[key]) is str and record[key] in values,"Unknown diagnostic state")
+              for key in ("proof_sha256","execution_sha256","primary_sha256"):require(digest(record[key],True),"Invalid diagnostic hash")
+              require((record["proof_state"]=="candidate_valid")== (record["proof_sha256"] is not None), "Proof mismatch")
+              require(kind!="execution" or record["execution_sha256"] is None and record["primary_sha256"] is None, "Execution references")
+              require(kind!="cleanup_primary" or record["primary_sha256"] is None, "Primary references")
+              if record["cleanup"]=="verified":
+                  require(record["journal_state"]=="valid" and record["journal_seen"] is True and record["cleanup_scope"]=="managed_session_resources"
+                          and s["nonce"] is not None and s["producer_state"] in ("quiescent","no_dispatch"),"Unproved cleanup")
+              if record["cleanup"]=="not_applicable":
+                  require(record["creation_attempted"] is False and record["execution"] in ("not_started","failed_before_creation") and
+                          record["journal_state"]=="absent" and record["journal_seen"] is False and record["cleanup_scope"]=="this_invocation_no_dispatch",
+                          "Unproved absence")
+              validate_failure_context(record,kind)
+              return record
+
+          def session_resources(nonce):
+              return dict(network_id=dict(kind="network",name="c3c02b-"+nonce),
+                  app_image_id=dict(kind="image",name="c3c02b:"+nonce),
+                  **{k:dict(kind="container",name="c3c02b-"+role+"-"+nonce) for k,role in
+                     (("app_id","app"),("peer_id","peer"),("denied_id","denied"))})
+
+          def validate_proof(proof, e, session):
+              exact_keys(proof,("identity","phase","allowed_peer","denied_peer","gateway_blocked","controls_positive","simulated_transport","routes_sha256","sql","workers_started"))
+              require(proof["phase"]=="isolation-only" and proof["sql"]=="not_applicable" and type(proof["workers_started"]) is int and proof["workers_started"]==0,
+                      "Operational proof forbidden")
+              require(all(proof[k] is True for k in ("allowed_peer","denied_peer","gateway_blocked","controls_positive","simulated_transport")) and digest(proof["routes_sha256"]), "Proof incomplete")
+              m=proof["identity"]
+              exact_keys(m,"phase repository code_sha policy_sha256 workflow_sha workflow_ref actor_id run_id attempt nonce network_id network_name subnet gateway app_id app_ip peer_id peer_ip denied_id denied_ip image_id sdk_image namespace rules_sha256 proof_stage gateway_port".split())
+              expected=dict(expected_identity(e),phase="isolation-only",workflow_ref=REF,actor_id=ACTOR,nonce=session["nonce"])
+              require(all(m[k]==v for k,v in expected.items()),"Proof identity differs")
+              require(m["proof_stage"]=="isolated" and digest(m["rules_sha256"]) and m["network_name"]=="c3c02b-"+session["nonce"],"Proof session differs")
+              for key in ("network_id","app_id","peer_id","denied_id"):
+                  require(type(m[key]) is str and re.fullmatch("[0-9a-f]{64}",m[key]) is not None,"Invalid resource identity")
+              require(len({m[k] for k in ("app_id","peer_id","denied_id")})==3,"Ambiguous identities")
+              require(type(m["image_id"]) is str and re.fullmatch("sha256:[0-9a-f]{64}",m["image_id"]) is not None and
+                      m["sdk_image"]==SDK_IMAGE and type(m["namespace"]) is str and re.fullmatch(r"net:\[[0-9]+\]",m["namespace"]) is not None,
+                      "Proof resources differ")
+              require(type(m["gateway_port"]) is int and 1024<=m["gateway_port"]<=65535 and m["gateway_port"]!=1433,"Invalid gateway port")
+              try:
+                  network=ipaddress.ip_network(m["subnet"],strict=True);gateway=ipaddress.ip_address(m["gateway"])
+                  hosts=[ipaddress.ip_address(m[k]) for k in ("app_ip","peer_ip","denied_ip")]
+                  require(network.version==4 and network.prefixlen<=29 and
+                          any(network.subnet_of(ipaddress.ip_network(x)) for x in ("10.0.0.0/8","172.16.0.0/12","192.168.0.0/16")),"Invalid topology")
+                  require(str(network)==m["subnet"] and str(gateway)==m["gateway"] and gateway in network and
+                          gateway not in (network.network_address,network.broadcast_address),"Invalid gateway")
+                  require(len(set(hosts))==3 and all(str(h)==m[k] and h in network and
+                          h not in (gateway,network.network_address,network.broadcast_address)
+                          for h,k in zip(hosts,("app_ip","peer_ip","denied_ip"))),"Invalid addresses")
+              except (ValueError,TypeError):raise Unsafe("Invalid topology") from None
+
+          def isolation_verified(run, cleanup, tests, record):
+              return (run==cleanup==tests=="success" and record.get("execution")=="completed" and
+                      record.get("first_failure") is None and record.get("operation_failure") is None and
+                      record.get("cleanup")=="verified" and record.get("proof_state")=="candidate_valid" and
+                      record.get("evidence")=="incomplete" and record.get("session",{}).get("producer_state")=="quiescent")
+
+          PROJECTION_FIELDS=frozenset("schema identity diagnostic_valid isolation_verified execution creation_attempted first_failure cleanup cleanup_scope cleanup_failure journal_state producer_state last_completed_stage source_evidence proof_state outcomes".split())
+
+          def validate_projection(p):
+              exact_keys(p,PROJECTION_FIELDS)
+              require(type(p["schema"]) is int and p["schema"]==1 and p["diagnostic_valid"] is True and type(p["isolation_verified"]) is bool,"Invalid projection")
+              identity=p["identity"];exact_keys(identity,("repository","run_id","attempt","code_sha","workflow_sha","policy_sha256","phase"))
+              require(identity["repository"]==REPO and identity["code_sha"]==H and identity["policy_sha256"]==D and
+                      identity["phase"]=="isolation-only" and identity["attempt"]=="1" and type(identity["run_id"]) is str and
+                      re.fullmatch("[1-9][0-9]*",identity["run_id"]) is not None and type(identity["workflow_sha"]) is str and
+                      re.fullmatch("[0-9a-f]{40}",identity["workflow_sha"]) is not None,"Invalid projection identity")
+              fixed_failure(p["first_failure"]);fixed_failure(p["cleanup_failure"])
+              if p["execution"]=="completed" and p["first_failure"] is not None:
+                  require(p["proof_state"]=="invalid" or p["proof_state"]=="absent" and p["source_evidence"]=="unavailable",
+                          "Projection first failure lacks failed candidate")
+              validate_execution_failure(p["execution"],p["creation_attempted"],p["first_failure"],p["producer_state"])
+              validate_execution_stage(p["execution"],p["creation_attempted"],p["first_failure"],p["last_completed_stage"])
+              require(failure_key(p["cleanup_failure"]) in CLEANUP_OPERATIONS|{None},"Projection misattributes cleanup failure")
+              require(p["creation_attempted"] is None or type(p["creation_attempted"]) is bool,"Invalid projection boolean")
+              require(p["execution"] not in ("completed","failed_after_creation_attempt") or p["creation_attempted"] is True,"Projection creation mismatch")
+              require(p["execution"] not in ("not_started","failed_before_creation") or p["creation_attempted"] is False,"Projection creation mismatch")
+              require(p["last_completed_stage"] is None or p["last_completed_stage"] in STAGES,"Invalid projection stage")
+              for key,values in {"execution":(None,"not_started","failed_before_creation","failed_after_creation_attempt","completed"),
+                  "cleanup":("not_applicable","verified","uncertain","failed"),"cleanup_scope":("unknown","this_invocation_no_dispatch","managed_session_resources"),
+                  "journal_state":("unknown","absent","preexisting","valid","invalid","write_failed"),"producer_state":PRODUCERS,
+                  "source_evidence":("incomplete","unavailable"),"proof_state":("absent","candidate_valid","invalid","unavailable")}.items():
+                  require(p[key] in values,"Invalid projection state")
+              exact_keys(p["outcomes"],("tests","run","cleanup"))
+              require(all(type(v) is str and v in OUTCOMES for v in p["outcomes"].values()),"Invalid step outcomes")
+              if p["isolation_verified"]:
+                  require(all(v=="success" for v in p["outcomes"].values()) and p["execution"]=="completed" and
+                          p["first_failure"] is None and p["cleanup_failure"] is None and p["cleanup"]=="verified" and
+                          p["proof_state"]=="candidate_valid" and p["producer_state"]=="quiescent" and p["source_evidence"]=="incomplete","False isolation success")
+
+          def validate_bundle(root, e, outcomes):
+              validate_context(e,{},e.get("GITHUB_SHA"))
+              exact_keys(outcomes,("tests","run","cleanup"))
+              require(all(type(v) is str and v in OUTCOMES for v in outcomes.values()),"Unknown step outcome")
+              root=safe_directory(root);directory=root/"c3c02b-diagnostics"
+              raw=read_set(directory,DIAGNOSTIC_FILES)
+              records={name:validate_record(strict_json(data),DIAGNOSTIC_FILES[name],e) for name,data in raw.items()}
+              original=records["isolation-execution.json"];primary=records["isolation-cleanup-primary.json"];final=records["isolation-cleanup-final.json"]
+              execution_hash=hashlib.sha256(raw["isolation-execution.json"]).hexdigest()
+              primary_hash=hashlib.sha256(raw["isolation-cleanup-primary.json"]).hexdigest()
+              require(original["operation_failure"] is None,"Execution contains cleanup failure")
+              require(primary["execution_sha256"]==final["execution_sha256"]==execution_hash and final["primary_sha256"]==primary_hash,"Broken transitive references")
+              for later,prior in ((primary,original),(final,primary)):
+                  require(all(later[k]==original[k] for k in ("execution","creation_attempted","first_failure","session")),"Inconsistent execution snapshot")
+                  require(not (prior["journal_seen"] is True and later["journal_seen"] is not True),"Forgotten journal")
+                  require(not (prior["evidence"]=="unavailable" and later["evidence"]!="unavailable"),"Evidence promoted")
+                  require(later["proof_state"]!="candidate_valid" or
+                          prior["proof_state"]=="candidate_valid" and later["proof_sha256"]==prior["proof_sha256"],"Proof promoted")
+              require(all(primary[k]==original[k] for k in ("proof_state","proof_sha256")),"Primary changed candidate snapshot")
+              if original["proof_state"]=="candidate_valid" and final["proof_state"]!="candidate_valid":
+                  require(final["proof_state"] in ("invalid","unavailable") and failure_key(final["operation_failure"])==EVIDENCE_INVALID,
+                          "Candidate changed without revalidation failure")
+              else:
+                  require(all(final[k]==original[k] for k in ("proof_state","proof_sha256")),"Final changed unvalidated candidate")
+              if failure_key(final["operation_failure"])==EVIDENCE_INVALID:
+                  require(original["proof_state"]=="candidate_valid" and final["proof_state"] in ("invalid","unavailable"),
+                          "Final evidence error lacks revalidation")
+              session=original["session"];inputs={directory/name:data for name,data in raw.items()}
+              manifest_path=root/("c3c02b-"+e["GITHUB_RUN_ID"]+".json")
+              if session["nonce"] is not None:
+                  data=safe_read(manifest_path,131072);m=strict_json(data)
+                  exact_keys(m,("schema","phase","identity","nonce","resources"))
+                  require(type(m["schema"]) is int and m["schema"]==3 and m["phase"]=="isolation-only" and
+                          m["nonce"]==session["nonce"] and m["identity"]==dict(expected_identity(e),workflow_ref=REF,actor_id=ACTOR) and
+                          m["resources"]==session_resources(session["nonce"]),"Manifest differs")
+                  require(hashlib.sha256(data).hexdigest()==session["manifest_sha256"],"Manifest digest differs")
+                  inputs[manifest_path]=data
+              else:
+                  # H2 emits execution before cleanup; do not rewrite that historical snapshot.
+                  require(not manifest_path.exists() and not manifest_path.is_symlink() and not manifest_path.is_junction(),
+                          "Unexpected unbound manifest")
+                  require(session["producer_state"]=="no_dispatch" and original["creation_attempted"] is False and
+                          original["execution"]=="failed_before_creation" and original["first_failure"] is not None and
+                          original["cleanup"]=="uncertain" and original["cleanup_scope"]=="unknown" and
+                          type(original["journal_seen"]) is bool and
+                          original["journal_state"] in ("unknown","absent","preexisting","write_failed"),
+                          "Invalid pre-cleanup execution snapshot")
+                  require(original["journal_state"]!="absent" or original["journal_seen"] is False,
+                          "Initial absence contradicts observation")
+                  require(original["journal_state"]!="preexisting" or original["journal_seen"] is True,
+                          "Initial journal observation missing")
+                  for previous,current in ((original,primary),(primary,final)):
+                      require(type(current["journal_seen"]) is bool,"Missing cleanup observation")
+                      if current["cleanup"]=="not_applicable":
+                          # validate_record also requires absent journal, no creation and this_invocation_no_dispatch.
+                          require(previous["journal_seen"] is False and current["operation_failure"] is None,
+                                  "Absence not justified")
+                      else:
+                          # A failed query/observed journal stays uncertain; it cannot become proof of absence.
+                          require(current["cleanup"]=="uncertain" and current["cleanup_scope"]=="unknown" and
+                                  current["operation_failure"] is not None,"Incompatible cleanup transition")
+              public=root/"c3c02b-public";proof_path=public/"isolation.json"
+              if public.exists() or public.is_symlink() or public.is_junction():
+                  safe_directory(public)
+                  require({p.name for p in public.iterdir()} in (set(),{"isolation.json"}),"Unexpected public artifact")
+              if proof_path.exists() or proof_path.is_symlink():
+                  data=safe_read(proof_path,131072)
+                  require(original["proof_state"]=="candidate_valid","Unbound proof")
+                  validate_proof(strict_json(data),e,session)
+                  require(all(r["proof_state"]=="candidate_valid" and r["proof_sha256"]==hashlib.sha256(data).hexdigest()
+                              for r in (original,primary,final)),"Proof hash differs")
+                  inputs[proof_path]=data
+              else:require(all(r["proof_state"]!="candidate_valid" for r in (original,primary,final)),"Required proof absent")
+              # Re-read exactly the authorized inputs; no raw input becomes a public artifact.
+              for path,data in inputs.items():require(safe_read(path,max(8192,len(data)))==data,"Evidence changed after validation")
+              require({p.name for p in directory.iterdir()}==set(DIAGNOSTIC_FILES),"Late unexpected artifact")
+              if session["nonce"] is None:
+                  require(not manifest_path.exists() and not manifest_path.is_symlink() and not manifest_path.is_junction(),"Manifest appeared after absence")
+              if public.exists() or public.is_symlink() or public.is_junction():
+                  safe_directory(public)
+                  require({p.name for p in public.iterdir()}==({"isolation.json"} if proof_path in inputs else set()),"Late unexpected public artifact")
+              cleanup_failure=primary["operation_failure"] or final["operation_failure"]
+              verified=isolation_verified(outcomes["run"],outcomes["cleanup"],outcomes["tests"],final) and cleanup_failure is None
+              projection=dict(schema=1,identity=dict(expected_identity(e),phase="isolation-only"),
+                  diagnostic_valid=True,isolation_verified=verified,execution=original["execution"],creation_attempted=original["creation_attempted"],
+                  first_failure=original["first_failure"],cleanup=final["cleanup"],cleanup_scope=final["cleanup_scope"],cleanup_failure=cleanup_failure,
+                  journal_state=final["journal_state"],producer_state=session["producer_state"],last_completed_stage=original["last_completed_stage"],
+                  source_evidence=final["evidence"],proof_state=final["proof_state"],outcomes=dict(outcomes))
+              validate_projection(projection)
+              return projection
+
+          def publish_projection(root, projection):
+              validate_projection(projection);root=safe_directory(root)
+              data=json.dumps(projection,sort_keys=True,separators=(",",":"),allow_nan=False).encode("utf-8")
+              require(len(data)<=8192,"Projection too large")
+              directory=pathlib.Path(tempfile.mkdtemp(prefix="c3c02b-l2-public-",dir=root))
+              path=directory/"diagnostic.json"
+              fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_RDWR|getattr(os,"O_BINARY",0)|getattr(os,"O_NOFOLLOW",0),0o600)
+              try:
+                  offset=0
+                  while offset<len(data):
+                      count=os.write(fd,data[offset:]);require(count>0,"Projection write failed");offset+=count
+                  os.fsync(fd);os.lseek(fd,0,os.SEEK_SET)
+                  written=os.read(fd,len(data)+1)
+                  require(written==data and fingerprint(os.fstat(fd))==fingerprint(path.lstat()) and os.fstat(fd).st_nlink==1,"Projection changed")
+                  validate_projection(strict_json(written))
+              finally:os.close(fd)
+              require(read_set(directory,{"diagnostic.json"})["diagnostic.json"]==data,"Publication differs")
+              return str(directory),hashlib.sha256(data).hexdigest()
+
+          def execute_verified(root, stage, e):
+              require(stage in ("tests","run","cleanup"),"Execution phase forbidden")
+              verify_checkout(root)  # Immediately before each execution, including post-failure cleanup.
+              allowed=("PATH","HOME","LANG","LC_ALL","TMPDIR","TEMP","TMP","SystemRoot","GITHUB_ACTIONS","RUNNER_ENVIRONMENT","RUNNER_OS",
+                  "GITHUB_REPOSITORY","GITHUB_EVENT_NAME","GITHUB_RUN_ATTEMPT","GITHUB_REF","GITHUB_WORKFLOW_REF","GITHUB_SHA",
+                  "GITHUB_WORKFLOW_SHA","GITHUB_RUN_ID","GITHUB_ACTOR_ID","CODE_SHA","CONSTIA_B3_APPROVED_SHA","CONSTIA_B3_APPROVED_ACTOR_ID",
+                  "CONSTIA_B3_INVENTORY_SHA256","CONSTIA_B3_APPROVED_PHASE","C3C02B_PHASE","RUNNER_TEMP")
+              child={k:e[k] for k in allowed if k in e}
+              for key in ("GIT_CONFIG_NOSYSTEM","GIT_CONFIG_GLOBAL","GIT_CONFIG_COUNT",
+                          "GIT_CONFIG_KEY_0","GIT_CONFIG_VALUE_0","GIT_CONFIG_KEY_1","GIT_CONFIG_VALUE_1","GIT_CONFIG_KEY_2","GIT_CONFIG_VALUE_2"):
+                  if key in e:child[key]=e[key]
+              child["CONSTIA_B3_INVENTORY"]=json.dumps(TABLE,sort_keys=True,separators=(",",":"))
+              args=[sys.executable,"-I","-B"]
+              args+=["-m","unittest","discover","-s",".github/scripts","-p","test_c3c02b_runner.py"] if stage=="tests" else [
+                  ".github/scripts/c3c02b_runner.py",stage,"--phase","isolation-only"]
+              result=subprocess.run(args,cwd=root,env=child,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=1500 if stage=="run" else (600 if stage=="cleanup" else 300))
+              return 0 if result.returncode==0 else 1
+
+
+
+          def outputs(values):
+              path=os.environ.get("GITHUB_OUTPUT")
+              require(path is not None and all(type(v) is str and "\n" not in v and "\r" not in v for v in values.values()),"Output rejected")
+              with open(path,"a",encoding="utf-8") as f:
+                  for key,value in values.items():f.write(key+"="+value+"\n")
 
           def main():
-              e = os.environ
-              validate_context(e, json.loads(pathlib.Path(e["GITHUB_EVENT_PATH"]).read_text()), current_main())
-              stage = e["LAUNCHER_STAGE"]
-              require(stage in ("gate", "approved", "verify", "evidence"), "Unknown launcher stage")
-              if stage != "gate":
-                  require(e.get("GATE_RESULT") == "success", "Prior identity gate absent")
-              if stage == "gate":
-                  print("Read-only gate: H=" + H + "; D=" + D + "; actor=" + ACTOR +
-                        "; phase=isolation-only; run=" + e["GITHUB_RUN_ID"] + "; L=" + e["GITHUB_SHA"])
-              elif stage == "verify":
-                  verify_checkout(pathlib.Path(e["GITHUB_WORKSPACE"]) / "harness")
-                  with open(e["GITHUB_ENV"], "a", encoding="utf-8") as f:
-                      f.write("CONSTIA_B3_INVENTORY=" + json.dumps(TABLE, sort_keys=True, separators=(",", ":")) + "\n")
-                  with open(e["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
-                      f.write("verified=true\n")
-              elif stage == "evidence":
-                  validate_artifacts(pathlib.Path(e["RUNNER_TEMP"]) / "c3c02b-public", e)
-                  with open(e["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
-                      f.write("safe=true\n")
+              e=os.environ;stage=e.get("LAUNCHER_STAGE")
+              require(stage in ("gate","approved","verify","tests","run","cleanup","evidence","final"),"Unknown launcher stage")
+              # No new execution after main moves. Cleanup/reporting retain the original authorized run identity.
+              event=strict_json(safe_read(pathlib.Path(e["GITHUB_EVENT_PATH"]),65536))
+              validate_context(e,event,e.get("GITHUB_SHA"))  # Reject inherited connections before tokened HTTP.
+              if stage in ("gate","approved","verify","tests","run"):
+                  validate_context(e,event,current_main())
+              if stage!="gate":
+                  require(e.get("GATE_RESULT")=="success" and e.get("L2_ENVIRONMENT")=="constia-c3c-isolation","Protected approval context absent")
+              if stage in ("tests","run","cleanup","evidence","final"):require(e.get("CHECKOUT_VERIFIED")=="true","Prior verification absent")
+              if stage=="gate":
+                  print("Read-only gate: H2="+H+"; D2="+D+"; actor="+ACTOR+"; phase=isolation-only")
+              elif stage=="verify":
+                  verify_checkout(pathlib.Path(e["GITHUB_WORKSPACE"])/"harness")
+                  outputs(dict(verified="true"))
+              elif stage in ("tests","run","cleanup"):
+                  raise SystemExit(execute_verified(pathlib.Path(e["GITHUB_WORKSPACE"])/"harness",stage,e))
+              elif stage=="evidence":
+                  outcome=dict(tests=e.get("TESTS_OUTCOME"),run=e.get("RUN_OUTCOME"),cleanup=e.get("CLEANUP_OUTCOME"))
+                  projection=validate_bundle(pathlib.Path(e["RUNNER_TEMP"]),e,outcome)
+                  directory,sha=publish_projection(pathlib.Path(e["RUNNER_TEMP"]),projection)
+                  outputs(dict(diagnostic_valid="true",isolation_verified=str(projection["isolation_verified"]).lower(),
+                               directory=directory,projection_sha256=sha))
+              elif stage=="final":
+                  require(e.get("DIAGNOSTIC_VALID")=="true" and e.get("ISOLATION_VERIFIED")=="true" and
+                          all(e.get(k)=="success" for k in ("TESTS_OUTCOME","RUN_OUTCOME","CLEANUP_OUTCOME")),"Isolation did not succeed")
 
           if __name__ == "__main__":
               try:
                   main()
               except Exception:
-                  # No arbitrary API/Git exception, payload or credential in logs.
-                  raise SystemExit("Trusted launcher failed closed; no authorization to continue") from None
+                  # Own fixed status only: never invent H2's unavailable internal cause.
+                  raise SystemExit("L2_UNAVAILABLE_OR_REJECTED: trusted launcher failed closed") from None
           # END TRUSTED PYTHON
 
   isolation:
@@ -246,6 +726,7 @@ jobs:
         shell: bash --noprofile --norc -euo pipefail {0}
     env:
       GATE_RESULT: ${{ needs.gate.result }}
+      L2_ENVIRONMENT: constia-c3c-isolation
     steps:
       - name: Recheck trusted identity after approval
         shell: python3 -I -B {0}
@@ -253,21 +734,21 @@ jobs:
           LAUNCHER_STAGE: approved
           LAUNCHER_READ_TOKEN: ${{ github.token }}
         run: *trusted_verifier
-      - name: Checkout only H
+      - name: Checkout only H2
         id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: ivandinicola/CONSTIA
-          ref: 5eb98f07728bfa8602930af04a286a21a78b6cf9
+          ref: 62543ba874eb4d080ca68913d72dac944417ad7f
           path: harness
           persist-credentials: false
-          fetch-depth: 2
+          fetch-depth: 3
           fetch-tags: false
           submodules: false
           lfs: false
           clean: false
           set-safe-directory: false
-      - name: Verify H and every checkout byte from L
+      - name: Verify H2 chain and every checkout byte from L2
         id: verified
         if: ${{ success() && steps.checkout.outcome == 'success' }}
         shell: python3 -I -B {0}
@@ -275,34 +756,62 @@ jobs:
           LAUNCHER_STAGE: verify
           LAUNCHER_READ_TOKEN: ${{ github.token }}
         run: *trusted_verifier
-      - name: Pure regressions from verified H
-        working-directory: harness
-        run: python3 -I -B -m unittest discover -s .github/scripts -p test_c3c02b_runner.py
+      - name: Pure regressions from verified H2
+        id: regressions
+        if: ${{ success() && steps.verified.outputs.verified == 'true' }}
+        shell: python3 -I -B {0}
+        env:
+          LAUNCHER_STAGE: tests
+          LAUNCHER_READ_TOKEN: ${{ github.token }}
+          CHECKOUT_VERIFIED: ${{ steps.verified.outputs.verified }}
+        run: *trusted_verifier
       - name: Run only isolation
-        working-directory: harness
-        run: python3 -I -B .github/scripts/c3c02b_runner.py run --phase isolation-only
-      - name: Cleanup only verified H resources
+        id: run
+        if: ${{ success() && steps.verified.outputs.verified == 'true' }}
+        shell: python3 -I -B {0}
+        env:
+          LAUNCHER_STAGE: run
+          LAUNCHER_READ_TOKEN: ${{ github.token }}
+          CHECKOUT_VERIFIED: ${{ steps.verified.outputs.verified }}
+        run: *trusted_verifier
+      - name: Cleanup only verified H2 resources
+        id: cleanup
         if: ${{ always() && steps.verified.outputs.verified == 'true' }}
-        working-directory: harness
-        run: python3 -I -B .github/scripts/c3c02b_runner.py cleanup --phase isolation-only
-      - name: Validate allowlisted evidence from L
+        shell: python3 -I -B {0}
+        env:
+          LAUNCHER_STAGE: cleanup
+          CHECKOUT_VERIFIED: ${{ steps.verified.outputs.verified }}
+        run: *trusted_verifier
+      - name: Validate and project allowlisted diagnostics from L2
         id: evidence
         if: ${{ always() && steps.verified.outputs.verified == 'true' }}
         shell: python3 -I -B {0}
         env:
           LAUNCHER_STAGE: evidence
-          LAUNCHER_READ_TOKEN: ${{ github.token }}
+          CHECKOUT_VERIFIED: ${{ steps.verified.outputs.verified }}
+          TESTS_OUTCOME: ${{ steps.regressions.outcome }}
+          RUN_OUTCOME: ${{ steps.run.outcome }}
+          CLEANUP_OUTCOME: ${{ steps.cleanup.outcome }}
         run: *trusted_verifier
-      - name: Upload only validated evidence
-        if: ${{ always() && steps.evidence.outputs.safe == 'true' }}
+      - name: Upload only validated projection
+        if: ${{ always() && steps.evidence.outcome == 'success' && steps.evidence.outputs.diagnostic_valid == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: c3c02b-isolation-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/c3c02b-public/isolation.json
-            ${{ runner.temp }}/c3c02b-public/isolation-execution.json
-            ${{ runner.temp }}/c3c02b-public/isolation-sha256.json
+          path: ${{ steps.evidence.outputs.directory }}/diagnostic.json
           if-no-files-found: error
           include-hidden-files: false
           overwrite: false
           retention-days: 7
+      - name: Require actual isolation success
+        if: ${{ always() && steps.verified.outputs.verified == 'true' }}
+        shell: python3 -I -B {0}
+        env:
+          LAUNCHER_STAGE: final
+          CHECKOUT_VERIFIED: ${{ steps.verified.outputs.verified }}
+          TESTS_OUTCOME: ${{ steps.regressions.outcome }}
+          RUN_OUTCOME: ${{ steps.run.outcome }}
+          CLEANUP_OUTCOME: ${{ steps.cleanup.outcome }}
+          DIAGNOSTIC_VALID: ${{ steps.evidence.outputs.diagnostic_valid }}
+          ISOLATION_VERIFIED: ${{ steps.evidence.outputs.isolation_verified }}
+        run: *trusted_verifier
