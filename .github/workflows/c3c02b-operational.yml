@@ -8,10 +8,10 @@ concurrency:
   group: constia-c3c02b-operational
   cancel-in-progress: false
 env:
-  CODE_SHA: 62543ba874eb4d080ca68913d72dac944417ad7f
-  CONSTIA_B3_APPROVED_SHA: 62543ba874eb4d080ca68913d72dac944417ad7f
+  CODE_SHA: 64ebe684ed882dae04ad4068b40c8fae4b5d26b2
+  CONSTIA_B3_APPROVED_SHA: 64ebe684ed882dae04ad4068b40c8fae4b5d26b2
   CONSTIA_B3_APPROVED_ACTOR_ID: '147414572'
-  CONSTIA_B3_INVENTORY_SHA256: b31273e6cb9f4177e32cba0c09af254b73db1ee22c862ffd8043bcca564489a4
+  CONSTIA_B3_INVENTORY_SHA256: 00fd956a40a6e803e9ee37cff6d19bf46cb4c5a01b45c59d8f32ae1f420a3c83
   CONSTIA_B3_APPROVED_PHASE: isolation-only
   C3C02B_PHASE: isolation-only
   # Suppress hooks, fsmonitor and checkout EOL transforms on this disposable runner only.
@@ -38,20 +38,24 @@ jobs:
           # BEGIN TRUSTED PYTHON
           import hashlib, io, json, os, pathlib, re, subprocess, urllib.request, stat, sys, tempfile, ipaddress
 
-          H = "62543ba874eb4d080ca68913d72dac944417ad7f"
-          PARENT = "5eb98f07728bfa8602930af04a286a21a78b6cf9"
-          PARENT_TREE = "4bfc2c9331295db1ab395b46434b108817d1b37c"
-          CHANGED = (".github/scripts/c3c02b_runner.py", ".github/scripts/test_c3c02b_runner.py")
+          H = "64ebe684ed882dae04ad4068b40c8fae4b5d26b2"
+          PARENT = "62543ba874eb4d080ca68913d72dac944417ad7f"
+          PARENT_TREE = "7e1b5989d29e07f53aa2c12e70dd04b5d0e8d4b5"
+          HISTORICAL_PARENT = "5eb98f07728bfa8602930af04a286a21a78b6cf9"
+          HISTORICAL_TREE = "4bfc2c9331295db1ab395b46434b108817d1b37c"
+          R16_BLOB = "50066c24e376596ba3e0701cacb5d38047491bd0"
+          CHANGED = (".github/scripts/test_c3c02b_runner.py",)
+          HISTORICAL_CHANGED = (".github/scripts/c3c02b_runner.py", ".github/scripts/test_c3c02b_runner.py")
           SDK_IMAGE = "mcr.microsoft.com/dotnet/sdk@sha256:8dd1a57fe6b7b8b1b357635db67e272c2f9e9d76d1dd0a32711c4c33c57d7b43"
           BASE = "79923e86eb1ce450db40d538d55848eaebe7877c"
-          TREE = "7e1b5989d29e07f53aa2c12e70dd04b5d0e8d4b5"
-          D = "b31273e6cb9f4177e32cba0c09af254b73db1ee22c862ffd8043bcca564489a4"
+          TREE = "e8118bd886ca2cb20895c0285ed7e707c9a0d6fe"
+          D = "00fd956a40a6e803e9ee37cff6d19bf46cb4c5a01b45c59d8f32ae1f420a3c83"
           REPO = "ivandinicola/CONSTIA"
           REF = REPO + "/.github/workflows/c3c02b-operational.yml@refs/heads/main"
           ACTOR = "147414572"
           TABLE = {
               ".github/scripts/c3c02b_runner.py": "a278e398a93646bba0f3dc867912c6375bbf42ac51b954a329fe4dc2153e8635",
-              ".github/scripts/test_c3c02b_runner.py": "5a383d497ac63c61004acf7dc1a9aacfc711f5bd28f238aa624b13506841ea12",
+              ".github/scripts/test_c3c02b_runner.py": "2025b1e8c0ce8e97333586d658b887b7ed87e8f0331ea2609d6df826f9e1bad1",
               ".github/workflows/c3c02b-operational.yml": "64474d003db5210f29c8b5bd5dbcc975b03297a083375410090ef02761986695",
               "docs/operations/c3-c-02b.md": "c7d615eee315cb2239b3f754b82946eb7b1b8696ff18aef87f4d954a865ed992",
               "tests/Constia.C3C02B.Tests/ConfirmationTests.cs": "7c6010d6efccf95fb6c1d333ecb293fe8af4e237e40020f69b10cb4791c5a6f8",
@@ -68,6 +72,8 @@ jobs:
               "tools/Constia.C3C02B.Harness/SandboxIdentity.cs": "a99c19df1b8a59072114841f7bb730b810235bb58dc4c94db77163694480712d",
               "tools/Constia.C3C02B.Harness/SimulatedResendHandler.cs": "9c2cfdea5f05e63733a3e71e11a7c6ea6d9ebc842cdf072893da9110f4f58b72"
           }
+          PARENT_TABLE = {**TABLE, ".github/scripts/test_c3c02b_runner.py":
+              "5a383d497ac63c61004acf7dc1a9aacfc711f5bd28f238aa624b13506841ea12"}
           HISTORICAL_TABLE = {
               ".github/scripts/c3c02b_runner.py": "630049f69dd7ff4241f90b6541fa1a1dea6adfe34770743f3c3a9e9f821726de",
               ".github/scripts/test_c3c02b_runner.py": "18bf565331829838661edf34c3ca2ab8b111ce275a552196a68c9b9dcacd2496",
@@ -164,21 +170,33 @@ jobs:
                       {p.decode("utf-8") for _, p in pairs} == set(paths), "Unexpected changed paths")
 
           def verify_checkout(root, h=H, base=BASE, tree=TREE, table=None, parent=PARENT,
-                              parent_tree=PARENT_TREE, historical_table=None, changes=CHANGED):
+                              parent_tree=PARENT_TREE, historical_table=None, changes=CHANGED,
+                              historical_parent=HISTORICAL_PARENT, historical_tree=HISTORICAL_TREE,
+                              parent_table=None, historical_changes=HISTORICAL_CHANGED, changed_blob=R16_BLOB):
               # Only tests pass alternative identities. Production always calls fixed defaults.
               table = TABLE if table is None else table
               historical_table = HISTORICAL_TABLE if historical_table is None else historical_table
+              parent_table = PARENT_TABLE if parent_table is None else parent_table
               root = pathlib.Path(root)
               require(root.is_dir() and not root.is_symlink() and not root.is_junction(), "Checkout missing")
               require(git(root, "rev-parse", "HEAD").decode().strip() == h, "Wrong checkout HEAD")
-              require(git(root, "rev-list", "--parents", "-n", "1", h).decode().split() == [h, parent], "Wrong H2 parent")
-              require(git(root, "rev-list", "--parents", "-n", "1", parent).decode().split() == [parent, base], "Wrong historical chain")
+              require(git(root, "rev-list", "--parents", "-n", "1", h).decode().split() == [h, parent], "Wrong H3 parent")
+              require(git(root, "rev-list", "--parents", "-n", "1", parent).decode().split() == [parent, historical_parent], "Wrong H2 parent")
+              require(git(root, "rev-list", "--parents", "-n", "1", historical_parent).decode().split() == [historical_parent, base], "Wrong historical chain")
               require(git(root, "rev-parse", h + "^{tree}").decode().strip() == tree, "Wrong tree")
               require(git(root, "rev-parse", parent + "^{tree}").decode().strip() == parent_tree, "Wrong historical tree")
-              diff_paths(root, base, parent, "A", historical_table)
+              require(git(root, "rev-parse", historical_parent + "^{tree}").decode().strip() == historical_tree, "Wrong H tree")
+              diff_paths(root, base, historical_parent, "A", historical_table)
+              diff_paths(root, historical_parent, parent, "M", historical_changes)
+              require(len(changes) == 1, "Only the R16 test may change")
               diff_paths(root, parent, h, "M", changes)
-              require(set(table) == set(historical_table), "Inventory paths differ")
-              history_ids = {p: git(root, "rev-parse", parent + ":" + p).decode().strip() for p in historical_table}
+              require(set(table) == set(parent_table) == set(historical_table), "Inventory paths differ")
+              require(git(root, "rev-parse", h + ":" + changes[0]).decode().strip() == changed_blob, "Wrong R16 blob")
+              parent_ids = {p: git(root, "rev-parse", parent + ":" + p).decode().strip() for p in parent_table}
+              parent_blobs = blob_bytes(root, list(dict.fromkeys(parent_ids.values())))
+              require(all(hashlib.sha256(parent_blobs[parent_ids[p]]).hexdigest() == digest
+                          for p, digest in parent_table.items()), "H2 inventory differs")
+              history_ids = {p: git(root, "rev-parse", historical_parent + ":" + p).decode().strip() for p in historical_table}
               history = blob_bytes(root, list(dict.fromkeys(history_ids.values())))
               require(all(hashlib.sha256(history[history_ids[p]]).hexdigest() == digest
                           for p, digest in historical_table.items()), "Historical inventory differs")
@@ -734,21 +752,21 @@ jobs:
           LAUNCHER_STAGE: approved
           LAUNCHER_READ_TOKEN: ${{ github.token }}
         run: *trusted_verifier
-      - name: Checkout only H2
+      - name: Checkout only H3
         id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: ivandinicola/CONSTIA
-          ref: 62543ba874eb4d080ca68913d72dac944417ad7f
+          ref: 64ebe684ed882dae04ad4068b40c8fae4b5d26b2
           path: harness
           persist-credentials: false
-          fetch-depth: 3
+          fetch-depth: 4
           fetch-tags: false
           submodules: false
           lfs: false
           clean: false
           set-safe-directory: false
-      - name: Verify H2 chain and every checkout byte from L2
+      - name: Verify H3 chain and every checkout byte from L3
         id: verified
         if: ${{ success() && steps.checkout.outcome == 'success' }}
         shell: python3 -I -B {0}
@@ -756,7 +774,7 @@ jobs:
           LAUNCHER_STAGE: verify
           LAUNCHER_READ_TOKEN: ${{ github.token }}
         run: *trusted_verifier
-      - name: Pure regressions from verified H2
+      - name: Pure regressions from verified H3
         id: regressions
         if: ${{ success() && steps.verified.outputs.verified == 'true' }}
         shell: python3 -I -B {0}
@@ -774,7 +792,7 @@ jobs:
           LAUNCHER_READ_TOKEN: ${{ github.token }}
           CHECKOUT_VERIFIED: ${{ steps.verified.outputs.verified }}
         run: *trusted_verifier
-      - name: Cleanup only verified H2 resources
+      - name: Cleanup only verified H3 resources
         id: cleanup
         if: ${{ always() && steps.verified.outputs.verified == 'true' }}
         shell: python3 -I -B {0}
