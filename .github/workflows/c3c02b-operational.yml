@@ -1,4 +1,4 @@
-# Trusted L2 candidate. H's workflow at the same path is never used as launcher code.
+# Trusted L4 candidate pinned to the audited H4/D4. H's workflow at the same path is never used as launcher code.
 name: C3-C trusted isolation launcher
 on:
   workflow_dispatch:
@@ -8,10 +8,10 @@ concurrency:
   group: constia-c3c02b-operational
   cancel-in-progress: false
 env:
-  CODE_SHA: 64ebe684ed882dae04ad4068b40c8fae4b5d26b2
-  CONSTIA_B3_APPROVED_SHA: 64ebe684ed882dae04ad4068b40c8fae4b5d26b2
+  CODE_SHA: 0e0bb2d7331c9c6fe77fb863651e4cb642b79a84
+  CONSTIA_B3_APPROVED_SHA: 0e0bb2d7331c9c6fe77fb863651e4cb642b79a84
   CONSTIA_B3_APPROVED_ACTOR_ID: '147414572'
-  CONSTIA_B3_INVENTORY_SHA256: 00fd956a40a6e803e9ee37cff6d19bf46cb4c5a01b45c59d8f32ae1f420a3c83
+  CONSTIA_B3_INVENTORY_SHA256: 21307d385d6119ab5a03f7acbe0a3e3bb8b4d38b9c38174ae56e4242f1a16d1a
   CONSTIA_B3_APPROVED_PHASE: isolation-only
   C3C02B_PHASE: isolation-only
   # Suppress hooks, fsmonitor and checkout EOL transforms on this disposable runner only.
@@ -94,6 +94,14 @@ jobs:
               "tools/Constia.C3C02B.Harness/SimulatedResendHandler.cs": "9c2cfdea5f05e63733a3e71e11a7c6ea6d9ebc842cdf072893da9110f4f58b72"
           }
 
+          H3, H3_TREE, H3_D, H3_TABLE = H, TREE, D, TABLE.copy()
+          # Definitive H4/D4 identities audited in C38.
+          H = "0e0bb2d7331c9c6fe77fb863651e4cb642b79a84"
+          TREE = "47861bf77376d2d2caea36bef4914883602964f9"
+          D = "21307d385d6119ab5a03f7acbe0a3e3bb8b4d38b9c38174ae56e4242f1a16d1a"
+          TABLE = {**H3_TABLE, ".github/scripts/c3c02b_runner.py": "9794d7b2d3a1b22736c3911c75cbbc82a2b45285f1be6e1a0516e25e7ecb236e",
+                   ".github/scripts/test_c3c02b_runner.py": "197cfa0995696634f078ed0dd630499a289f55967ac6cdef0fd918743ef66709"}
+
           class Unsafe(RuntimeError):
               pass
 
@@ -102,7 +110,13 @@ jobs:
                   raise Unsafe(message)
 
           def validate_policy(table):
-              require(table == TABLE and len(table) == 17, "Inventory policy differs")
+              require(type(H) is str and re.fullmatch("[0-9a-f]{40}",H) is not None and
+                      type(TREE) is str and re.fullmatch("[0-9a-f]{40}",TREE) is not None and
+                      type(D) is str and re.fullmatch("[0-9a-f]{64}",D) is not None,
+                      "H4 cryptographic pins are not consolidated")
+              require(table == TABLE and len(table) == 17 and
+                      all(type(v) is str and re.fullmatch("[0-9a-f]{64}",v) is not None for v in table.values()),
+                      "Inventory policy differs")
               digest = hashlib.sha256(json.dumps(table, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
               require(digest == D, "Policy digest differs")
 
@@ -169,17 +183,17 @@ jobs:
               require(len(pairs) == len(paths) and all(s == status.encode() for s, _ in pairs) and
                       {p.decode("utf-8") for _, p in pairs} == set(paths), "Unexpected changed paths")
 
-          def verify_checkout(root, h=H, base=BASE, tree=TREE, table=None, parent=PARENT,
+          def verify_historical_checkout(root, h=H3, base=BASE, tree=H3_TREE, table=None, parent=PARENT,
                               parent_tree=PARENT_TREE, historical_table=None, changes=CHANGED,
                               historical_parent=HISTORICAL_PARENT, historical_tree=HISTORICAL_TREE,
-                              parent_table=None, historical_changes=HISTORICAL_CHANGED, changed_blob=R16_BLOB):
+                              parent_table=None, historical_changes=HISTORICAL_CHANGED, changed_blob=R16_BLOB, checkout_head=None, physical=True):
               # Only tests pass alternative identities. Production always calls fixed defaults.
-              table = TABLE if table is None else table
+              table = H3_TABLE if table is None else table
               historical_table = HISTORICAL_TABLE if historical_table is None else historical_table
               parent_table = PARENT_TABLE if parent_table is None else parent_table
               root = pathlib.Path(root)
               require(root.is_dir() and not root.is_symlink() and not root.is_junction(), "Checkout missing")
-              require(git(root, "rev-parse", "HEAD").decode().strip() == h, "Wrong checkout HEAD")
+              require(git(root, "rev-parse", "HEAD").decode().strip() == (h if checkout_head is None else checkout_head), "Wrong checkout HEAD")
               require(git(root, "rev-list", "--parents", "-n", "1", h).decode().split() == [h, parent], "Wrong H3 parent")
               require(git(root, "rev-list", "--parents", "-n", "1", parent).decode().split() == [parent, historical_parent], "Wrong H2 parent")
               require(git(root, "rev-list", "--parents", "-n", "1", historical_parent).decode().split() == [historical_parent, base], "Wrong historical chain")
@@ -211,6 +225,16 @@ jobs:
                           and "\\" not in rel and ":" not in rel, "Unsafe tracked path")
                   tracked[rel] = oid
               raw_blobs = blob_bytes(root, list(dict.fromkeys(tracked.values())))
+              if physical:
+                  _verify_physical_checkout(root,tracked,raw_blobs)
+              require(all(p in tracked and hashlib.sha256(raw_blobs[tracked[p]]).hexdigest() == digest
+                          for p, digest in table.items()), "Audited blob differs")
+              require(not git(root, "status", "--porcelain=v1", "--untracked-files=all").strip(), "Dirty checkout")
+              return True
+
+
+
+          def _verify_physical_checkout(root,tracked,raw_blobs):
               actual = set()
               for directory, dirs, files in os.walk(root, followlinks=False):
                   if pathlib.Path(directory) == root:
@@ -223,11 +247,51 @@ jobs:
               require(actual == set(tracked), "Unexpected or missing physical paths")
               for rel, oid in tracked.items():
                   require((root / rel).read_bytes() == raw_blobs[oid], "Physical checkout differs from blob")
-              require(all(p in tracked and hashlib.sha256(raw_blobs[tracked[p]]).hexdigest() == digest
-                          for p, digest in table.items()), "Audited blob differs")
-              require(not git(root, "status", "--porcelain=v1", "--untracked-files=all").strip(), "Dirty checkout")
-              return True
 
+
+          def verify_checkout(root, h=None, tree=None, table=None, parent=H3, changes=HISTORICAL_CHANGED, history=None):
+              # The unbound candidate cannot verify or execute a historical H3 as H4.
+              h=H if h is None else h
+              tree=TREE if tree is None else tree
+              table=TABLE if table is None else table
+              require(type(h) is str and re.fullmatch("[0-9a-f]{40}",h) is not None and
+                      type(tree) is str and re.fullmatch("[0-9a-f]{40}",tree) is not None and
+                      type(table) is dict and all(type(v) is str and re.fullmatch("[0-9a-f]{64}",v) is not None for v in table.values()),
+                      "H4 cryptographic pins are not consolidated")
+              require(h!=parent,"H3 cannot execute as H4")
+              history={} if history is None else history
+              require(history.get("h",H3)==parent,"H4 parent differs from historical H3")
+              verify_historical_checkout(root,checkout_head=h,physical=False,**history)
+              require(git(root,"rev-list","--parents","-n","1",h).decode().split()==[h,parent],"Wrong H4 parent")
+              require(git(root,"rev-parse",h+"^{tree}").decode().strip()==tree,"Wrong H4 tree")
+              require(len(changes)==2,"Only image diagnostics runner and tests may change")
+              diff_paths(root,parent,h,"M",changes)
+              previous=history.get("table",H3_TABLE)
+              require(set(table)==set(previous) and all(table[p]==previous[p] for p in table if p not in changes),
+                      "H4 changed the retained inventory")
+              listing=git(root,"ls-tree","-r","-z",h).split(b"\0")
+              tracked={}
+              for item in filter(None,listing):
+                  header,path=item.split(b"\t",1);mode,kind,oid=header.decode("ascii").split()
+                  rel=path.decode("utf-8")
+                  require(kind=="blob" and mode in ("100644","100755") and
+                          not pathlib.PurePosixPath(rel).is_absolute() and ".." not in pathlib.PurePosixPath(rel).parts
+                          and "\\" not in rel and ":" not in rel,"Unsafe H4 tracked path")
+                  tracked[rel]=oid
+              raw=blob_bytes(root,list(dict.fromkeys(tracked.values())))
+              actual=set()
+              for directory,dirs,files in os.walk(root,followlinks=False):
+                  if pathlib.Path(directory)==pathlib.Path(root):dirs[:]=[d for d in dirs if d!=".git"]
+                  for name in dirs+files:
+                      path=pathlib.Path(directory)/name
+                      require(not path.is_symlink() and not path.is_junction(),"Checkout symlink forbidden")
+                  actual.update((pathlib.Path(directory)/name).relative_to(root).as_posix() for name in files)
+              require(actual==set(tracked),"Unexpected or missing physical paths")
+              require(all((pathlib.Path(root)/p).read_bytes()==raw[oid] for p,oid in tracked.items()),"Physical checkout differs from blob")
+              require(all(p in tracked and hashlib.sha256(raw[tracked[p]]).hexdigest()==value for p,value in table.items()),
+                      "Audited H4 blob differs")
+              require(not git(root,"status","--porcelain=v1","--untracked-files=all").strip(),"Dirty H4 checkout")
+              return True
 
 
           # L2 validates H2's wire contract independently; it never imports H2's validators.
@@ -246,6 +310,11 @@ jobs:
               ("cleanup","CLEANUP_UNVERIFIED","UNKNOWN"),("cleanup_remove","CLEANUP_FAILED","REMOVE_FAILED"),
               ("evidence","EVIDENCE_INVALID","INVALID"),("evidence_write","EVIDENCE_WRITE_FAILED","IO_FAILED"),
               ("unexpected","UNEXPECTED_FAILURE","UNCLASSIFIED")})
+          IMAGE_SUBPROCESS = frozenset(("resource_image","RESOURCE_UNVERIFIED",reason) for reason in
+              ("BUILD_START_NOT_FOUND","BUILD_START_DENIED","BUILD_START_FAILED","BUILD_EXIT_NONZERO",
+               "BUILD_TIMEOUT","BUILD_UNEXPECTED_EXCEPTION"))
+          IMAGE_CONFIRMATION = ("resource_image","RESOURCE_UNVERIFIED","IMAGE_CONFIRMATION_FAILED")
+          CATALOG = CATALOG | IMAGE_SUBPROCESS | frozenset((IMAGE_CONFIRMATION,))
           STAGES = frozenset(x[0] for x in CATALOG)
           PRODUCERS = frozenset(("no_dispatch","quiescent","unresolved","unknown"))
           OUTCOMES = frozenset(("success","failure","cancelled","skipped"))
@@ -277,6 +346,7 @@ jobs:
               ("isolation_setup","ISOLATION_UNVERIFIED","CHECK_FAILED"),
               ("connectivity","CONNECTIVITY_UNVERIFIED","CHECK_FAILED"),
               ("evidence","EVIDENCE_INVALID","INVALID"),("evidence_write","EVIDENCE_WRITE_FAILED","IO_FAILED")})
+          FIRST_WITH_MANIFEST = FIRST_WITH_MANIFEST | IMAGE_SUBPROCESS | frozenset((IMAGE_CONFIRMATION,))
           FIRST_BEFORE_DISPATCH = FIRST_PRE_MANIFEST | frozenset({
               ("build_context","BUILD_CONTEXT_FAILED","PREPARATION"),("resource_image","RESOURCE_UNVERIFIED","UNCONFIRMED")})
           CLEANUP_UNKNOWN = ("cleanup","CLEANUP_UNVERIFIED","UNKNOWN")
@@ -309,6 +379,9 @@ jobs:
               EVIDENCE_INVALID:{"isolation_setup","evidence","connectivity"},
               ("evidence_write","EVIDENCE_WRITE_FAILED","IO_FAILED"):{"evidence","evidence_write","connectivity"}}
 
+          BOUND_PREDECESSORS.update({key:{"journal_write"} for key in IMAGE_SUBPROCESS})
+          BOUND_PREDECESSORS[IMAGE_CONFIRMATION] = {"resource_image"}
+
           def failure_key(value):
               fixed_failure(value)
               return None if value is None else tuple(value[k] for k in ("stage","code","reason"))
@@ -321,6 +394,12 @@ jobs:
               require(producer in (("quiescent","unresolved") if creation else ("no_dispatch","unresolved")),"Producer not closed consistently")
               require(producer!="unresolved" or bound is not False,"Unbound producer unresolved")
               require(not creation or bound is not False,"Dispatch without admitted manifest")
+              if key in IMAGE_SUBPROCESS:
+                  require(bound is True and creation is True and producer=="unresolved",
+                          "Image subprocess failure lacks durable pending dispatch")
+              if key==IMAGE_CONFIRMATION:
+                  require(bound is True and creation is True and producer in ("quiescent","unresolved"),
+                          "Image confirmation failure predates acknowledged build")
               if execution=="completed":
                   # Candidate-proof validation runs after completed; cleanup never writes first_failure.
                   require(producer=="quiescent" and key in (None,EVIDENCE_INVALID),"Completed execution has contradictory first failure/producer")
@@ -710,7 +789,7 @@ jobs:
                   require(e.get("GATE_RESULT")=="success" and e.get("L2_ENVIRONMENT")=="constia-c3c-isolation","Protected approval context absent")
               if stage in ("tests","run","cleanup","evidence","final"):require(e.get("CHECKOUT_VERIFIED")=="true","Prior verification absent")
               if stage=="gate":
-                  print("Read-only gate: H2="+H+"; D2="+D+"; actor="+ACTOR+"; phase=isolation-only")
+                  print("Read-only gate: H4="+H+"; D4="+D+"; actor="+ACTOR+"; phase=isolation-only")
               elif stage=="verify":
                   verify_checkout(pathlib.Path(e["GITHUB_WORKSPACE"])/"harness")
                   outputs(dict(verified="true"))
@@ -752,21 +831,21 @@ jobs:
           LAUNCHER_STAGE: approved
           LAUNCHER_READ_TOKEN: ${{ github.token }}
         run: *trusted_verifier
-      - name: Checkout only H3
+      - name: Checkout only H4
         id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: ivandinicola/CONSTIA
-          ref: 64ebe684ed882dae04ad4068b40c8fae4b5d26b2
+          ref: 0e0bb2d7331c9c6fe77fb863651e4cb642b79a84
           path: harness
           persist-credentials: false
-          fetch-depth: 4
+          fetch-depth: 5
           fetch-tags: false
           submodules: false
           lfs: false
           clean: false
           set-safe-directory: false
-      - name: Verify H3 chain and every checkout byte from L3
+      - name: Verify H4 chain and every checkout byte from L4
         id: verified
         if: ${{ success() && steps.checkout.outcome == 'success' }}
         shell: python3 -I -B {0}
@@ -774,7 +853,7 @@ jobs:
           LAUNCHER_STAGE: verify
           LAUNCHER_READ_TOKEN: ${{ github.token }}
         run: *trusted_verifier
-      - name: Pure regressions from verified H3
+      - name: Pure regressions from verified H4
         id: regressions
         if: ${{ success() && steps.verified.outputs.verified == 'true' }}
         shell: python3 -I -B {0}
@@ -792,7 +871,7 @@ jobs:
           LAUNCHER_READ_TOKEN: ${{ github.token }}
           CHECKOUT_VERIFIED: ${{ steps.verified.outputs.verified }}
         run: *trusted_verifier
-      - name: Cleanup only verified H3 resources
+      - name: Cleanup only verified H4 resources
         id: cleanup
         if: ${{ always() && steps.verified.outputs.verified == 'true' }}
         shell: python3 -I -B {0}

@@ -14,13 +14,19 @@ from unittest import mock
 WORKFLOW = pathlib.Path(__file__).resolve().parents[2] / ".github/workflows/c3c02b-operational.yml"
 
 
-def load():
+def load(bind_test_identity=True):
     if not WORKFLOW.exists():
         return None
     text = WORKFLOW.read_text(encoding="utf-8")
     code = text.split("          # BEGIN TRUSTED PYTHON\n", 1)[1].split("          # END TRUSTED PYTHON", 1)[0]
     scope = {"__name__": "launcher_tests"}
     exec(compile(textwrap.dedent(code), str(WORKFLOW), "exec"), scope)
+    if not bind_test_identity:return scope
+    # Explicit synthetic H4 identity for pure contract fixtures, never workflow pins.
+    scope["H"]="f"*40;scope["TREE"]="e"*40
+    scope["TABLE"]={**scope["H3_TABLE"],".github/scripts/c3c02b_runner.py":hashlib.sha256(b"synthetic H4 runner").hexdigest(),
+                    ".github/scripts/test_c3c02b_runner.py":hashlib.sha256(b"synthetic H4 tests").hexdigest()}
+    scope["D"]=hashlib.sha256(json.dumps(scope["TABLE"],sort_keys=True,separators=(",",":")).encode()).hexdigest()
     return scope
 
 
@@ -39,8 +45,8 @@ def validate_topology(text):
     check("    needs: gate\n" in isolation and "    environment: constia-c3c-isolation\n" in isolation,"Protected approval")
     steps=isolation.split("    steps:\n",1)[1].split("      - name: ")[1:]
     names=[x.splitlines()[0] for x in steps]
-    check(names==["Recheck trusted identity after approval","Checkout only H3","Verify H3 chain and every checkout byte from L3",
-          "Pure regressions from verified H3","Run only isolation","Cleanup only verified H3 resources",
+    check(names==["Recheck trusted identity after approval","Checkout only H4","Verify H4 chain and every checkout byte from L4",
+          "Pure regressions from verified H4","Run only isolation","Cleanup only verified H4 resources",
           "Validate and project allowlisted diagnostics from L2","Upload only validated projection","Require actual isolation success"],"Step order")
     check("steps.checkout.outcome == 'success'" in steps[2] and "run: *trusted_verifier" in steps[2],"Checkout guard")
     for index,stage in ((3,"tests"),(4,"run"),(5,"cleanup"),(6,"evidence"),(8,"final")):
@@ -51,7 +57,7 @@ def validate_topology(text):
     check("steps.evidence.outputs.diagnostic_valid == 'true'" in steps[7] and
           "steps.evidence.outcome == 'success'" in steps[7],"No upload without validation")
     check("steps.evidence.outputs.isolation_verified" in steps[8],"Final success guard")
-    check("fetch-depth: 4" in steps[1] and "persist-credentials: false" in steps[1],"Checkout bounds")
+    check("fetch-depth: 5" in steps[1] and "persist-credentials: false" in steps[1],"Checkout bounds")
     check("secrets." not in text and "id-token:" not in text,"No new secrets or permissions")
 
 
@@ -63,15 +69,15 @@ def topology_mutations(text):
         "gate dependency absent": text.replace("    needs: gate\n", ""),
         "checkout before gate": text.replace("      - name: Read-only identity gate",
             "      - name: Premature checkout\n        uses: actions/checkout@bad\n      - name: Read-only identity gate"),
-        "H before verifier": text.replace("      - name: Verify H3 chain and every checkout byte from L3",
+        "H before verifier": text.replace("      - name: Verify H4 chain and every checkout byte from L4",
             "      - name: Premature H\n        run: python3 harness/.github/scripts/c3c02b_runner.py\n"
-            "      - name: Verify H3 chain and every checkout byte from L3"),
+            "      - name: Verify H4 chain and every checkout byte from L4"),
         "verified condition absent": text.replace("steps.verified.outputs.verified == 'true'", "true"),
         "different phase": text.replace("  C3C02B_PHASE: isolation-only", "  C3C02B_PHASE: operational-full"),
         "unexpected step": text + "      - name: Unexpected step\n        run: echo forbidden\n",
         "checkout success guard absent": text.replace("steps.checkout.outcome == 'success'", "true"),
-        "H forced after failure": text.replace("      - name: Pure regressions from verified H3\n",
-            "      - name: Pure regressions from verified H3\n        if: ${{ always() }}\n"),
+        "H forced after failure": text.replace("      - name: Pure regressions from verified H4\n",
+            "      - name: Pure regressions from verified H4\n        if: ${{ always() }}\n"),
     }
 
 
@@ -131,7 +137,7 @@ class LauncherTests(unittest.TestCase):
                 self.l["validate_context"](env, {}, "a"*40)
 
     def test_canonical_policy_is_the_approved_blob_digest(self):
-        table = self.l["TABLE"]
+        table = self.l["H3_TABLE"]
         self.assertEqual(17, len(table))
         self.assertEqual("00fd956a40a6e803e9ee37cff6d19bf46cb4c5a01b45c59d8f32ae1f420a3c83",
                          hashlib.sha256(json.dumps(table, sort_keys=True, separators=(",", ":")).encode()).hexdigest())
@@ -173,7 +179,7 @@ class LauncherTests(unittest.TestCase):
 
 
     def verify(self, root, policy):
-        return self.l["verify_checkout"](root, **policy)
+        return self.l["verify_historical_checkout"](root, **policy)
 
     def test_real_git_checkout_is_verified_without_executing_hooks(self):
         with tempfile.TemporaryDirectory() as t:
@@ -337,9 +343,9 @@ class LauncherTests(unittest.TestCase):
         self.assertNotIn("id-token:", text)
         steps = text.split("  isolation:\n", 1)[1].split("    steps:\n", 1)[1]
         names = [line.strip()[len("- name: "):] for line in steps.splitlines() if line.strip().startswith("- name: ")]
-        self.assertEqual(["Recheck trusted identity after approval", "Checkout only H3",
-                          "Verify H3 chain and every checkout byte from L3", "Pure regressions from verified H3",
-                          "Run only isolation", "Cleanup only verified H3 resources",
+        self.assertEqual(["Recheck trusted identity after approval", "Checkout only H4",
+                          "Verify H4 chain and every checkout byte from L4", "Pure regressions from verified H4",
+                          "Run only isolation", "Cleanup only verified H4 resources",
                           "Validate and project allowlisted diagnostics from L2", "Upload only validated projection", "Require actual isolation success"], names)
         self.assertEqual(5, text.count("steps.verified.outputs.verified == 'true'"))
         self.assertIn("steps.evidence.outputs.diagnostic_valid == 'true'", text)
@@ -416,10 +422,10 @@ class L2ContractTests(unittest.TestCase):
         self.l=load()
 
     def test_exact_H3_tree_parent_and_D3_are_pinned(self):
-        self.assertEqual("64ebe684ed882dae04ad4068b40c8fae4b5d26b2",self.l["H"])
+        self.assertEqual("64ebe684ed882dae04ad4068b40c8fae4b5d26b2",self.l["H3"])
         self.assertEqual("62543ba874eb4d080ca68913d72dac944417ad7f",self.l["PARENT"])
-        self.assertEqual("e8118bd886ca2cb20895c0285ed7e707c9a0d6fe",self.l["TREE"])
-        self.assertEqual("00fd956a40a6e803e9ee37cff6d19bf46cb4c5a01b45c59d8f32ae1f420a3c83",self.l["D"])
+        self.assertEqual("e8118bd886ca2cb20895c0285ed7e707c9a0d6fe",self.l["H3_TREE"])
+        self.assertEqual("00fd956a40a6e803e9ee37cff6d19bf46cb4c5a01b45c59d8f32ae1f420a3c83",self.l["H3_D"])
         self.assertEqual("50066c24e376596ba3e0701cacb5d38047491bd0",self.l["R16_BLOB"])
 
     def test_diagnostic_contract_is_independent_from_H2_code(self):
@@ -698,7 +704,7 @@ class L2StageTests(unittest.TestCase):
             git("add","--","extra.txt")
             git("-c","user.name=Local Test","-c","user.email=test@example.invalid","commit","--amend","--no-edit","--quiet")
             p.update(h=git("rev-parse","HEAD"),tree=git("rev-parse","HEAD^{tree}"))
-            with self.assertRaisesRegex(self.l["Unsafe"],"Unexpected changed paths"):self.l["verify_checkout"](root,**p)
+            with self.assertRaisesRegex(self.l["Unsafe"],"Unexpected changed paths"):self.l["verify_historical_checkout"](root,**p)
 
 
 def write_h2_early_failure(case, original_changes=None, primary_changes=None, final_changes=None):
@@ -1352,9 +1358,9 @@ class H3ChainTests(unittest.TestCase):
 
     def test_checkout_depth_four_is_required(self):
         text=WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("fetch-depth: 4",text)
+        self.assertIn("fetch-depth: 5",text)
         with self.assertRaises(AssertionError):
-            validate_topology(text.replace("fetch-depth: 4","fetch-depth: 3"))
+            validate_topology(text.replace("fetch-depth: 5","fetch-depth: 4"))
 
     def test_R16_oid_rejected_even_with_correct_hash_table(self):
         with tempfile.TemporaryDirectory() as d:
@@ -1362,14 +1368,200 @@ class H3ChainTests(unittest.TestCase):
             with self.assertRaises(self.l["Unsafe"]):self.verify(root,dict(p,changed_blob="0"*40))
 
     def test_exact_H3_inventory_and_preserved_H2_snapshot(self):
-        self.assertEqual(17,len(self.l["TABLE"]))
-        self.assertEqual(set(self.l["TABLE"]),set(self.l["PARENT_TABLE"]))
+        self.assertEqual(17,len(self.l["H3_TABLE"]))
+        self.assertEqual(set(self.l["H3_TABLE"]),set(self.l["PARENT_TABLE"]))
         key=".github/scripts/test_c3c02b_runner.py"
-        self.assertEqual("2025b1e8c0ce8e97333586d658b887b7ed87e8f0331ea2609d6df826f9e1bad1",self.l["TABLE"][key])
+        self.assertEqual("2025b1e8c0ce8e97333586d658b887b7ed87e8f0331ea2609d6df826f9e1bad1",self.l["H3_TABLE"][key])
         self.assertEqual("5a383d497ac63c61004acf7dc1a9aacfc711f5bd28f238aa624b13506841ea12",self.l["PARENT_TABLE"][key])
         self.assertEqual([key],list(self.l["CHANGED"]))
-        for path in self.l["TABLE"]:
-            if path!=key:self.assertEqual(self.l["TABLE"][path],self.l["PARENT_TABLE"][path])
+        for path in self.l["H3_TABLE"]:
+            if path!=key:self.assertEqual(self.l["H3_TABLE"][path],self.l["PARENT_TABLE"][path])
+
+
+
+class H4DiagnosticContractTests(unittest.TestCase):
+    setUp=L2EvidenceTests.setUp
+    context=LauncherTests.context
+    body=L2EvidenceTests.body
+    write=L2EvidenceTests.write
+    validate=L2EvidenceTests.validate
+
+    def image_failure(self,reason):
+        self.record.update(first_failure=dict(stage="resource_image",code="RESOURCE_UNVERIFIED",reason=reason),
+                           last_completed_stage="resource_image" if reason=="IMAGE_CONFIRMATION_FAILED" else "journal_write")
+        self.record["session"]["producer_state"]="quiescent" if reason=="IMAGE_CONFIRMATION_FAILED" else "unresolved"
+        self.outcomes["cleanup"]="failure"
+        self.record["session"]["manifest_sha256"]=hashlib.sha256(self.body(self.manifest)).hexdigest()
+        self.primary=copy.deepcopy(self.record)
+        self.primary.update(kind="cleanup_primary",last_completed_stage="evidence_write",
+            operation_failure=dict(stage="cleanup",code="CLEANUP_UNVERIFIED",reason="UNKNOWN"))
+        self.final=copy.deepcopy(self.primary);self.final.update(kind="cleanup_final",last_completed_stage="authorization")
+
+    def test_T12_seven_closed_reasons_reach_projection(self):
+        for reason in ("BUILD_START_NOT_FOUND","BUILD_START_DENIED","BUILD_START_FAILED","BUILD_EXIT_NONZERO",
+                       "BUILD_TIMEOUT","BUILD_UNEXPECTED_EXCEPTION","IMAGE_CONFIRMATION_FAILED"):
+            with self.subTest(reason=reason):
+                self.image_failure(reason);self.write();p=self.validate()
+                self.assertTrue(p["diagnostic_valid"]);self.assertFalse(p["isolation_verified"])
+                self.assertEqual(reason,p["first_failure"]["reason"])
+                self.assertNotIn("PRIVATE_SECRET",self.body(p).decode())
+                self.l["validate_projection"](p)
+
+    def test_T13_process_requires_attempt_admission_and_unresolved(self):
+        reason="BUILD_TIMEOUT";self.image_failure(reason)
+        for creation,producer,bound in ((False,"no_dispatch",True),(True,"quiescent",True),(True,"unresolved",False)):
+            with self.subTest(creation=creation,producer=producer,bound=bound),self.assertRaises(self.l["Unsafe"]):
+                self.l["validate_execution_failure"]("failed_after_creation_attempt" if creation else "failed_before_creation",
+                    creation,self.record["first_failure"],producer,bound)
+        with self.assertRaises(self.l["Unsafe"]):
+            self.l["validate_execution_stage"]("failed_after_creation_attempt",True,self.record["first_failure"],"resource_image",True)
+
+    def test_T14_confirmation_requires_completed_build(self):
+        self.image_failure("IMAGE_CONFIRMATION_FAILED")
+        for last in ("journal_write","build_context","connectivity"):
+            with self.subTest(last=last),self.assertRaises(self.l["Unsafe"]):
+                self.l["validate_execution_stage"]("failed_after_creation_attempt",True,self.record["first_failure"],last,True)
+        with self.assertRaises(self.l["Unsafe"]):
+            self.l["validate_execution_failure"]("failed_before_creation",False,self.record["first_failure"],"no_dispatch",True)
+
+    def test_T15_unknown_wrong_stage_and_extra_fields_rejected(self):
+        for f in (dict(stage="resource_image",code="RESOURCE_UNVERIFIED",reason="PRIVATE_SECRET"),
+                  dict(stage="resource_network",code="RESOURCE_UNVERIFIED",reason="BUILD_TIMEOUT"),
+                  dict(stage="resource_image",code="RESOURCE_UNVERIFIED",reason="BUILD_TIMEOUT",stderr="PRIVATE_SECRET")):
+            with self.subTest(f=f),self.assertRaises(self.l["Unsafe"]):self.l["fixed_failure"](f)
+
+    def test_T16_new_reasons_are_never_cleanup_or_before_dispatch(self):
+        for reason in ("BUILD_START_NOT_FOUND","BUILD_START_DENIED","BUILD_START_FAILED","BUILD_EXIT_NONZERO",
+                       "BUILD_TIMEOUT","BUILD_UNEXPECTED_EXCEPTION","IMAGE_CONFIRMATION_FAILED"):
+            key=("resource_image","RESOURCE_UNVERIFIED",reason)
+            self.assertNotIn(key,self.l["FIRST_BEFORE_DISPATCH"])
+            self.assertNotIn(key,self.l["CLEANUP_OPERATIONS"])
+            self.image_failure(reason)
+            bad=copy.deepcopy(self.primary);bad["operation_failure"]=self.record["first_failure"]
+            with self.assertRaises(self.l["Unsafe"]):self.l["validate_failure_context"](bad,"cleanup_primary")
+
+
+
+class H4ChainTests(unittest.TestCase):
+    def setUp(self):self.l=load()
+    def fixture(self,directory):
+        case=LauncherTests();case.l=self.l
+        root,git,history=case.repository(directory)
+        h3=history["h"]
+        (root/"option.txt").write_bytes(b"approved-v4\n")
+        (root/"base.txt").write_bytes(b"synthetic H4 second changed file\n")
+        git("add","--","option.txt","base.txt")
+        git("-c","user.name=Local Test","-c","user.email=test@example.invalid","commit","-qm","synthetic H4")
+        policy=dict(h=git("rev-parse","HEAD"),tree=git("rev-parse","HEAD^{tree}"),
+            parent=h3,changes=("option.txt","base.txt"),history=history,
+            table={"option.txt":hashlib.sha256(b"approved-v4\n").hexdigest()})
+        return root,git,policy
+
+    def test_unbound_policy_variants_cannot_authorize_execution(self):
+        l=load(False)
+        e=LauncherTests();e.l=l
+        context=e.context()
+        for key in ("H","TREE","D"):
+            old=l[key]
+            try:
+                l[key]=None
+                with self.subTest(key=key),self.assertRaisesRegex(l["Unsafe"],"not consolidated"):
+                    l["validate_policy"](l["TABLE"])
+                with self.assertRaises(l["Unsafe"]):l["validate_context"](context,{},context["GITHUB_SHA"])
+            finally:l[key]=old
+        table=l["TABLE"].copy()
+        try:
+            l["TABLE"][".github/scripts/c3c02b_runner.py"]=None
+            with self.assertRaises(l["Unsafe"]):l["validate_policy"](l["TABLE"])
+        finally:l["TABLE"]=table
+
+    def test_five_real_commits_and_four_commit_shallow_boundary(self):
+        with tempfile.TemporaryDirectory() as d:
+            root,git,p=self.fixture(d)
+            self.assertEqual(5,len(git("rev-list","HEAD").splitlines()))
+            self.assertTrue(self.l["verify_checkout"](root,**p))
+            (root/".git/shallow").write_text(p["history"]["historical_parent"]+"\n",encoding="ascii")
+            with self.assertRaises(self.l["Unsafe"]):self.l["verify_checkout"](root,**p)
+
+    def test_H4_head_tree_parent_and_inventory_tampering_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root,git,p=self.fixture(d)
+            for key in ("h","tree","parent"):
+                with self.subTest(key=key),self.assertRaises(self.l["Unsafe"]):
+                    self.l["verify_checkout"](root,**dict(p,**{key:"0"*40}))
+            for bad in ({}, {"option.txt":"0"*64}):
+                with self.assertRaises(self.l["Unsafe"]):
+                    self.l["verify_checkout"](root,**dict(p,table=bad))
+            with self.assertRaises(self.l["Unsafe"]):
+                self.l["verify_checkout"](root,**dict(p,h=p["parent"]))
+            (root/"option.txt").write_bytes(b"tampered\n")
+            with self.assertRaises(self.l["Unsafe"]):self.l["verify_checkout"](root,**p)
+
+    def test_H4_may_not_change_a_third_path(self):
+        with tempfile.TemporaryDirectory() as d:
+            root,git,p=self.fixture(d)
+            (root/"third.txt").write_bytes(b"not approved\n");git("add","--","third.txt")
+            git("-c","user.name=Local Test","-c","user.email=test@example.invalid","commit","--amend","-qm","synthetic bad H4")
+            p.update(h=git("rev-parse","HEAD"),tree=git("rev-parse","HEAD^{tree}"))
+            with self.assertRaisesRegex(self.l["Unsafe"],"Unexpected changed paths"):self.l["verify_checkout"](root,**p)
+
+    def test_H3_identity_cannot_emit_H4_diagnostics(self):
+        e=LauncherTests();e.l=self.l
+        for key in ("CODE_SHA","CONSTIA_B3_APPROVED_SHA"):
+            with self.assertRaises(self.l["Unsafe"]):
+                env=e.context();env[key]=self.l["H3"]
+                self.l["validate_context"](env,{},env["GITHUB_SHA"])
+
+
+
+class C40DefinitivePolicyTests(unittest.TestCase):
+    """Real approved identities; synthetic histories remain separate fixtures."""
+    def setUp(self):
+        self.l=load(False)
+        case=LauncherTests();case.l=self.l
+        self.e=case.context()
+        self.e.update(CODE_SHA="0e0bb2d7331c9c6fe77fb863651e4cb642b79a84",
+            CONSTIA_B3_APPROVED_SHA="0e0bb2d7331c9c6fe77fb863651e4cb642b79a84",
+            CONSTIA_B3_INVENTORY_SHA256="21307d385d6119ab5a03f7acbe0a3e3bb8b4d38b9c38174ae56e4242f1a16d1a")
+
+    def test_approved_H4_context_and_policy_are_accepted(self):
+        try:self.l["validate_context"](self.e,{},self.e["GITHUB_SHA"])
+        except self.l["Unsafe"] as error:self.fail("Approved H4 context rejected: "+str(error))
+        self.l["validate_policy"](self.l["TABLE"])
+        self.assertEqual(17,len(self.l["TABLE"]))
+        self.assertEqual("47861bf77376d2d2caea36bef4914883602964f9",self.l["TREE"])
+        import inspect
+        self.assertEqual("64ebe684ed882dae04ad4068b40c8fae4b5d26b2",
+                         inspect.signature(self.l["verify_checkout"]).parameters["parent"].default)
+
+    def test_H3_or_wrong_digest_cannot_authorize_H4(self):
+        for changes in (
+            dict(CODE_SHA="64ebe684ed882dae04ad4068b40c8fae4b5d26b2",
+                 CONSTIA_B3_APPROVED_SHA="64ebe684ed882dae04ad4068b40c8fae4b5d26b2"),
+            dict(CONSTIA_B3_INVENTORY_SHA256="0"*64)):
+            with self.subTest(changes=changes),self.assertRaises(self.l["Unsafe"]):
+                self.l["validate_context"](dict(self.e,**changes),{},self.e["GITHUB_SHA"])
+
+    def test_inventory_and_digest_mutation_are_rejected(self):
+        table=dict(self.l["TABLE"]);table[".github/scripts/c3c02b_runner.py"]="0"*64
+        with self.assertRaises(self.l["Unsafe"]):self.l["validate_policy"](table)
+        old=self.l["D"]
+        try:
+            self.l["D"]="0"*64
+            with self.assertRaises(self.l["Unsafe"]):self.l["validate_policy"](self.l["TABLE"])
+        finally:self.l["D"]=old
+
+    def test_workflow_environment_is_accepted_by_the_fixed_gate(self):
+        text=WORKFLOW.read_text(encoding="utf-8")
+        top=text.split("env:\n",1)[1].split("jobs:\n",1)[0]
+        e=dict(self.e)
+        for key in ("CODE_SHA","CONSTIA_B3_APPROVED_SHA","CONSTIA_B3_INVENTORY_SHA256"):
+            e[key]=next(line.split(": ",1)[1] for line in top.splitlines() if line.startswith("  "+key+": "))
+        try:self.l["validate_context"](e,{},e["GITHUB_SHA"])
+        except self.l["Unsafe"] as error:self.fail("Workflow environment is not the approved H4 policy: "+str(error))
+        checkout=text.split("      - name: Checkout only H4\n",1)[1].split("      - name:",1)[0]
+        self.assertIn("          ref: "+e["CODE_SHA"]+"\n",checkout)
+        validate_topology(text)
 
 
 if __name__ == "__main__":
