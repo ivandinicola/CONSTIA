@@ -124,6 +124,41 @@ def command(args,*,env=None,input=None,timeout=60):
     r=subprocess.run(checked_command(args),env=env,input=input,capture_output=True,timeout=timeout)
     if r.returncode: raise Unsafe('Bounded operation failed; raw output withheld.')
     return r.stdout.decode().strip()
+
+def image_build_command(args,*,env=None,input=None,timeout=60):
+    """Classify only structured signals at the image subprocess boundary."""
+    args=checked_command(args)  # Preparation failures retain the historical fallback.
+    try:
+        result=subprocess.run(args,env=env,input=input,capture_output=True,timeout=timeout)
+    except FileNotFoundError:
+        _image_failure('BUILD_START_NOT_FOUND')
+        raise
+    except PermissionError:
+        _image_failure('BUILD_START_DENIED')
+        raise
+    except OSError:
+        _image_failure('BUILD_START_FAILED')
+        raise
+    except subprocess.TimeoutExpired:
+        _image_failure('BUILD_TIMEOUT')
+        raise
+    except Exception:
+        _image_failure('BUILD_UNEXPECTED_EXCEPTION')
+        raise
+    if result.returncode:
+        _image_failure('BUILD_EXIT_NONZERO')
+        raise Unsafe('Bounded operation failed; raw output withheld.')
+    try:
+        return result.stdout.decode().strip()
+    except Exception:
+        _image_failure('BUILD_UNEXPECTED_EXCEPTION')
+        raise
+
+
+def _image_failure(reason):
+    c=ACTIVE_DIAGNOSTIC.get()
+    if c is not None:c.fail('resource_image','RESOURCE_UNVERIFIED',reason)
+
 def inspect(kind,x): return json.loads(command(['docker',kind,'inspect',x]))[0]
 
 def require_local_engine():
@@ -494,12 +529,16 @@ def _create_resource(s,key,args,**kwargs):
         c = ACTIVE_DIAGNOSTIC.get()
         if c is not None: c.creation_attempted = True
         try:
-            output=diagnostic_call(_resource_stage(key), command, args, **kwargs)
+            output=diagnostic_call(_resource_stage(key), image_build_command if key=='app_image_id' else command, args, **kwargs)
         except BaseException:
             ACTIVE_DIAGNOSTIC.get().controller.ambiguous=True
             raise
         ACTIVE_DIAGNOSTIC.get().controller.acknowledge(key)
-        obj=reconcile_resource(s,key)
+        try:
+            obj=reconcile_resource(s,key)
+        except Exception:
+            if key=='app_image_id':_image_failure('IMAGE_CONFIRMATION_FAILED')
+            raise
         if key in ('container_id','app_id','peer_id','denied_id','network_id','volume_id') and output!=s[key]:
             raise Unsafe('Creation response does not match inspected ownership.')
         return s[key]
@@ -1054,6 +1093,9 @@ DIAGNOSTIC_FILES = {
     'isolation-cleanup-final.json': 'cleanup_final',
 }
 DIAGNOSTIC_CATALOG = frozenset({
+    *(('resource_image','RESOURCE_UNVERIFIED',reason) for reason in (
+      'BUILD_START_NOT_FOUND','BUILD_START_DENIED','BUILD_START_FAILED','BUILD_EXIT_NONZERO',
+      'BUILD_TIMEOUT','IMAGE_CONFIRMATION_FAILED','BUILD_UNEXPECTED_EXCEPTION')),
     ('cli', 'INPUT_REJECTED', 'INVALID'),
     ('authorization', 'AUTH_REJECTED', 'POLICY'),
     ('git_head', 'GIT_REJECTED', 'QUERY_FAILED'),
@@ -1078,7 +1120,8 @@ DIAGNOSTIC_CATALOG = frozenset({
 })
 _DIAGNOSTIC_DEFAULTS = {stage: (code, reason) for stage, code, reason in DIAGNOSTIC_CATALOG
                         if stage not in ('git_head', 'git_status', 'journal_check')}
-_DIAGNOSTIC_DEFAULTS.update(git_head=('GIT_REJECTED', 'QUERY_FAILED'),
+_DIAGNOSTIC_DEFAULTS.update(resource_image=('RESOURCE_UNVERIFIED','UNCONFIRMED'),
+                            git_head=('GIT_REJECTED', 'QUERY_FAILED'),
                             git_status=('GIT_REJECTED', 'QUERY_FAILED'),
                             journal_check=('JOURNAL_REJECTED', 'INVALID'))
 ACTIVE_DIAGNOSTIC = contextvars.ContextVar('isolation_diagnostic', default=None)

@@ -758,6 +758,7 @@ class H2SyntheticIntegrationTests(unittest.TestCase):
         self.native=self.stack.enter_context(patch.object(r.subprocess,'run',side_effect=AssertionError('Native process forbidden')))
         self.popen=self.stack.enter_context(patch.object(r.subprocess,'Popen',side_effect=AssertionError('Native process forbidden')))
         self.command=self.stack.enter_context(patch.object(r,'command',side_effect=self.fake_command))
+        self.stack.enter_context(patch.object(r,'image_build_command',side_effect=lambda *a,**kw:r.command(*a,**kw)))
         self.build=self.stack.enter_context(patch.object(r,'build_preflight_image',side_effect=AssertionError('Build boundary forbidden')))
         self.addCleanup(self.native.assert_not_called)
         self.addCleanup(self.popen.assert_not_called)
@@ -1890,5 +1891,123 @@ def _simulate_manifest_dispatch(s):
     ctrl.begin(s,'network_id');ctrl.acknowledge('network_id')
 
 _NATIVE_BOUNDED_QUERY = r._bounded_docker
+
+
+_H4_ORIGINAL_COMMAND = r.command
+_H4_ORIGINAL_IMAGE_COMMAND = r.image_build_command
+
+class H4ImageDiagnosticTests(unittest.TestCase):
+    """Structured signals only; all native processes are blocked by the fixture."""
+    def scenario(self, outcome, reason, confirmation=False):
+        import contextlib,io,subprocess
+        from unittest.mock import patch
+        captured={}
+        def check(case):
+            r._admit_session(case.s)
+            original=outcome if isinstance(outcome,Exception) else None
+            # Replace the fixture's process blocker only at the actual subprocess boundary.
+            with patch.object(r,'image_build_command',_H4_ORIGINAL_IMAGE_COMMAND),patch.object(r,'command',_H4_ORIGINAL_COMMAND), \
+                 patch.object(r.subprocess,'run',side_effect=original,
+                              return_value=None if original else outcome) as process, \
+                 patch.object(r,'checked_command',wraps=r.checked_command) as checked, \
+                 contextlib.redirect_stderr(io.StringIO()) as err:
+                if confirmation:
+                    failure=r.Unsafe('PRIVATE_SECRET confirmation')
+                    process.side_effect=None
+                    with patch.object(r,'reconcile_resource',side_effect=failure) as reconcile:
+                        with case.assertRaises(r.Unsafe) as ex:
+                            r.create_resource(case.s,'app_image_id',['docker','build','-'],input=b'tar',timeout=600)
+                    case.assertIs(failure,ex.exception);case.assertEqual(2,reconcile.call_count)
+                else:
+                    expected=type(original) if original else r.Unsafe
+                    with case.assertRaises(expected) as ex:
+                        r.create_resource(case.s,'app_image_id',['docker','build','-'],input=b'tar',timeout=600)
+                    if original:case.assertIs(original,ex.exception)
+                process.assert_called_once_with(['docker','--context','default','build','-'],env=None,input=b'tar',capture_output=True,timeout=600)
+                checked.assert_called_once_with(['docker','build','-'])
+                case.assertEqual(dict(stage='resource_image',code='RESOURCE_UNVERIFIED',reason=reason),case.c.first_failure)
+                case.assertNotIn('PRIVATE_SECRET',err.getvalue())
+            case.assertTrue(case.c.creation_attempted)
+            case.assertIn('app_image_id',case.c.controller.dispatched)
+            case.assertEqual(set() if confirmation else {'app_image_id'},case.c.controller.pending)
+            case.assertEqual(not confirmation,case.c.controller.ambiguous)
+            r._freeze_producer(case.c)
+            case.assertEqual('quiescent' if confirmation else 'unresolved',case.c.session['producer_state'])
+            case.assertEqual('resource_image' if confirmation else 'journal_write',case.c.last_completed_stage)
+            case.c.execution='failed_after_creation_attempt'
+            record=r.make_diagnostic('execution',case.c);r.validate_diagnostic(record)
+            case.assertNotIn('PRIVATE_SECRET',str(record))
+            # A later cleanup diagnostic cannot rewrite the build failure or certify success.
+            first=case.c.first_failure.copy();case.c.cleaning=True
+            with contextlib.redirect_stderr(io.StringIO()):
+                case.c.fail('cleanup','CLEANUP_UNVERIFIED','UNKNOWN')
+            case.assertEqual(first,case.c.first_failure)
+            case.assertEqual('uncertain',case.c.cleanup)
+            captured.update(record)
+        _with_protocol_fixture(check)
+        return captured
+
+    def test_T01_executable_not_found(self):
+        self.scenario(FileNotFoundError('PRIVATE_SECRET'),'BUILD_START_NOT_FOUND')
+
+    def test_T02_process_permission_denied(self):
+        self.scenario(PermissionError('PRIVATE_SECRET'),'BUILD_START_DENIED')
+
+    def test_T03_other_process_start_error(self):
+        self.scenario(OSError('PRIVATE_SECRET'),'BUILD_START_FAILED')
+
+    def test_T04_nonzero_exit_is_not_daemon_diagnosis(self):
+        import subprocess
+        self.scenario(subprocess.CompletedProcess([],125,b'PRIVATE_SECRET',b'PRIVATE_SECRET'),'BUILD_EXIT_NONZERO')
+
+    def test_T05_process_timeout_preserves_original_exception(self):
+        import subprocess
+        self.scenario(subprocess.TimeoutExpired('PRIVATE_SECRET',600,output=b'PRIVATE_SECRET',stderr=b'PRIVATE_SECRET'),'BUILD_TIMEOUT')
+
+    def test_T06_unexpected_process_error(self):
+        self.scenario(RuntimeError('PRIVATE_SECRET'),'BUILD_UNEXPECTED_EXCEPTION')
+
+    def test_T07_confirmation_after_acknowledgement(self):
+        import subprocess
+        self.scenario(subprocess.CompletedProcess([],0,b'image',b'PRIVATE_SECRET'),'IMAGE_CONFIRMATION_FAILED',True)
+
+    def test_T08_preparation_error_retains_historical_fallback(self):
+        from unittest.mock import patch
+        import contextlib,io
+        def check(case):
+            r._admit_session(case.s)
+            error=FileNotFoundError('PRIVATE_SECRET preparation')
+            with patch.object(r,'plan_resource',side_effect=error),contextlib.redirect_stderr(io.StringIO()):
+                with case.assertRaises(FileNotFoundError) as ex:
+                    r.create_resource(case.s,'app_image_id',['docker','build','-'])
+            case.assertIs(error,ex.exception)
+            case.assertEqual('UNCONFIRMED',case.c.first_failure['reason'])
+            case.assertFalse(case.c.creation_attempted);case.native.assert_not_called()
+        _with_protocol_fixture(check)
+
+    def test_T09_validation_is_not_process_start(self):
+        from unittest.mock import patch
+        import contextlib,io
+        def check(case):
+            r._admit_session(case.s);error=FileNotFoundError('PRIVATE_SECRET argument validation')
+            with patch.object(r,'image_build_command',_H4_ORIGINAL_IMAGE_COMMAND),patch.object(r,'command',_H4_ORIGINAL_COMMAND),patch.object(r,'checked_command',side_effect=error),contextlib.redirect_stderr(io.StringIO()):
+                with case.assertRaises(FileNotFoundError) as ex:
+                    r.create_resource(case.s,'app_image_id',['docker','build','-'])
+            case.assertIs(error,ex.exception);case.native.assert_not_called()
+            case.assertEqual('UNCONFIRMED',case.c.first_failure['reason'])
+        _with_protocol_fixture(check)
+
+    def test_T10_success_keeps_bytes_and_other_commands_unchanged(self):
+        import subprocess
+        from unittest.mock import patch
+        with patch.object(r.subprocess,'run',return_value=subprocess.CompletedProcess([],0,b' image\n',b'')) as p:
+            self.assertEqual('image',r.image_build_command(['docker','build','-'],input=b'tar',timeout=600))
+            p.assert_called_once_with(['docker','--context','default','build','-'],env=None,input=b'tar',capture_output=True,timeout=600)
+
+    def test_T11_fallback_and_catalog_are_explicit(self):
+        self.assertEqual(('RESOURCE_UNVERIFIED','UNCONFIRMED'),r._DIAGNOSTIC_DEFAULTS['resource_image'])
+        with self.assertRaises(r.Unsafe):
+            r.DiagnosticContext().fail('resource_image','RESOURCE_UNVERIFIED','PRIVATE_SECRET')
+
 
 if __name__ == '__main__': unittest.main()
