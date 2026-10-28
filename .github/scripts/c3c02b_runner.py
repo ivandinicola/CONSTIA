@@ -1,5 +1,5 @@
 """Manual-only disposable runner. Imports and pure guards perform no I/O."""
-import argparse, hashlib, ipaddress, json, math, os, pathlib, re, secrets, subprocess, sys, tarfile, tempfile
+import argparse, gzip, hashlib, ipaddress, json, math, os, pathlib, re, secrets, subprocess, sys, tarfile, tempfile
 import xml.etree.ElementTree as ET
 SQL_IMAGE='mcr.microsoft.com/mssql/server@sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718'
 SDK_IMAGE='mcr.microsoft.com/dotnet/sdk@sha256:8dd1a57fe6b7b8b1b357635db67e272c2f9e9d76d1dd0a32711c4c33c57d7b43'
@@ -810,7 +810,7 @@ def operational_full_prepared():
                     if (root/rel).is_symlink(): raise Unsafe('Build symlink forbidden.')
                     t.add(root/rel,arcname=rel,recursive=False)
         tag='c3c02b:'+nonce
-        create_resource(s,'app_image_id',['docker','build','--file','tests/sandbox/c3c02b/Dockerfile',*la,'--build-arg','CODE_SHA='+s['code_sha'],'--tag',tag,'-'],input=archive.read_bytes(),timeout=600)
+        create_resource(s,'app_image_id',['docker','build','--file','tests/sandbox/c3c02b/Dockerfile',*la,'--build-arg','CODE_SHA='+s['code_sha'],'--tag',tag,'-'],input=compressed_build_context(archive),timeout=600)
     metadata=['GITHUB_ACTIONS','RUNNER_ENVIRONMENT','GITHUB_EVENT_NAME','GITHUB_RUN_ATTEMPT','GITHUB_SHA','GITHUB_WORKFLOW_SHA','GITHUB_WORKFLOW_REF','GITHUB_REF','GITHUB_RUN_ID','CONSTIA_B3_APPROVED_SHA','CODE_SHA']
     inherited=[x for k in metadata for x in ('--env',k+'='+os.environ[k])]
     create_resource(s,'app_id',['docker','run','-d','--name',resource_specs(s)['app_id'][1],*la,*inherited,'--network',s['network_name'],
@@ -952,6 +952,10 @@ def validate_routes(s,v4,v6):
     if any(not isinstance(row,dict) or row.get('dev')!='lo' or row.get('dst') not in ('::1','::1/128') for row in v6):
         raise Unsafe('Non-loopback IPv6 route.')
 
+def compressed_build_context(archive):
+    """Compress the unchanged tar bytes with a deterministic gzip timestamp."""
+    return gzip.compress(archive.read_bytes(),mtime=0)
+
 def build_preflight_image(root,s,la):
     with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as tmp:
         archive=pathlib.Path(tmp)/'context.tar'
@@ -965,7 +969,7 @@ def build_preflight_image(root,s,la):
                     if (root/rel).is_symlink():raise Unsafe('Build symlink forbidden.')
                     t.add(root/rel,arcname=rel,recursive=False)
         create_resource(s,'app_image_id',['docker','build','--file','tests/sandbox/c3c02b/Dockerfile',*la,
-            '--build-arg','CODE_SHA='+s['code_sha'],'--tag',resource_specs(s)['app_image_id'][1],'-'],input=archive.read_bytes(),timeout=600)
+            '--build-arg','CODE_SHA='+s['code_sha'],'--tag',resource_specs(s)['app_image_id'][1],'-'],input=compressed_build_context(archive),timeout=600)
 
 def write_preflight_identity(s,m):
     validate_preflight(m)

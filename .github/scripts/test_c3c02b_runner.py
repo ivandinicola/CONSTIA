@@ -2010,4 +2010,168 @@ class H4ImageDiagnosticTests(unittest.TestCase):
             r.DiagnosticContext().fail('resource_image','RESOURCE_UNVERIFIED','PRIVATE_SECRET')
 
 
+_H5_ORIGINAL_BUILD = r.build_preflight_image
+
+
+class H5BuildTransportTests(unittest.TestCase):
+    """Real tar/gzip bytes; native subprocesses are replaced at their boundary."""
+    def context(self, directory):
+        import os
+        root=pathlib.Path(directory)/'checkout';root.mkdir()
+        files={'src/Example.cs':b'class Example {}\n',
+               'tests/sandbox/c3c02b/Dockerfile':b'FROM pinned@example\n',
+               'global.json':b'{}\n',
+               'notes.txt':b'PRIVATE_SECRET not a build input'}
+        for name,body in files.items():
+            path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(body)
+            os.utime(path,ns=(1500000000,1500000000))
+        selected=('src/Example.cs','tests/sandbox/c3c02b/Dockerfile','global.json')
+        import io,tarfile
+        expected=io.BytesIO()
+        with tarfile.open(fileobj=expected,mode='w') as archive:
+            for name in selected:archive.add(root/name,arcname=name,recursive=False)
+        return root,files,selected,expected.getvalue()
+
+    def routes(self):
+        # Exercise only the existing legacy context/build block, never its blocked
+        # SQL preparation. The real public entry point remains tested as rejected.
+        import ast,inspect
+        node=ast.parse(inspect.getsource(r.operational_full_prepared)).body[0]
+        blocks=[n for n in node.body if isinstance(n,ast.With) and
+                any(isinstance(x,ast.Call) and isinstance(x.func,ast.Attribute) and
+                    x.func.attr=='add' for x in ast.walk(n))]
+        self.assertEqual(1,len(blocks))
+        function=ast.FunctionDef(name='legacy_context_only',
+            args=ast.arguments(posonlyargs=[],args=[ast.arg(arg=n) for n in ('root','s','la','nonce')],
+                               kwonlyargs=[],kw_defaults=[],defaults=[]),
+            body=[blocks[0]],decorator_list=[])
+        module=ast.fix_missing_locations(ast.Module(body=[function],type_ignores=[]))
+        namespace=dict(r.__dict__);exec(compile(module,'<legacy-context-only>','exec'),namespace)
+        import types
+        legacy=types.FunctionType(namespace['legacy_context_only'].__code__,r.__dict__)
+        return (_H5_ORIGINAL_BUILD,lambda root,s,la:legacy(root,s,la,s['nonce']))
+
+    def test_gzip_stdin_preserves_pax_tar_both_routes_and_command_contract(self):
+        import gzip,io,subprocess,tarfile,tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            root,files,selected,expected=self.context(directory)
+            # C60's condition: PAX header plus payload precedes the first file.
+            self.assertEqual(b'././@PaxHeader',expected[:100].rstrip(b'\0'))
+            self.assertEqual(b'x',expected[156:157])
+            self.assertIn(b'mtime=1.5\n',expected[512:1024])
+            with self.assertRaises(tarfile.ReadError):
+                tarfile.open(fileobj=io.BytesIO(expected[:1024]),mode='r:')
+            state=dict(run_id='123',nonce='c'*32,code_sha='a'*40)
+            la=['--label','constia.owner=c3c02b','--label','constia.run=123',
+                '--label','constia.nonce='+'c'*32,'--label','constia.sha='+'a'*40]
+            want=['docker','--context','default','build','--file','tests/sandbox/c3c02b/Dockerfile',
+                  *la,'--build-arg','CODE_SHA='+'a'*40,'--tag','c3c02b:'+'c'*32,'-']
+            payloads=[]
+            for route in self.routes():
+                with self.subTest(route=route.__name__),patch.dict(r.os.environ,{'RUNNER_TEMP':directory}), \
+                     patch.object(r,'command',return_value='\0'.join(files)+'\0'), \
+                     patch.object(r,'create_resource',side_effect=lambda s,k,args,**kw:_H4_ORIGINAL_COMMAND(args,**kw)), \
+                     patch.object(r.subprocess,'run',return_value=subprocess.CompletedProcess([],0,b'image',b'')) as process:
+                    route(root,state,la)
+                    self.assertEqual(1,process.call_count)
+                    args,kw=process.call_args
+                    self.assertEqual((want,),args)
+                    self.assertEqual({'input','timeout','env','capture_output'},set(kw))
+                    self.assertEqual(600,kw['timeout']);self.assertIsNone(kw['env'])
+                    self.assertTrue(kw['capture_output'])
+                    compressed=kw['input'];payloads.append(compressed)
+                    # This recognizes gzip magic, NOT a native Buildx execution.
+                    self.assertEqual(b'\x1f\x8b\x08',compressed[:3])
+                    self.assertEqual(b'\0'*4,compressed[4:8])
+                    plain=gzip.decompress(compressed)
+                    self.assertEqual(expected,plain)
+                    with tarfile.open(fileobj=io.BytesIO(plain),mode='r:') as archive:
+                        self.assertEqual(list(selected),archive.getnames())
+                        for member in archive:
+                            self.assertEqual(files[member.name],archive.extractfile(member).read())
+                            self.assertEqual(1.5,member.mtime)
+                    self.assertNotIn(b'PRIVATE_SECRET',plain)
+            self.assertEqual(2,len(payloads))
+            if len(payloads)==2:self.assertEqual(payloads[0],payloads[1])
+
+    def test_compression_error_is_exact_and_prevents_dispatch_in_both_routes(self):
+        import gzip,tempfile
+        from unittest.mock import patch
+        class CompressionFailure(OSError):pass
+        with tempfile.TemporaryDirectory() as directory:
+            root,files,_,_=self.context(directory)
+            failure=CompressionFailure('synthetic compression failure')
+            for route in self.routes():
+                with self.subTest(route=route.__name__),patch.dict(r.os.environ,{'RUNNER_TEMP':directory}), \
+                     patch.object(r,'command',return_value='\0'.join(files)), \
+                     patch.object(gzip,'compress',side_effect=failure) as compress, \
+                     patch.object(r,'create_resource',side_effect=AssertionError('Dispatch forbidden')) as dispatch, \
+                     patch.object(r.subprocess,'run',side_effect=AssertionError('Native process forbidden')) as process:
+                    with self.assertRaises(CompressionFailure) as caught:
+                        route(root,dict(nonce='c'*32,code_sha='a'*40),[])
+                    self.assertIs(failure,caught.exception);self.assertEqual(1,compress.call_count)
+                    dispatch.assert_not_called();process.assert_not_called()
+
+    def test_unsafe_context_still_rejected_before_dispatch_in_both_routes(self):
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            for route in self.routes():
+                with self.subTest(route=route.__name__),patch.dict(r.os.environ,{'RUNNER_TEMP':directory}), \
+                     patch.object(r,'command',return_value='src/.env/private.cs'), \
+                     patch.object(r,'create_resource',side_effect=AssertionError('Dispatch forbidden')) as dispatch:
+                    with self.assertRaisesRegex(r.Unsafe,'^Unsafe build input\\.$'):
+                        route(pathlib.Path(directory),dict(nonce='c'*32,code_sha='a'*40),[])
+                    dispatch.assert_not_called()
+
+    def test_transport_repeat_is_deterministic_and_operational_full_stays_blocked(self):
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            path=pathlib.Path(directory)/'context.tar';path.write_bytes(b'exact tar bytes')
+            first=r.compressed_build_context(path)
+            self.assertEqual(first,r.compressed_build_context(path))
+        with patch.object(r.subprocess,'run',side_effect=AssertionError('Native process forbidden')) as process:
+            with self.assertRaisesRegex(r.Unsafe,'^operational-full remains blocked;'):
+                r.operational_full_prepared()
+            process.assert_not_called()
+
+    def test_nonzero_gzip_build_retains_unresolved_protocol_and_negative_diagnostic(self):
+        import contextlib,io,subprocess,tempfile,gzip
+        from unittest.mock import patch
+        def check(case):
+            r._admit_session(case.s)
+            with tempfile.TemporaryDirectory(dir=r.os.environ['RUNNER_TEMP']) as directory:
+                root,files,_,expected=self.context(directory)
+                def command(args,**kw):
+                    if args[0]=='git':return '\0'.join(files)
+                    return _H4_ORIGINAL_COMMAND(args,**kw)
+                with patch.object(r,'command',side_effect=command), \
+                     patch.object(r,'image_build_command',_H4_ORIGINAL_IMAGE_COMMAND), \
+                     patch.object(r.subprocess,'run',return_value=subprocess.CompletedProcess([],125,b'PRIVATE_SECRET',b'PRIVATE_SECRET')) as process, \
+                     contextlib.redirect_stderr(io.StringIO()) as stderr:
+                    with case.assertRaisesRegex(r.Unsafe,'^Bounded operation failed; raw output withheld\\.$'):
+                        _H5_ORIGINAL_BUILD(root,case.s,[])
+                    case.assertEqual(1,process.call_count)
+                    case.assertEqual(expected,gzip.decompress(process.call_args.kwargs['input']))
+                    case.assertNotIn('PRIVATE_SECRET',stderr.getvalue())
+                case.assertTrue(case.c.creation_attempted)
+                case.assertEqual({'app_image_id'},case.c.controller.pending)
+                case.assertEqual({'app_image_id'},case.c.controller.dispatched)
+                case.assertTrue(case.c.controller.ambiguous)
+                case.assertEqual(dict(stage='resource_image',code='RESOURCE_UNVERIFIED',reason='BUILD_EXIT_NONZERO'),case.c.first_failure)
+                r._freeze_producer(case.c)
+                case.assertEqual('unresolved',case.c.session['producer_state'])
+                case.c.execution='failed_after_creation_attempt'
+                record=r.make_diagnostic('execution',case.c);r.validate_diagnostic(record)
+                case.assertNotIn('PRIVATE_SECRET',str(record))
+                case.assertEqual('journal_write',case.c.last_completed_stage)
+                first=case.c.first_failure.copy();case.c.cleaning=True
+                with contextlib.redirect_stderr(io.StringIO()):
+                    case.c.fail('cleanup','CLEANUP_UNVERIFIED','UNKNOWN')
+                case.assertEqual(first,case.c.first_failure)
+                case.assertEqual('uncertain',case.c.cleanup)
+        _with_protocol_fixture(check)
+
 if __name__ == '__main__': unittest.main()
