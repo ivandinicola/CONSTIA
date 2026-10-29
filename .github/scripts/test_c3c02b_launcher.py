@@ -22,10 +22,10 @@ def load(bind_test_identity=True):
     scope = {"__name__": "launcher_tests"}
     exec(compile(textwrap.dedent(code), str(WORKFLOW), "exec"), scope)
     if not bind_test_identity:return scope
-    # Explicit synthetic H4 identity for pure contract fixtures, never workflow pins.
+    # Explicit synthetic H5 identity for pure contract fixtures, never workflow pins.
     scope["H"]="f"*40;scope["TREE"]="e"*40
-    scope["TABLE"]={**scope["H3_TABLE"],".github/scripts/c3c02b_runner.py":hashlib.sha256(b"synthetic H4 runner").hexdigest(),
-                    ".github/scripts/test_c3c02b_runner.py":hashlib.sha256(b"synthetic H4 tests").hexdigest()}
+    scope["TABLE"]={**scope["H4_TABLE"],".github/scripts/c3c02b_runner.py":hashlib.sha256(b"synthetic H5 runner").hexdigest(),
+                    ".github/scripts/test_c3c02b_runner.py":hashlib.sha256(b"synthetic H5 tests").hexdigest()}
     scope["D"]=hashlib.sha256(json.dumps(scope["TABLE"],sort_keys=True,separators=(",",":")).encode()).hexdigest()
     return scope
 
@@ -45,8 +45,8 @@ def validate_topology(text):
     check("    needs: gate\n" in isolation and "    environment: constia-c3c-isolation\n" in isolation,"Protected approval")
     steps=isolation.split("    steps:\n",1)[1].split("      - name: ")[1:]
     names=[x.splitlines()[0] for x in steps]
-    check(names==["Recheck trusted identity after approval","Checkout only H4","Verify H4 chain and every checkout byte from L4",
-          "Pure regressions from verified H4","Run only isolation","Cleanup only verified H4 resources",
+    check(names==["Recheck trusted identity after approval","Checkout only H5","Verify H5 chain and every checkout byte from L5",
+          "Pure regressions from verified H5","Run only isolation","Cleanup only verified H5 resources",
           "Validate and project allowlisted diagnostics from L2","Upload only validated projection","Require actual isolation success"],"Step order")
     check("steps.checkout.outcome == 'success'" in steps[2] and "run: *trusted_verifier" in steps[2],"Checkout guard")
     for index,stage in ((3,"tests"),(4,"run"),(5,"cleanup"),(6,"evidence"),(8,"final")):
@@ -57,7 +57,7 @@ def validate_topology(text):
     check("steps.evidence.outputs.diagnostic_valid == 'true'" in steps[7] and
           "steps.evidence.outcome == 'success'" in steps[7],"No upload without validation")
     check("steps.evidence.outputs.isolation_verified" in steps[8],"Final success guard")
-    check("fetch-depth: 5" in steps[1] and "persist-credentials: false" in steps[1],"Checkout bounds")
+    check("fetch-depth: 6" in steps[1] and "persist-credentials: false" in steps[1],"Checkout bounds")
     check("secrets." not in text and "id-token:" not in text,"No new secrets or permissions")
 
 
@@ -69,15 +69,15 @@ def topology_mutations(text):
         "gate dependency absent": text.replace("    needs: gate\n", ""),
         "checkout before gate": text.replace("      - name: Read-only identity gate",
             "      - name: Premature checkout\n        uses: actions/checkout@bad\n      - name: Read-only identity gate"),
-        "H before verifier": text.replace("      - name: Verify H4 chain and every checkout byte from L4",
+        "H before verifier": text.replace("      - name: Verify H5 chain and every checkout byte from L5",
             "      - name: Premature H\n        run: python3 harness/.github/scripts/c3c02b_runner.py\n"
-            "      - name: Verify H4 chain and every checkout byte from L4"),
+            "      - name: Verify H5 chain and every checkout byte from L5"),
         "verified condition absent": text.replace("steps.verified.outputs.verified == 'true'", "true"),
         "different phase": text.replace("  C3C02B_PHASE: isolation-only", "  C3C02B_PHASE: operational-full"),
         "unexpected step": text + "      - name: Unexpected step\n        run: echo forbidden\n",
         "checkout success guard absent": text.replace("steps.checkout.outcome == 'success'", "true"),
-        "H forced after failure": text.replace("      - name: Pure regressions from verified H4\n",
-            "      - name: Pure regressions from verified H4\n        if: ${{ always() }}\n"),
+        "H forced after failure": text.replace("      - name: Pure regressions from verified H5\n",
+            "      - name: Pure regressions from verified H5\n        if: ${{ always() }}\n"),
     }
 
 
@@ -343,9 +343,9 @@ class LauncherTests(unittest.TestCase):
         self.assertNotIn("id-token:", text)
         steps = text.split("  isolation:\n", 1)[1].split("    steps:\n", 1)[1]
         names = [line.strip()[len("- name: "):] for line in steps.splitlines() if line.strip().startswith("- name: ")]
-        self.assertEqual(["Recheck trusted identity after approval", "Checkout only H4",
-                          "Verify H4 chain and every checkout byte from L4", "Pure regressions from verified H4",
-                          "Run only isolation", "Cleanup only verified H4 resources",
+        self.assertEqual(["Recheck trusted identity after approval", "Checkout only H5",
+                          "Verify H5 chain and every checkout byte from L5", "Pure regressions from verified H5",
+                          "Run only isolation", "Cleanup only verified H5 resources",
                           "Validate and project allowlisted diagnostics from L2", "Upload only validated projection", "Require actual isolation success"], names)
         self.assertEqual(5, text.count("steps.verified.outputs.verified == 'true'"))
         self.assertIn("steps.evidence.outputs.diagnostic_valid == 'true'", text)
@@ -1358,9 +1358,9 @@ class H3ChainTests(unittest.TestCase):
 
     def test_checkout_depth_four_is_required(self):
         text=WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("fetch-depth: 5",text)
+        self.assertIn("fetch-depth: 6",text)
         with self.assertRaises(AssertionError):
-            validate_topology(text.replace("fetch-depth: 5","fetch-depth: 4"))
+            validate_topology(text.replace("fetch-depth: 6","fetch-depth: 5"))
 
     def test_R16_oid_rejected_even_with_correct_hash_table(self):
         with tempfile.TemporaryDirectory() as d:
@@ -1479,23 +1479,23 @@ class H4ChainTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             root,git,p=self.fixture(d)
             self.assertEqual(5,len(git("rev-list","HEAD").splitlines()))
-            self.assertTrue(self.l["verify_checkout"](root,**p))
+            self.assertTrue(self.l["verify_h4_checkout"](root,**p))
             (root/".git/shallow").write_text(p["history"]["historical_parent"]+"\n",encoding="ascii")
-            with self.assertRaises(self.l["Unsafe"]):self.l["verify_checkout"](root,**p)
+            with self.assertRaises(self.l["Unsafe"]):self.l["verify_h4_checkout"](root,**p)
 
     def test_H4_head_tree_parent_and_inventory_tampering_rejected(self):
         with tempfile.TemporaryDirectory() as d:
             root,git,p=self.fixture(d)
             for key in ("h","tree","parent"):
                 with self.subTest(key=key),self.assertRaises(self.l["Unsafe"]):
-                    self.l["verify_checkout"](root,**dict(p,**{key:"0"*40}))
+                    self.l["verify_h4_checkout"](root,**dict(p,**{key:"0"*40}))
             for bad in ({}, {"option.txt":"0"*64}):
                 with self.assertRaises(self.l["Unsafe"]):
-                    self.l["verify_checkout"](root,**dict(p,table=bad))
+                    self.l["verify_h4_checkout"](root,**dict(p,table=bad))
             with self.assertRaises(self.l["Unsafe"]):
-                self.l["verify_checkout"](root,**dict(p,h=p["parent"]))
+                self.l["verify_h4_checkout"](root,**dict(p,h=p["parent"]))
             (root/"option.txt").write_bytes(b"tampered\n")
-            with self.assertRaises(self.l["Unsafe"]):self.l["verify_checkout"](root,**p)
+            with self.assertRaises(self.l["Unsafe"]):self.l["verify_h4_checkout"](root,**p)
 
     def test_H4_may_not_change_a_third_path(self):
         with tempfile.TemporaryDirectory() as d:
@@ -1503,7 +1503,7 @@ class H4ChainTests(unittest.TestCase):
             (root/"third.txt").write_bytes(b"not approved\n");git("add","--","third.txt")
             git("-c","user.name=Local Test","-c","user.email=test@example.invalid","commit","--amend","-qm","synthetic bad H4")
             p.update(h=git("rev-parse","HEAD"),tree=git("rev-parse","HEAD^{tree}"))
-            with self.assertRaisesRegex(self.l["Unsafe"],"Unexpected changed paths"):self.l["verify_checkout"](root,**p)
+            with self.assertRaisesRegex(self.l["Unsafe"],"Unexpected changed paths"):self.l["verify_h4_checkout"](root,**p)
 
     def test_H3_identity_cannot_emit_H4_diagnostics(self):
         e=LauncherTests();e.l=self.l
@@ -1514,27 +1514,27 @@ class H4ChainTests(unittest.TestCase):
 
 
 
-class C40DefinitivePolicyTests(unittest.TestCase):
+class C68DefinitivePolicyTests(unittest.TestCase):
     """Real approved identities; synthetic histories remain separate fixtures."""
     def setUp(self):
         self.l=load(False)
         case=LauncherTests();case.l=self.l
         self.e=case.context()
-        self.e.update(CODE_SHA="0e0bb2d7331c9c6fe77fb863651e4cb642b79a84",
-            CONSTIA_B3_APPROVED_SHA="0e0bb2d7331c9c6fe77fb863651e4cb642b79a84",
-            CONSTIA_B3_INVENTORY_SHA256="21307d385d6119ab5a03f7acbe0a3e3bb8b4d38b9c38174ae56e4242f1a16d1a")
+        self.e.update(CODE_SHA="2a97f1919e15d10ec887b87108b62b336e3bfbe3",
+            CONSTIA_B3_APPROVED_SHA="2a97f1919e15d10ec887b87108b62b336e3bfbe3",
+            CONSTIA_B3_INVENTORY_SHA256="688e7dd742efde53bc14667f5b8feda1ba8222cd19ea113c482e58217af0ccdb")
 
-    def test_approved_H4_context_and_policy_are_accepted(self):
+    def test_approved_H5_context_and_policy_are_accepted(self):
         try:self.l["validate_context"](self.e,{},self.e["GITHUB_SHA"])
-        except self.l["Unsafe"] as error:self.fail("Approved H4 context rejected: "+str(error))
+        except self.l["Unsafe"] as error:self.fail("Approved H5 context rejected: "+str(error))
         self.l["validate_policy"](self.l["TABLE"])
         self.assertEqual(17,len(self.l["TABLE"]))
-        self.assertEqual("47861bf77376d2d2caea36bef4914883602964f9",self.l["TREE"])
+        self.assertEqual("bee66bb4915930690c1afa513fb4df5369738668",self.l["TREE"])
         import inspect
-        self.assertEqual("64ebe684ed882dae04ad4068b40c8fae4b5d26b2",
+        self.assertEqual("0e0bb2d7331c9c6fe77fb863651e4cb642b79a84",
                          inspect.signature(self.l["verify_checkout"]).parameters["parent"].default)
 
-    def test_H3_or_wrong_digest_cannot_authorize_H4(self):
+    def test_H3_or_wrong_digest_cannot_authorize_H5(self):
         for changes in (
             dict(CODE_SHA="64ebe684ed882dae04ad4068b40c8fae4b5d26b2",
                  CONSTIA_B3_APPROVED_SHA="64ebe684ed882dae04ad4068b40c8fae4b5d26b2"),
@@ -1558,10 +1558,158 @@ class C40DefinitivePolicyTests(unittest.TestCase):
         for key in ("CODE_SHA","CONSTIA_B3_APPROVED_SHA","CONSTIA_B3_INVENTORY_SHA256"):
             e[key]=next(line.split(": ",1)[1] for line in top.splitlines() if line.startswith("  "+key+": "))
         try:self.l["validate_context"](e,{},e["GITHUB_SHA"])
-        except self.l["Unsafe"] as error:self.fail("Workflow environment is not the approved H4 policy: "+str(error))
-        checkout=text.split("      - name: Checkout only H4\n",1)[1].split("      - name:",1)[0]
+        except self.l["Unsafe"] as error:self.fail("Workflow environment is not the approved H5 policy: "+str(error))
+        checkout=text.split("      - name: Checkout only H5\n",1)[1].split("      - name:",1)[0]
         self.assertIn("          ref: "+e["CODE_SHA"]+"\n",checkout)
         validate_topology(text)
+
+
+
+class H5ChainTests(unittest.TestCase):
+    """Six real temporary Git commits; no network, Docker or operational runner."""
+    def setUp(self):
+        self.l=load(False)
+
+    def fixture(self,directory):
+        root=pathlib.Path(directory)
+        env=dict(os.environ,GIT_CONFIG_NOSYSTEM="1",GIT_CONFIG_GLOBAL=os.devnull)
+        def git(*args):
+            return subprocess.check_output(["git","-c","core.autocrlf=false","-C",str(root),*args],
+                env=env,stderr=subprocess.DEVNULL).strip().decode()
+        def commit(label):
+            git("add","--",*sorted(paths))
+            git("-c","user.name=Local Test","-c","user.email=test@example.invalid","commit","-qm",label)
+            return git("rev-parse","HEAD"),git("rev-parse","HEAD^{tree}"),{p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in paths}
+        def write(path,body):
+            p=root/path;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(body)
+        git("init","--quiet")
+        write("seed.txt",b"base\n");git("add","--","seed.txt")
+        git("-c","user.name=Local Test","-c","user.email=test@example.invalid","commit","-qm","BASE")
+        base=git("rev-parse","HEAD")
+        paths=tuple(sorted(self.l["TABLE"]))
+        runner=".github/scripts/c3c02b_runner.py";tests=".github/scripts/test_c3c02b_runner.py"
+        for p in paths:write(p,(p+" H\n").encode())
+        h,ht,htable=commit("H")
+        for p in (runner,tests):write(p,(p+" H2\n").encode())
+        h2,h2t,h2table=commit("H2")
+        write(tests,b"R16 corrected\n")
+        h3,h3t,h3table=commit("H3")
+        r16=git("rev-parse","HEAD:"+tests)
+        for p in (runner,tests):write(p,(p+" H4 diagnostics\n").encode())
+        h4,h4t,h4table=commit("H4")
+        for p in (runner,tests):write(p,(p+" H5 gzip\n").encode())
+        h5,h5t,h5table=commit("H5")
+        historical=dict(h=h3,base=base,tree=h3t,parent=h2,parent_tree=h2t,
+            historical_parent=h,historical_tree=ht,historical_table=htable,
+            parent_table=h2table,table=h3table,changes=(tests,),
+            historical_changes=(runner,tests),changed_blob=r16)
+        previous=dict(h=h4,tree=h4t,table=h4table,parent=h3,
+            changes=(runner,tests),history=historical)
+        policy=dict(h=h5,tree=h5t,table=h5table,parent=h4,
+            changes=(runner,tests),history=previous,
+            blobs={p:git("rev-parse",h5+":"+p) for p in (runner,tests)})
+        return root,git,policy
+
+    def test_exact_H5_policy_and_H4_snapshot(self):
+        l=self.l
+        self.assertEqual("2a97f1919e15d10ec887b87108b62b336e3bfbe3",l["H"])
+        self.assertEqual("bee66bb4915930690c1afa513fb4df5369738668",l["TREE"])
+        self.assertEqual("688e7dd742efde53bc14667f5b8feda1ba8222cd19ea113c482e58217af0ccdb",l["D"])
+        self.assertEqual("0e0bb2d7331c9c6fe77fb863651e4cb642b79a84",l["H4"])
+        self.assertEqual("47861bf77376d2d2caea36bef4914883602964f9",l["H4_TREE"])
+        self.assertEqual("21307d385d6119ab5a03f7acbe0a3e3bb8b4d38b9c38174ae56e4242f1a16d1a",l["H4_D"])
+        self.assertEqual({".github/scripts/c3c02b_runner.py":"ca65ed558b1fe881101e0cec38b82ec32cbccb05",
+                          ".github/scripts/test_c3c02b_runner.py":"851965e52d572da49a26e4268fdb9ac1b77858c2"},l["H5_BLOBS"])
+        self.assertEqual(17,len(l["TABLE"]))
+        self.assertEqual(l["D"],hashlib.sha256(json.dumps(l["TABLE"],sort_keys=True,separators=(",",":")).encode()).hexdigest())
+        for p in l["TABLE"]:
+            if p not in l["H5_BLOBS"]:self.assertEqual(l["H4_TABLE"][p],l["TABLE"][p])
+
+    def test_H4_cannot_be_selected_and_legacy_H4_policy_rejects_H5(self):
+        case=LauncherTests();case.l=self.l
+        context=case.context()
+        old_context=dict(context,CODE_SHA="0e0bb2d7331c9c6fe77fb863651e4cb642b79a84",
+            CONSTIA_B3_APPROVED_SHA="0e0bb2d7331c9c6fe77fb863651e4cb642b79a84",
+            CONSTIA_B3_INVENTORY_SHA256="21307d385d6119ab5a03f7acbe0a3e3bb8b4d38b9c38174ae56e4242f1a16d1a")
+        with self.assertRaises(self.l["Unsafe"]):self.l["validate_context"](old_context,{},context["GITHUB_SHA"])
+        # validate_context is unchanged; rebinding its globals reconstructs the
+        # old fixed H4 policy without adding a production fallback.
+        old=load(False)
+        old.update(H=old["H4"],TREE=old["H4_TREE"],D=old["H4_D"],TABLE=old["H4_TABLE"])
+        old["validate_context"](old_context,{},context["GITHUB_SHA"])
+        with self.assertRaises(old["Unsafe"]):old["validate_context"](context,{},context["GITHUB_SHA"])
+
+    def test_six_real_commits_and_depth_five_boundary(self):
+        with tempfile.TemporaryDirectory() as d:
+            root,git,p=self.fixture(d)
+            self.assertEqual(6,len(git("rev-list","HEAD").splitlines()))
+            self.assertTrue(self.l["verify_checkout"](root,**p))
+            (root/".git/shallow").write_text(p["history"]["history"]["historical_parent"]+"\n",encoding="ascii")
+            with self.assertRaisesRegex(self.l["Unsafe"],"Wrong historical chain"):
+                self.l["verify_checkout"](root,**p)
+
+    def test_forged_H5_tree_parent_inventory_and_blobs_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root,git,p=self.fixture(d)
+            for key in ("h","tree","parent"):
+                with self.subTest(identity=key),self.assertRaises(self.l["Unsafe"]):
+                    self.l["verify_checkout"](root,**dict(p,**{key:"0"*40}))
+            for path in p["blobs"]:
+                with self.subTest(blob=path),self.assertRaisesRegex(self.l["Unsafe"],"H5 blob OID"):
+                    self.l["verify_checkout"](root,**dict(p,blobs={**p["blobs"],path:"0"*40}))
+            with self.assertRaises(self.l["Unsafe"]):self.l["verify_checkout"](root,**dict(p,blobs={}))
+            for path in p["table"]:
+                with self.subTest(inventory=path),self.assertRaises(self.l["Unsafe"]):
+                    self.l["verify_checkout"](root,**dict(p,table={**p["table"],path:"0"*64}))
+            with self.assertRaises(self.l["Unsafe"]):self.l["verify_checkout"](root,**dict(p,table={}))
+
+    def test_real_H5_merge_parent_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root,git,p=self.fixture(d)
+            forged=git("-c","user.name=Local Test","-c","user.email=test@example.invalid",
+                "commit-tree",p["tree"],"-p",p["parent"],"-p",p["history"]["parent"],"-m","forged H5 merge")
+            git("checkout","--detach",forged)
+            with self.assertRaisesRegex(self.l["Unsafe"],"Wrong H5 parent"):
+                self.l["verify_checkout"](root,**dict(p,h=forged))
+
+    def test_third_changed_path_cannot_enter_H5(self):
+        with tempfile.TemporaryDirectory() as d:
+            root,git,p=self.fixture(d)
+            path="docs/operations/c3-c-02b.md"
+            (root/path).write_bytes(b"unexpected third change\n");git("add","--",path)
+            git("-c","user.name=Local Test","-c","user.email=test@example.invalid","commit","--amend","-qm","bad H5")
+            p.update(h=git("rev-parse","HEAD"),tree=git("rev-parse","HEAD^{tree}"))
+            with self.assertRaisesRegex(self.l["Unsafe"],"Unexpected changed paths"):
+                self.l["verify_checkout"](root,**p)
+
+    def test_physical_tampering_and_missing_checkout_evidence_rejected(self):
+        # Historical verification rejects dirty evidence before H5 physical comparison.
+        with tempfile.TemporaryDirectory() as d:
+            root,git,p=self.fixture(d)
+            runner=root/".github/scripts/c3c02b_runner.py";original=runner.read_bytes()
+            runner.write_bytes(b"tampered\n")
+            with self.assertRaisesRegex(self.l["Unsafe"],"Dirty checkout"):
+                self.l["verify_checkout"](root,**p)
+            runner.write_bytes(original)
+            extra=root/"unexpected.txt";extra.write_bytes(b"extra\n")
+            with self.assertRaisesRegex(self.l["Unsafe"],"Dirty checkout"):
+                self.l["verify_checkout"](root,**p)
+            extra.unlink()
+            runner.unlink()
+            with self.assertRaisesRegex(self.l["Unsafe"],"Dirty checkout"):
+                self.l["verify_checkout"](root,**p)
+
+    def test_H4_checkout_never_becomes_a_silent_fallback(self):
+        with tempfile.TemporaryDirectory() as d:
+            root,git,p=self.fixture(d);git("checkout","--detach",p["parent"])
+            with self.assertRaisesRegex(self.l["Unsafe"],"Wrong checkout HEAD"):
+                self.l["verify_checkout"](root,**p)
+
+    def test_missing_H5_blob_pins_fail_before_execution(self):
+        for invalid in (None,{}, {".github/scripts/c3c02b_runner.py":"0"*40}):
+            l=load(False);l["H5_BLOBS"]=invalid
+            with self.subTest(pins=invalid),self.assertRaises(l["Unsafe"]):
+                l["validate_policy"](l["TABLE"])
 
 
 if __name__ == "__main__":
