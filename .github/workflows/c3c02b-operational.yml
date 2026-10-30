@@ -1,4 +1,4 @@
-# Trusted L5 candidate pinned to the audited H5/D5. H's workflow at the same path is never used as launcher code.
+# Trusted L6 candidate pinned to the audited H6/D6. H's workflow at the same path is never used as launcher code.
 name: C3-C trusted isolation launcher
 on:
   workflow_dispatch:
@@ -8,10 +8,10 @@ concurrency:
   group: constia-c3c02b-operational
   cancel-in-progress: false
 env:
-  CODE_SHA: 2a97f1919e15d10ec887b87108b62b336e3bfbe3
-  CONSTIA_B3_APPROVED_SHA: 2a97f1919e15d10ec887b87108b62b336e3bfbe3
+  CODE_SHA: 5265f9f93aeeaa90e2edbed8abfd1713ecbec16c
+  CONSTIA_B3_APPROVED_SHA: 5265f9f93aeeaa90e2edbed8abfd1713ecbec16c
   CONSTIA_B3_APPROVED_ACTOR_ID: '147414572'
-  CONSTIA_B3_INVENTORY_SHA256: 688e7dd742efde53bc14667f5b8feda1ba8222cd19ea113c482e58217af0ccdb
+  CONSTIA_B3_INVENTORY_SHA256: e455a3169bf036271f50833c6662f3d62c845aa2451454886652e8c18a23900c
   CONSTIA_B3_APPROVED_PHASE: isolation-only
   C3C02B_PHASE: isolation-only
   # Suppress hooks, fsmonitor and checkout EOL transforms on this disposable runner only.
@@ -113,6 +113,17 @@ jobs:
           H5_BLOBS = {".github/scripts/c3c02b_runner.py": "ca65ed558b1fe881101e0cec38b82ec32cbccb05",
                       ".github/scripts/test_c3c02b_runner.py": "851965e52d572da49a26e4268fdb9ac1b77858c2"}
 
+
+          H5, H5_TREE, H5_D, H5_TABLE = H, TREE, D, TABLE.copy()
+          # Definitive H6/D6 identities consolidated in C89 and published in C96.
+          H = "5265f9f93aeeaa90e2edbed8abfd1713ecbec16c"
+          TREE = "ad1eff3ca200eee55067ccbd633d09652c5a440e"
+          D = "e455a3169bf036271f50833c6662f3d62c845aa2451454886652e8c18a23900c"
+          TABLE = {**H5_TABLE, ".github/scripts/c3c02b_runner.py": "23f690909d0098f9f07f558f70086cad21923d4b06c007b6686c7a38ac221fc5",
+                   ".github/scripts/test_c3c02b_runner.py": "c14235cc1e67cd3d1f364326d7138db6ffd737304623ebb113da03831123d5e4"}
+          H6_BLOBS = {".github/scripts/c3c02b_runner.py": "43e766946880485d5af5bc020a228cab871fbae9",
+                      ".github/scripts/test_c3c02b_runner.py": "71e668b75127ad1fe1f48f4038e49d182233bfc4"}
+
           class Unsafe(RuntimeError):
               pass
 
@@ -124,7 +135,10 @@ jobs:
               require(type(H) is str and re.fullmatch("[0-9a-f]{40}",H) is not None and
                       type(TREE) is str and re.fullmatch("[0-9a-f]{40}",TREE) is not None and
                       type(D) is str and re.fullmatch("[0-9a-f]{64}",D) is not None,
-                      "H5 cryptographic pins are not consolidated")
+                      "H6 cryptographic pins are not consolidated")
+              require(type(H6_BLOBS) is dict and set(H6_BLOBS) == set(HISTORICAL_CHANGED) and
+                      all(type(v) is str and re.fullmatch("[0-9a-f]{40}",v) is not None for v in H6_BLOBS.values()),
+                      "H6 blob pins are not consolidated")
               require(type(H5_BLOBS) is dict and set(H5_BLOBS) == set(HISTORICAL_CHANGED) and
                       all(type(v) is str and re.fullmatch("[0-9a-f]{40}",v) is not None for v in H5_BLOBS.values()),
                       "H5 blob pins are not consolidated")
@@ -310,11 +324,11 @@ jobs:
 
 
 
-          def verify_checkout(root, h=None, tree=None, table=None, parent=H4, changes=HISTORICAL_CHANGED, history=None, blobs=None):
+          def verify_h5_checkout(root, h=None, tree=None, table=None, parent=H4, changes=HISTORICAL_CHANGED, history=None, blobs=None, checkout_head=None, physical=True):
               # Only tests override identities; production selects the fixed H5 policy.
-              h=H if h is None else h
-              tree=TREE if tree is None else tree
-              table=TABLE if table is None else table
+              h=H5 if h is None else h
+              tree=H5_TREE if tree is None else tree
+              table=H5_TABLE if table is None else table
               blobs=H5_BLOBS if blobs is None else blobs
               require(type(h) is str and re.fullmatch("[0-9a-f]{40}",h) is not None and
                       type(tree) is str and re.fullmatch("[0-9a-f]{40}",tree) is not None and
@@ -323,7 +337,7 @@ jobs:
               require(h!=parent,"H4 cannot execute as H5")
               history={} if history is None else history
               require(history.get("h",H4)==parent,"H5 parent differs from historical H4")
-              verify_h4_checkout(root,checkout_head=h,physical=False,**history)
+              verify_h4_checkout(root,checkout_head=h if checkout_head is None else checkout_head,physical=False,**history)
               require(git(root,"rev-list","--parents","-n","1",h).decode().split()==[h,parent],"Wrong H5 parent")
               require(git(root,"rev-parse",h+"^{tree}").decode().strip()==tree,"Wrong H5 tree")
               require(len(changes)==2,"Only gzip transport runner and tests may change")
@@ -346,10 +360,52 @@ jobs:
                           and "\\" not in rel and ":" not in rel,"Unsafe H5 tracked path")
                   tracked[rel]=oid
               raw=blob_bytes(root,list(dict.fromkeys(tracked.values())))
-              _verify_physical_checkout(pathlib.Path(root),tracked,raw)
+              if physical:_verify_physical_checkout(pathlib.Path(root),tracked,raw)
               require(all(p in tracked and hashlib.sha256(raw[tracked[p]]).hexdigest()==value for p,value in table.items()),
                       "Audited H5 blob differs")
               require(not git(root,"status","--porcelain=v1","--untracked-files=all").strip(),"Dirty H5 checkout")
+              return True
+
+          def verify_checkout(root, h=None, tree=None, table=None, parent=H5, changes=HISTORICAL_CHANGED, history=None, blobs=None):
+              # Only tests override identities; production selects the fixed H6 policy.
+              h=H if h is None else h
+              tree=TREE if tree is None else tree
+              table=TABLE if table is None else table
+              blobs=H6_BLOBS if blobs is None else blobs
+              require(type(h) is str and re.fullmatch("[0-9a-f]{40}",h) is not None and
+                      type(tree) is str and re.fullmatch("[0-9a-f]{40}",tree) is not None and
+                      type(table) is dict and all(type(v) is str and re.fullmatch("[0-9a-f]{64}",v) is not None for v in table.values()),
+                      "H6 cryptographic pins are not consolidated")
+              require(h!=parent,"H5 cannot execute as H6")
+              history={} if history is None else history
+              require(history.get("h",H5)==parent,"H6 parent differs from historical H5")
+              verify_h5_checkout(root,checkout_head=h,physical=False,**history)
+              require(git(root,"rev-list","--parents","-n","1",h).decode().split()==[h,parent],"Wrong H6 parent")
+              require(git(root,"rev-parse",h+"^{tree}").decode().strip()==tree,"Wrong H6 tree")
+              require(len(changes)==2,"Only default PID runner and tests may change")
+              diff_paths(root,parent,h,"M",changes)
+              previous=history.get("table",H5_TABLE)
+              require(set(table)==set(previous) and all(table[p]==previous[p] for p in table if p not in changes),
+                      "H6 changed the retained inventory")
+              require(type(blobs) is dict and set(blobs)==set(changes) and
+                      all(type(v) is str and re.fullmatch("[0-9a-f]{40}",v) is not None for v in blobs.values()),
+                      "H6 blob OID policy differs")
+              require(all(git(root,"rev-parse",h+":"+p).decode().strip()==oid for p,oid in blobs.items()),
+                      "H6 blob OID differs")
+              listing=git(root,"ls-tree","-r","-z",h).split(b"\0")
+              tracked={}
+              for item in filter(None,listing):
+                  header,path=item.split(b"\t",1);mode,kind,oid=header.decode("ascii").split()
+                  rel=path.decode("utf-8")
+                  require(kind=="blob" and mode in ("100644","100755") and
+                          not pathlib.PurePosixPath(rel).is_absolute() and ".." not in pathlib.PurePosixPath(rel).parts
+                          and "\\" not in rel and ":" not in rel,"Unsafe H6 tracked path")
+                  tracked[rel]=oid
+              raw=blob_bytes(root,list(dict.fromkeys(tracked.values())))
+              _verify_physical_checkout(pathlib.Path(root),tracked,raw)
+              require(all(p in tracked and hashlib.sha256(raw[tracked[p]]).hexdigest()==value for p,value in table.items()),
+                      "Audited H6 blob differs")
+              require(not git(root,"status","--porcelain=v1","--untracked-files=all").strip(),"Dirty H6 checkout")
               return True
 
           # L2 validates H2's wire contract independently; it never imports H2's validators.
@@ -847,7 +903,7 @@ jobs:
                   require(e.get("GATE_RESULT")=="success" and e.get("L2_ENVIRONMENT")=="constia-c3c-isolation","Protected approval context absent")
               if stage in ("tests","run","cleanup","evidence","final"):require(e.get("CHECKOUT_VERIFIED")=="true","Prior verification absent")
               if stage=="gate":
-                  print("Read-only gate: H5="+H+"; D5="+D+"; actor="+ACTOR+"; phase=isolation-only")
+                  print("Read-only gate: H6="+H+"; D6="+D+"; actor="+ACTOR+"; phase=isolation-only")
               elif stage=="verify":
                   verify_checkout(pathlib.Path(e["GITHUB_WORKSPACE"])/"harness")
                   outputs(dict(verified="true"))
@@ -889,21 +945,21 @@ jobs:
           LAUNCHER_STAGE: approved
           LAUNCHER_READ_TOKEN: ${{ github.token }}
         run: *trusted_verifier
-      - name: Checkout only H5
+      - name: Checkout only H6
         id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: ivandinicola/CONSTIA
-          ref: 2a97f1919e15d10ec887b87108b62b336e3bfbe3
+          ref: 5265f9f93aeeaa90e2edbed8abfd1713ecbec16c
           path: harness
           persist-credentials: false
-          fetch-depth: 6
+          fetch-depth: 7
           fetch-tags: false
           submodules: false
           lfs: false
           clean: false
           set-safe-directory: false
-      - name: Verify H5 chain and every checkout byte from L5
+      - name: Verify H6 chain and every checkout byte from L6
         id: verified
         if: ${{ success() && steps.checkout.outcome == 'success' }}
         shell: python3 -I -B {0}
@@ -911,7 +967,7 @@ jobs:
           LAUNCHER_STAGE: verify
           LAUNCHER_READ_TOKEN: ${{ github.token }}
         run: *trusted_verifier
-      - name: Pure regressions from verified H5
+      - name: Pure regressions from verified H6
         id: regressions
         if: ${{ success() && steps.verified.outputs.verified == 'true' }}
         shell: python3 -I -B {0}
@@ -929,7 +985,7 @@ jobs:
           LAUNCHER_READ_TOKEN: ${{ github.token }}
           CHECKOUT_VERIFIED: ${{ steps.verified.outputs.verified }}
         run: *trusted_verifier
-      - name: Cleanup only verified H5 resources
+      - name: Cleanup only verified H6 resources
         id: cleanup
         if: ${{ always() && steps.verified.outputs.verified == 'true' }}
         shell: python3 -I -B {0}
