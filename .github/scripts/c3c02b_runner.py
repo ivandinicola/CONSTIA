@@ -1002,7 +1002,7 @@ def run_isolation(phase):
     inherited=[x for k in metadata for x in ('--env',k+'='+e[k])]
     for key in ('app_id','peer_id','denied_id'):
         create_resource(s,key,['docker','run','-d','--name',resource_specs(s)[key][1],*la,*inherited,
-            '--network',s['network_name'],'--pid','private','--ipc','private','--cap-drop','ALL',
+            '--network',s['network_name'],'--ipc','private','--cap-drop','ALL',
             '--security-opt','no-new-privileges','--read-only','--tmpfs','/tmp:rw,noexec,nosuid,size=256m',
             '--tmpfs','/run/c3:rw,noexec,nosuid,size=32m',s['app_image_id'],'sleep','infinity'])
     addresses={key:diagnostic_call('isolation_setup', app, s, key)['NetworkSettings']['Networks'][s['network_name']]['IPAddress'] for key in ('app_id','peer_id','denied_id')}

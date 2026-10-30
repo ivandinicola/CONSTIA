@@ -2174,4 +2174,200 @@ class H5BuildTransportTests(unittest.TestCase):
                 case.assertEqual('uncertain',case.c.cleanup)
         _with_protocol_fixture(check)
 
+
+class C83PidDefaultTests(unittest.TestCase):
+    """Pure argv contracts: real isolation AST, no Docker execution."""
+    H5_OUTSIDE_ISOLATION_SHA256 = "827fbf5bbbb5a9c8d49eb2dcd832494f99b5ac7a88ebc5a93f8d0d7b809f6771"
+    H6_ISOLATION_SHA256 = "7467cfa4248e3d8d6719f6ac8ac7f5dd517d034196a5fd81cbb1294ca19a53a5"
+    METADATA = ("GITHUB_ACTIONS", "RUNNER_ENVIRONMENT", "GITHUB_EVENT_NAME", "GITHUB_RUN_ATTEMPT",
+                "GITHUB_SHA", "GITHUB_WORKFLOW_SHA", "GITHUB_WORKFLOW_REF", "GITHUB_REF",
+                "GITHUB_RUN_ID", "CODE_SHA", "GITHUB_ACTOR_ID", "CONSTIA_B3_APPROVED_ACTOR_ID",
+                "CONSTIA_B3_APPROVED_SHA", "C3C02B_PHASE", "CONSTIA_B3_APPROVED_PHASE",
+                "CONSTIA_B3_INVENTORY_SHA256")
+
+    def parts(self):
+        import ast
+        source = pathlib.Path(__file__).with_name("c3c02b_runner.py").read_text(encoding="utf-8")
+        function = next(n for n in ast.parse(source).body
+                        if isinstance(n, ast.FunctionDef) and n.name == "run_isolation")
+        loop = next(n for n in function.body if isinstance(n, ast.For)
+                    and isinstance(n.iter, ast.Tuple)
+                    and ast.literal_eval(n.iter) == ("app_id", "peer_id", "denied_id"))
+        return source, function, loop
+
+    def fixture(self):
+        state = SafetyTests().session()
+        state.update(phase="isolation-only", app_image_id="sha256:" + "d" * 64)
+        return state, IsolationPhaseTests().environment()
+
+    def commands(self, state=None, environment=None):
+        import ast
+        state, environment = self.fixture() if state is None else (state, environment)
+        _, function, loop = self.parts()
+        wanted = ("la", "metadata", "inherited")
+        assignments = []
+        for name in wanted:
+            assignments.append(next(n for n in function.body if isinstance(n, ast.Assign)
+                                    and any(isinstance(x, ast.Name) and x.id == name for x in n.targets)))
+        captured = []
+        scope = dict(s=state, e=environment, resource_specs=r.resource_specs,
+                     create_resource=lambda s, key, args: captured.append((key, args)))
+        # Execute only the unchanged data-building assignments and actual creation loop.
+        code = ast.fix_missing_locations(ast.Module(body=[*assignments, loop], type_ignores=[]))
+        exec(compile(code, "H6-isolation-argv", "exec"), scope)
+        return captured, scope
+
+    def legacy_H5_command(self, state, environment, key):
+        # Frozen contract from reviewed H5; intentionally includes the invalid PID pair.
+        names = {"app_id": "c3c02b-app-", "peer_id": "c3c02b-peer-", "denied_id": "c3c02b-denied-"}
+        labels = {"constia.owner": "c3c02b", "constia.run": state["run_id"],
+                  "constia.nonce": state["nonce"], "constia.sha": state["code_sha"]}
+        label_args = [x for k, v in labels.items() for x in ("--label", k + "=" + v)]
+        inherited = [x for k in self.METADATA for x in ("--env", k + "=" + environment[k])]
+        return ["docker", "run", "-d", "--name", names[key] + state["nonce"], *label_args, *inherited,
+                "--network", state["network_name"], "--pid", "private", "--ipc", "private",
+                "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--read-only",
+                "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m",
+                "--tmpfs", "/run/c3:rw,noexec,nosuid,size=32m", state["app_image_id"], "sleep", "infinity"]
+
+    def test_reviewed_H5_fixture_contains_the_invalid_PID_pair(self):
+        state, environment = self.fixture()
+        for key in ("app_id", "peer_id", "denied_id"):
+            with self.subTest(role=key):
+                old = self.legacy_H5_command(state, environment, key)
+                self.assertEqual(1, old.count("--pid"))
+                self.assertEqual("private", old[old.index("--pid") + 1])
+
+    def test_C82_red_regression_actual_loop_omits_PID_option(self):
+        calls, _ = self.commands()
+        self.assertEqual(3, len(calls))
+        for key, args in calls:
+            with self.subTest(role=key):
+                self.assertFalse(any(x == "--pid" or x.startswith("--pid=") for x in args),
+                                 "H5 invalid PID literal must be removed, not replaced with host/container")
+
+    def test_exact_H5_arguments_minus_only_the_PID_pair(self):
+        state, environment = self.fixture()
+        calls, _ = self.commands(state, environment)
+        for key, actual in calls:
+            with self.subTest(role=key):
+                old = self.legacy_H5_command(state, environment, key)
+                index = old.index("--pid")
+                self.assertEqual(old[:index] + old[index + 2:], actual)
+
+    def test_creation_order_and_distinct_exact_names(self):
+        state, environment = self.fixture()
+        calls, _ = self.commands(state, environment)
+        self.assertEqual(["app_id", "peer_id", "denied_id"], [key for key, _ in calls])
+        names = [args[args.index("--name") + 1] for _, args in calls]
+        self.assertEqual(["c3c02b-app-" + state["nonce"], "c3c02b-peer-" + state["nonce"],
+                          "c3c02b-denied-" + state["nonce"]], names)
+
+    def test_private_network_and_IPC_are_preserved(self):
+        import ast
+        state, environment = self.fixture()
+        calls, _ = self.commands(state, environment)
+        for _, args in calls:
+            self.assertEqual(state["network_name"], args[args.index("--network") + 1])
+            self.assertEqual("private", args[args.index("--ipc") + 1])
+        _, function, _ = self.parts()
+        creation = next(n for n in ast.walk(function) if isinstance(n, ast.Call)
+                        and isinstance(n.func, ast.Name) and n.func.id == "create_resource"
+                        and len(n.args) > 1 and isinstance(n.args[1], ast.Constant)
+                        and n.args[1].value == "network_id")
+        scope = dict(s=state, la=[x for k, v in r.labels(state).items() for x in ("--label", k + "=" + v)])
+        args = eval(compile(ast.Expression(creation.args[2]), "H6-network-argv", "eval"), scope)
+        self.assertIn("--internal", args)
+        self.assertEqual("bridge", args[args.index("--driver") + 1])
+
+    def test_no_published_ports_or_added_privileges(self):
+        calls, _ = self.commands()
+        forbidden = ("--privileged", "--publish", "--publish-all", "-p", "-P", "--cap-add")
+        for _, args in calls:
+            self.assertFalse(any(x == key or x.startswith(key + "=") for x in args for key in forbidden))
+            self.assertEqual("ALL", args[args.index("--cap-drop") + 1])
+            self.assertEqual("no-new-privileges", args[args.index("--security-opt") + 1])
+
+    def test_read_only_root_and_existing_tmpfs_are_preserved(self):
+        calls, _ = self.commands()
+        for _, args in calls:
+            self.assertEqual(1, args.count("--read-only"))
+            self.assertEqual(["/tmp:rw,noexec,nosuid,size=256m", "/run/c3:rw,noexec,nosuid,size=32m"],
+                             [args[i + 1] for i, value in enumerate(args) if value == "--tmpfs"])
+            self.assertNotIn("--mount", args)
+            self.assertNotIn("--volume", args)
+            self.assertNotIn("-v", args)
+
+    def test_labels_CODE_SHA_environment_image_and_command_are_preserved(self):
+        state, environment = self.fixture()
+        calls, scope = self.commands(state, environment)
+        self.assertEqual(self.METADATA, scope["metadata"])
+        for _, args in calls:
+            labels = [args[i + 1] for i, value in enumerate(args) if value == "--label"]
+            self.assertEqual(["constia.owner=c3c02b", "constia.run=" + state["run_id"],
+                              "constia.nonce=" + state["nonce"], "constia.sha=" + state["code_sha"]], labels)
+            inherited = [args[i + 1] for i, value in enumerate(args) if value == "--env"]
+            self.assertEqual([key + "=" + environment[key] for key in self.METADATA], inherited)
+            self.assertIn("CODE_SHA=" + environment["CODE_SHA"], inherited)
+            self.assertEqual([state["app_image_id"], "sleep", "infinity"], args[-3:])
+            self.assertFalse(any("RESEND" in item or "SQLCONNSTR" in item for item in inherited))
+
+    def test_default_PID_inspect_is_accepted_but_shared_namespaces_are_rejected(self):
+        def check(case):
+            case.populate()
+            state = case.s
+            state.update(app_image_id=case.rows["app_image_id"]["Id"],
+                         network_id=case.rows["network_id"]["Id"],
+                         subnet="172.31.240.0/28", gateway="172.31.240.1")
+            _legacy_plan_fixture(state, "app_id")
+            obj = copy.deepcopy(case.rows["app_id"])
+            obj["HostConfig"]["PidMode"] = ""
+            self.assertEqual(obj["Id"], r.verify_owned(state, "app_id", obj))
+            for mode in ("host", "container:" + "f" * 64):
+                with self.subTest(mode=mode), self.assertRaisesRegex(r.Unsafe, "Host namespaces/privileges"):
+                    bad = copy.deepcopy(obj)
+                    bad["HostConfig"]["PidMode"] = mode
+                    r.verify_owned(state, "app_id", bad)
+        _with_protocol_fixture(check)
+
+    def test_only_the_authorized_pair_changes_in_productive_source(self):
+        import ast, hashlib
+        source, function, _ = self.parts()
+        lines = source.splitlines(keepends=True)
+        outside = "".join(lines[:function.lineno - 1] + lines[function.end_lineno:])
+        self.assertEqual(self.H5_OUTSIDE_ISOLATION_SHA256, hashlib.sha256(outside.encode()).hexdigest())
+        body = ast.get_source_segment(source, function)
+        self.assertEqual(self.H6_ISOLATION_SHA256, hashlib.sha256(body.encode()).hexdigest())
+
+    def test_creation_failure_stays_unresolved_without_operational_success(self):
+        import contextlib, io, subprocess
+        from unittest.mock import patch
+        def check(case):
+            r._admit_session(case.s)
+            state = case.s
+            state["app_image_id"] = "sha256:" + "d" * 64
+            calls, _ = self.commands(state, case.e)
+            args = calls[0][1]
+            output = io.StringIO()
+            result = subprocess.CompletedProcess([], 125, b"PRIVATE_SECRET", b"PRIVATE_SECRET")
+            with patch.object(r, "command", _H4_ORIGINAL_COMMAND), \
+                 patch.object(r.subprocess, "run", return_value=result) as process, \
+                 contextlib.redirect_stderr(output), \
+                 self.assertRaisesRegex(r.Unsafe, "Bounded operation failed"):
+                r.create_resource(state, "app_id", args)
+            process.assert_called_once_with(["docker", "--context", "default", *args[1:]],
+                                           env=None, input=None, capture_output=True, timeout=60)
+            self.assertEqual(dict(stage="resource_app", code="RESOURCE_UNVERIFIED", reason="UNCONFIRMED"),
+                             case.c.first_failure)
+            self.assertEqual({"app_id"}, case.c.controller.pending)
+            self.assertTrue(case.c.controller.ambiguous)
+            r._freeze_producer(case.c)
+            self.assertEqual("unresolved", case.c.session["producer_state"])
+            self.assertEqual("absent", case.c.proof_state)
+            self.assertEqual("uncertain", case.c.cleanup)
+            self.assertEqual("unknown", case.c.cleanup_scope)
+            self.assertNotIn("PRIVATE_SECRET", output.getvalue())
+        _with_protocol_fixture(check)
+
+
 if __name__ == '__main__': unittest.main()
