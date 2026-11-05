@@ -31,7 +31,8 @@ public sealed class AutorizacionEnvioUnicoMappingTests
         Assert.Contains("CREATE TABLE [AutorizacionEnvioUnico]", up);
         Assert.Contains("CREATE UNIQUE INDEX [IX_AutorizacionEnvioUnico_OperacionId]", up);
         Assert.DoesNotContain("ALTER TABLE [Usuario]", up);
-        var down = migrator.GenerateScript("20261030232834_AddAutorizacionEnvioUnico", "20261023003711_AddWelcomeEmailOutbox");
+        var down = migrator.GenerateScript("20261030232834_AddAutorizacionEnvioUnico", "20261023003711_AddWelcomeEmailOutbox")
+            .ReplaceLineEndings("\n");
         var migration = db.GetService<IMigrationsAssembly>().CreateMigration(
             db.GetService<IMigrationsAssembly>().Migrations["20261030232834_AddAutorizacionEnvioUnico"], db.Database.ProviderName!);
         Assert.Equal(2, migration.DownOperations.Count);
@@ -45,9 +46,10 @@ public sealed class AutorizacionEnvioUnicoMappingTests
             @"WITH\s*\(\s*TABLOCKX\s*,\s*HOLDLOCK\s*\)\s*\)\s+" +
             @"THROW\s+51000\s*,\s*'Cannot discard authorization history\.'\s*,\s*1\s*;\s*\z");
         Assert.True(contrato.Success, guard.Sql);
-        var guardIndex = down.IndexOf(guard.Sql, StringComparison.Ordinal);
+        var guardSql = guard.Sql.ReplaceLineEndings("\n");
+        var guardIndex = down.IndexOf(guardSql, StringComparison.Ordinal);
         Assert.True(guardIndex >= 0);
-        Assert.True(down.IndexOf("DROP TABLE [AutorizacionEnvioUnico]", StringComparison.Ordinal) > guardIndex + guard.Sql.Length);
+        Assert.True(down.IndexOf("DROP TABLE [AutorizacionEnvioUnico]", StringComparison.Ordinal) > guardIndex + guardSql.Length);
         Assert.Contains("DROP TABLE [AutorizacionEnvioUnico]", down);
     }
     [Fact]
