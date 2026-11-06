@@ -38,7 +38,7 @@ header {
     padding: var(--constia-space-xs) var(--constia-space-sm);
     color: var(--constia-ink);
     background: var(--constia-surface);
-    border: 1px solid var(--constia-border);
+    border: 1px solid var(--constia-secondary-action);
     border-radius: var(--constia-radius-control);
 }
 
