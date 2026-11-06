@@ -343,6 +343,33 @@ public sealed class HabitosController(
         }
     }
 
+    [HttpGet("{id:guid}/cumplimientos")]
+    [ProducesResponseType(typeof(IReadOnlyList<CumplimientoResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<CumplimientoResponse>>> ListarCumplimientos(
+        Guid id,
+        [FromServices] IHistorialCumplimientosRepository historial,
+        CancellationToken cancellationToken)
+    {
+        if (usuarioActual.UsuarioId is not Guid usuarioId)
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "No se pudo identificar al usuario autenticado."
+            });
+        }
+
+        var cumplimientos = await historial.ListarPorHabitoYUsuarioAsync(id, usuarioId, cancellationToken);
+        if (cumplimientos is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(cumplimientos.Select(item => new CumplimientoResponse(item.Id, item.Fecha)).ToArray());
+    }
+
     [HttpPost("{id:guid}/cumplimientos")]
     [ProducesResponseType(typeof(CumplimientoResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

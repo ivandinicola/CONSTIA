@@ -5,9 +5,33 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Constia.Infrastructure.Cumplimientos;
 
-public sealed class CumplimientoRepository(ConstiaDbContext dbContext) : ICumplimientoRepository
+public sealed class CumplimientoRepository(ConstiaDbContext dbContext) : ICumplimientoRepository, IHistorialCumplimientosRepository
 {
     private const string UniqueHabitDateIndexName = "UX_Cumplimiento_HabitoId_Fecha";
+
+    public async Task<IReadOnlyList<CumplimientoListado>?> ListarPorHabitoYUsuarioAsync(
+        Guid habitoId, Guid usuarioId, CancellationToken cancellationToken)
+    {
+        var filas = await (
+            from habito in dbContext.Set<Habito>()
+            where habito.Id == habitoId && EF.Property<Guid>(habito, "UsuarioId") == usuarioId
+            join cumplimiento in dbContext.Set<Cumplimiento>()
+                on habito.Id equals EF.Property<Guid>(cumplimiento, "HabitoId") into cumplimientos
+            from cumplimiento in cumplimientos.DefaultIfEmpty()
+            orderby cumplimiento.Fecha descending
+            select new { Id = (Guid?)cumplimiento.Id, Fecha = (DateOnly?)cumplimiento.Fecha })
+            .ToListAsync(cancellationToken);
+
+        // El LEFT JOIN conserva una fila sin cumplimiento si existe el hábito propio.
+        if (filas.Count == 0)
+        {
+            return null;
+        }
+
+        return filas[0].Id is null
+            ? []
+            : filas.Select(fila => new CumplimientoListado(fila.Id!.Value, fila.Fecha!.Value)).ToArray();
+    }
 
     public Task<bool> ExistePorHabitoYFechaAsync(
         Guid habitId,

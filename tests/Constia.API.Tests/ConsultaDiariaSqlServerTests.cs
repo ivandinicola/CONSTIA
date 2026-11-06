@@ -82,7 +82,7 @@ public sealed class ConsultaDiariaSqlServerTests(ITestOutputHelper output)
         }
     }
 
-    private sealed class HostSql(string connection, ConsultasEjecutadas consultas) : WebApplicationFactory<Program>
+    internal sealed class HostSql(string connection, ConsultasEjecutadas consultas) : WebApplicationFactory<Program>
     {
         protected override IHost CreateHost(IHostBuilder builder)
         {
@@ -109,7 +109,7 @@ public sealed class ConsultaDiariaSqlServerTests(ITestOutputHelper output)
         }
     }
 
-    private sealed class ConsultasEjecutadas : DbCommandInterceptor
+    internal sealed class ConsultasEjecutadas : DbCommandInterceptor
     {
         public List<string> Comandos { get; } = [];
 

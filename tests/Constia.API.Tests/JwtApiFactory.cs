@@ -109,6 +109,8 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
             services.AddScoped<ICumplimientoRepository>(_ => new FakeCumplimientoRepository(
                 CumplimientosPersistidos,
                 RegistrarCumplimientoGuardado));
+            services.RemoveAll<IHistorialCumplimientosRepository>();
+            services.AddScoped<IHistorialCumplimientosRepository>(_ => new FakeHistorialCumplimientosRepository(this));
             services.RemoveAll<IHabitosDiariosReadRepository>();
             services.AddScoped<IHabitosDiariosReadRepository>(_ => new FakeHabitosDiariosReadRepository(this));
             services.RemoveAll<IHabitoRepository>();
@@ -239,6 +241,25 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
 
         public Task<bool> HistorialCompletoAsync(CancellationToken cancellationToken) =>
             Task.FromResult(factory.HistorialCompleto);
+    }
+
+    private sealed class FakeHistorialCumplimientosRepository(JwtApiFactory factory)
+        : IHistorialCumplimientosRepository
+    {
+        public Task<IReadOnlyList<CumplimientoListado>?> ListarPorHabitoYUsuarioAsync(
+            Guid habitoId, Guid usuarioId, CancellationToken cancellationToken)
+        {
+            if (!factory.HabitosPersistidos.Any(habito => habito.Id == habitoId && habito.Usuario.Id == usuarioId))
+            {
+                return Task.FromResult<IReadOnlyList<CumplimientoListado>?>(null);
+            }
+
+            return Task.FromResult<IReadOnlyList<CumplimientoListado>?>(factory.CumplimientosPersistidos.Values
+                .Where(cumplimiento => cumplimiento.Habito.Id == habitoId)
+                .OrderByDescending(cumplimiento => cumplimiento.Fecha)
+                .Select(cumplimiento => new CumplimientoListado(cumplimiento.Id, cumplimiento.Fecha))
+                .ToArray());
+        }
     }
 
     private sealed class FakeHabitosDiariosReadRepository(JwtApiFactory factory) : IHabitosDiariosReadRepository

@@ -1098,6 +1098,79 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     }
 
 
+    [Fact]
+    public async Task HistorialCumplimientos_SinBearer_Devuelve401()
+    {
+        using var client = factory.CreateClient();
+        var response = await client.GetAsync($"/api/habitos/{Guid.NewGuid():D}/cumplimientos");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task HistorialCumplimientos_PropioVacioEs200_YAjenoOInexistenteEs404()
+    {
+        var propio = CrearHabitoConIdYFecha(factory.Usuario, "Propio", Guid.NewGuid(), DateTimeOffset.UtcNow);
+        var otro = new Usuario("Otro", "historial-otro@example.invalid", "fake-hash", "Etc/UTC");
+        var ajeno = CrearHabitoConIdYFecha(otro, "Ajeno", Guid.NewGuid(), DateTimeOffset.UtcNow);
+        factory.ReemplazarHabitos([propio, ajeno]);
+        using var client = ClienteAutenticadoParaCumplimientos(factory.Usuario.Id);
+        var fecha = new DateOnly(2026, 10, 9);
+        factory.CumplimientosPersistidos[(ajeno.Id, fecha)] = new Cumplimiento(ajeno, fecha);
+
+        var vacio = await client.GetAsync($"/api/habitos/{propio.Id:D}/cumplimientos");
+        Assert.Equal(HttpStatusCode.OK, vacio.StatusCode);
+        Assert.Empty((await vacio.Content.ReadFromJsonAsync<CumplimientoResponse[]>())!);
+
+        var privado = await client.GetAsync($"/api/habitos/{ajeno.Id:D}/cumplimientos");
+        var ausente = await client.GetAsync($"/api/habitos/{Guid.NewGuid():D}/cumplimientos");
+        Assert.Equal(HttpStatusCode.NotFound, privado.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, ausente.StatusCode);
+        var problemaPrivado = await privado.Content.ReadFromJsonAsync<ProblemDetails>();
+        var problemaAusente = await ausente.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.NotNull(problemaPrivado);
+        Assert.NotNull(problemaAusente);
+        Assert.Equal(problemaAusente.Title, problemaPrivado.Title);
+        Assert.Equal(problemaAusente.Type, problemaPrivado.Type);
+        Assert.Null(problemaPrivado.Detail);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task HistorialCumplimientos_ConservaHechosYOrdenConHistorialSinInicializar(bool inactivo)
+    {
+        var viernes = new DateOnly(2026, 10, 9);
+        var habito = HabitoHistorico.Crear(factory.Usuario, "Leer", null, viernes.AddDays(-7), [DayOfWeek.Friday]);
+        factory.ReemplazarHabitos([habito]);
+        using var client = ClienteAutenticadoParaCumplimientos(factory.Usuario.Id);
+        var antiguo = new Cumplimiento(habito, viernes.AddDays(-7));
+        var reciente = new Cumplimiento(habito, viernes);
+        factory.CumplimientosPersistidos[(habito.Id, antiguo.Fecha)] = antiguo;
+        factory.CumplimientosPersistidos[(habito.Id, reciente.Fecha)] = reciente;
+        habito.ActualizarConfiguracionVersionada(habito.Nombre, habito.Descripcion, [DayOfWeek.Saturday], viernes);
+        if (inactivo)
+        {
+            habito.Desactivar(viernes.AddDays(1));
+        }
+
+        factory.HistorialCompleto = false;
+        try
+        {
+            var response = await client.GetAsync($"/api/habitos/{habito.Id:D}/cumplimientos");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var resultados = Assert.IsType<CumplimientoResponse[]>(
+                await response.Content.ReadFromJsonAsync<CumplimientoResponse[]>());
+            Assert.Equal(
+                [new CumplimientoResponse(reciente.Id, reciente.Fecha), new CumplimientoResponse(antiguo.Id, antiguo.Fecha)],
+                resultados);
+        }
+        finally
+        {
+            factory.HistorialCompleto = true;
+        }
+    }
+
+
     private HttpClient ClienteAutenticado(Guid subject)
     {
         var client = factory.CreateClient();
