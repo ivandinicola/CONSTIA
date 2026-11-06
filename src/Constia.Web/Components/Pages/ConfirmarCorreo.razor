@@ -1,0 +1,118 @@
+@page "/confirmar-correo"
+@layout CuentaLayout
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using System.Net
+@using Constia.Web.Configuration
+@inject IHttpClientFactory Clients
+@inject IJSRuntime JS
+
+<PageTitle>Confirmar correo · CONSTIA</PageTitle>
+
+@if (confirmado)
+{
+    <h1 tabindex="-1">Correo confirmado</h1>
+    <p role="status">La verificación de tu cuenta se completó.</p>
+}
+else
+{
+    <h1 tabindex="-1">Confirmá tu correo</h1>
+
+    @if (!enlaceLeido)
+    {
+        <p role="status">Verificando el enlace…</p>
+    }
+    else if (enlace is null)
+    {
+        <p class="cuenta-error" role="alert">El enlace de confirmación no es válido.</p>
+    }
+    else
+    {
+        <p>Ingresá la contraseña que elegiste al crear tu cuenta.</p>
+
+        <form @onsubmit="ConfirmarAsync" @onsubmit:preventDefault>
+            <fieldset disabled="@enviando" aria-busy="@(enviando ? "true" : "false")">
+                <div>
+                    <label for="password-original">Contraseña</label>
+                    <input id="password-original" type="password" autocomplete="current-password"
+                           @bind="password" required />
+                </div>
+                <button type="submit">Confirmar mi correo</button>
+            </fieldset>
+        </form>
+        @if (enviando)
+        {
+            <p role="status">Confirmando tu correo…</p>
+        }
+        @if (error is not null)
+        {
+            <p class="cuenta-error" role="alert">@error</p>
+        }
+    }
+}
+
+@code {
+    private string[]? enlace;
+    private bool enlaceLeido;
+    private string password = "";
+    private bool enviando;
+    private bool confirmado;
+    private string? error;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        enlace = await JS.InvokeAsync<string[]?>("constiaCuenta.tomarEnlace");
+        enlaceLeido = true;
+        StateHasChanged();
+    }
+
+    private async Task ConfirmarAsync()
+    {
+        if (enviando || confirmado || enlace is not { Length: 2 } ||
+            !Guid.TryParseExact(enlace[0], "D", out var desafioId) || string.IsNullOrEmpty(password))
+            return;
+
+        enviando = true;
+        error = null;
+        try
+        {
+            using var client = Clients.CreateClient(ApiOptions.ClientName);
+            using var response = await client.PostAsJsonAsync("api/auth/email/verificar", new
+            {
+                desafioId,
+                token = enlace[1],
+                password
+            });
+
+            if (response.StatusCode == HttpStatusCode.NoContent)
+            {
+                enlace = null;
+                confirmado = true;
+                return;
+            }
+
+            error = response.StatusCode switch
+            {
+                HttpStatusCode.BadRequest => "El enlace o los datos no son válidos. Revisá la contraseña y el enlace del correo.",
+                HttpStatusCode.TooManyRequests => "Hiciste demasiados intentos. Esperá un momento y volvé a intentar.",
+                HttpStatusCode.ServiceUnavailable => "La confirmación no está disponible temporalmente.",
+                _ => "No pudimos comprobar si se confirmó tu correo."
+            };
+        }
+        catch (InvalidOperationException)
+        {
+            error = "La confirmación no está disponible temporalmente.";
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        {
+            error = "Se interrumpió la conexión. No pudimos comprobar si se confirmó tu correo.";
+        }
+        finally
+        {
+            password = "";
+            enviando = false;
+        }
+    }
+}

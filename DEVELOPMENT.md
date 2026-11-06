@@ -243,6 +243,10 @@ Constia.API
 SQL Server
 ```
 
+### Compatibilidad del registro (UI-002)
+
+El selector de zona horaria IANA de `/registro` requiere que el navegador implemente `Intl.supportedValuesOf("timeZone")`. Si la función no está disponible, el formulario muestra un aviso y deshabilita el alta. La zona horaria se elige explícitamente.
+
 ---
 
 ## 12. Flujo de trabajo

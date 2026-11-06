@@ -1,0 +1,177 @@
+@page "/registro"
+@layout CuentaLayout
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using System.ComponentModel.DataAnnotations
+@using System.Net
+@using Constia.Web.Configuration
+@inject IHttpClientFactory Clients
+@inject IJSRuntime JS
+
+<PageTitle>Crear cuenta · CONSTIA</PageTitle>
+
+@if (registrado)
+{
+    <h1 tabindex="-1">Revisá tu correo</h1>
+    <p role="status">Tu cuenta está pendiente de verificación. Abrí el enlace de confirmación cuando recibas el correo.</p>
+}
+else
+{
+    <h1 tabindex="-1">Creá tu cuenta</h1>
+    <p>Empezá a construir hábitos con CONSTIA.</p>
+
+    <EditForm Model="datos" OnValidSubmit="RegistrarAsync" FormName="registro">
+        <DataAnnotationsValidator />
+        <fieldset disabled="@enviando" aria-busy="@(enviando ? "true" : "false")">
+            <div>
+                <label for="nombre">Nombre</label>
+                <InputText id="nombre" @bind-Value="datos.Nombre" autocomplete="name" maxlength="200" required />
+                <ValidationMessage For="() => datos.Nombre" />
+            </div>
+            <div>
+                <label for="email">Correo electrónico</label>
+                <InputText id="email" type="email" @bind-Value="datos.Email" autocomplete="email" maxlength="254" required />
+                <ValidationMessage For="() => datos.Email" />
+            </div>
+            <div>
+                <label for="password">Contraseña</label>
+                <InputText id="password" type="password" @bind-Value="datos.Password"
+                           autocomplete="new-password" aria-describedby="password-ayuda" required />
+                <small id="password-ayuda">Entre 8 y 128 caracteres, con una mayúscula, un dígito y un signo de puntuación o símbolo.</small>
+                <ValidationMessage For="() => datos.Password" />
+            </div>
+            <div>
+                <label for="repetir-password">Repetí tu contraseña</label>
+                <InputText id="repetir-password" type="password" @bind-Value="datos.Repetida"
+                           autocomplete="new-password" aria-describedby="repetir-error"
+                           aria-invalid="@(noCoinciden ? "true" : null)" required />
+                <div id="repetir-error" class="cuenta-error" aria-live="polite">
+                    @if (noCoinciden)
+                    {
+                        <span>Las contraseñas no coinciden.</span>
+                    }
+                </div>
+                <ValidationMessage For="() => datos.Repetida" />
+            </div>
+            <div>
+                <label for="zona">Zona horaria</label>
+                <InputSelect id="zona" @bind-Value="datos.TimeZoneId" required>
+                    <option value="">Elegí tu zona horaria</option>
+                    @foreach (var zona in zonas)
+                    {
+                        <option @key="zona" value="@zona">@zona</option>
+                    }
+                </InputSelect>
+                <ValidationMessage For="() => datos.TimeZoneId" />
+            </div>
+            <button type="submit" disabled="@(enviando || zonas.Length == 0)">Crear mi cuenta</button>
+        </fieldset>
+        @if (enviando)
+        {
+            <p role="status">Creando tu cuenta…</p>
+        }
+        @if (error is not null)
+        {
+            <p class="cuenta-error" role="alert">@error</p>
+        }
+    </EditForm>
+}
+
+@code {
+    private readonly DatosRegistro datos = new();
+    private string[] zonas = [];
+    private bool enviando;
+    private bool registrado;
+    private bool noCoinciden;
+    private string? error;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        zonas = await JS.InvokeAsync<string[]>("constiaCuenta.zonas");
+        if (zonas.Length == 0)
+            error = "Este navegador no pudo cargar la lista de zonas horarias.";
+
+        StateHasChanged();
+    }
+
+    private async Task RegistrarAsync()
+    {
+        if (enviando || registrado)
+            return;
+
+        error = null;
+        noCoinciden = !string.Equals(datos.Password, datos.Repetida, StringComparison.Ordinal);
+        if (noCoinciden)
+            return;
+
+        if (!zonas.Contains(datos.TimeZoneId, StringComparer.Ordinal))
+        {
+            error = "Elegí una zona horaria de la lista.";
+            return;
+        }
+
+        enviando = true;
+        try
+        {
+            using var client = Clients.CreateClient(ApiOptions.ClientName);
+            using var response = await client.PostAsJsonAsync("api/usuarios", new
+            {
+                nombre = datos.Nombre,
+                email = datos.Email,
+                password = datos.Password,
+                timeZoneId = datos.TimeZoneId
+            });
+
+            if (response.StatusCode == HttpStatusCode.Created)
+            {
+                datos.Password = datos.Repetida = "";
+                registrado = true;
+                return;
+            }
+
+            error = response.StatusCode switch
+            {
+                HttpStatusCode.BadRequest => "Revisá el nombre, el correo, la contraseña y la zona horaria.",
+                HttpStatusCode.Conflict => "Ese correo ya está registrado.",
+                HttpStatusCode.TooManyRequests => "Hiciste demasiados intentos. Esperá un momento y volvé a intentar.",
+                HttpStatusCode.ServiceUnavailable => "El registro no está disponible temporalmente.",
+                _ => "No pudimos confirmar el alta. Revisá tu correo antes de volver a intentar."
+            };
+        }
+        catch (InvalidOperationException)
+        {
+            error = "El registro no está disponible temporalmente.";
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        {
+            error = "Se interrumpió la conexión. Revisá tu correo antes de volver a intentar.";
+        }
+        finally
+        {
+            enviando = false;
+        }
+    }
+
+    private sealed class DatosRegistro
+    {
+        [Required(ErrorMessage = "Ingresá tu nombre.")]
+        [StringLength(200, ErrorMessage = "El nombre admite hasta 200 caracteres.")]
+        public string Nombre { get; set; } = "";
+
+        [Required(ErrorMessage = "Ingresá tu correo.")]
+        [EmailAddress(ErrorMessage = "Ingresá un correo válido.")]
+        [StringLength(254, ErrorMessage = "El correo admite hasta 254 caracteres.")]
+        public string Email { get; set; } = "";
+
+        [Required(ErrorMessage = "Ingresá tu contraseña.")]
+        public string Password { get; set; } = "";
+
+        [Required(ErrorMessage = "Repetí tu contraseña.")]
+        public string Repetida { get; set; } = "";
+
+        [Required(ErrorMessage = "Elegí tu zona horaria.")]
+        public string TimeZoneId { get; set; } = "";
+    }
+}
