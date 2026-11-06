@@ -19,6 +19,7 @@ namespace Constia.API.Tests;
 public sealed class BienvenidaCapturaSqlServerTests
 {
     private const string Previous = "20261021062129_AddEmailVerification";
+    private const string WelcomeOutbox = "20261023003711_AddWelcomeEmailOutbox";
     private const string Password = "ABCDE1.@";
     private static readonly Guid Epoch = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly AspNetCorePasswordHasher Hasher = new();
@@ -27,10 +28,10 @@ public sealed class BienvenidaCapturaSqlServerTests
     private static VerificacionCorreoRepository Repo(ConstiaDbContext db, Clock clock, OpcionesCapturaBienvenida? options = null) =>
         new(db, Hasher, clock, options ?? Enabled);
 
-    private static async Task Init(EmailVerificationSqlDatabase d, bool active = true)
+    private static async Task Init(EmailVerificationSqlDatabase d, bool active = true, string? targetMigration = null)
     {
         await using var db = d.CreateContext();
-        await db.Database.MigrateAsync();
+        await db.GetService<IMigrator>().MigrateAsync(targetMigration);
         if (active)
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE dbo.ControlBienvenida SET CapturaHabilitada=1,EpocaCaptura={Epoch},
@@ -73,7 +74,7 @@ public sealed class BienvenidaCapturaSqlServerTests
         var id = Guid.NewGuid();
         await db.Database.ExecuteSqlInterpolatedAsync($"INSERT dbo.Usuario (Id,Nombre,Email,PasswordHash,TimeZoneId) VALUES ({id},{"Anterior"},{"anterior@example.invalid"},{"hash"},{"Etc/UTC"})");
         var tables = await db.Database.SqlQueryRaw<string>("SELECT name AS [Value] FROM sys.tables WHERE is_ms_shipped=0").ToArrayAsync();
-        await db.Database.MigrateAsync();
+        await db.GetService<IMigrator>().MigrateAsync(WelcomeOutbox);
         var after = await db.Database.SqlQueryRaw<string>("SELECT name AS [Value] FROM sys.tables WHERE is_ms_shipped=0").ToArrayAsync();
         Assert.Equal(new[] { "ControlBienvenida", "EventoBienvenida", "IntentoBienvenida" }, after.Except(tables).Order().ToArray());
         Assert.Equal(id, (await db.Set<Usuario>().SingleAsync()).Id);
@@ -378,7 +379,7 @@ public sealed class BienvenidaCapturaSqlServerTests
     [C3ASqlFact]
     public async Task DownVacio_RestauraBConDatosPreviosIntactos()
     {
-        await using var d = await EmailVerificationSqlDatabase.CreateAsync(); await Init(d, false);
+        await using var d = await EmailVerificationSqlDatabase.CreateAsync(); await Init(d, active: false, targetMigration: WelcomeOutbox);
         var clock = new Clock(); var a = await Alta(d, clock);
         await using var db = d.CreateContext();
         var before = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
@@ -394,7 +395,7 @@ public sealed class BienvenidaCapturaSqlServerTests
     {
         foreach (var evidence in new[] { false, true })
         {
-            await using var d = await EmailVerificationSqlDatabase.CreateAsync(); await Init(d);
+            await using var d = await EmailVerificationSqlDatabase.CreateAsync(); await Init(d, targetMigration: WelcomeOutbox);
             var clock = new Clock(); var a = await Alta(d, clock);
             if (evidence) await Confirmar(d, clock, a);
             await using var db = d.CreateContext();
