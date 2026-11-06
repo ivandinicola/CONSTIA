@@ -298,7 +298,7 @@ public sealed class RegistrarCumplimientoSqlServerTests
         }
     }
 
-    private static async Task<DisposableDatabase> CreateReadyDatabaseAsync()
+    internal static async Task<DisposableDatabase> CreateReadyDatabaseAsync()
     {
         var database = await CreateDisposableDatabaseAsync(GetDisposableRunnerConnectionString());
         try
@@ -315,7 +315,7 @@ public sealed class RegistrarCumplimientoSqlServerTests
         }
     }
 
-    private static ConstiaDbContext CreateContext(string connectionString)
+    internal static ConstiaDbContext CreateContext(string connectionString)
     {
         var options = new DbContextOptionsBuilder<ConstiaDbContext>()
             .UseSqlServer(connectionString, sql => sql.CommandTimeout(60))
@@ -490,7 +490,7 @@ public sealed class RegistrarCumplimientoSqlServerTests
         throw new InvalidOperationException("The disposable COMP-004 SQL Server service did not become ready.");
     }
 
-    private static async Task DropDisposableDatabaseAsync(DisposableDatabase database)
+    internal static async Task DropDisposableDatabaseAsync(DisposableDatabase database)
     {
         await using var connection = new SqlConnection(database.AdminConnectionString);
         await connection.OpenAsync();
@@ -500,7 +500,7 @@ public sealed class RegistrarCumplimientoSqlServerTests
         await command.ExecuteNonQueryAsync();
     }
 
-    private sealed record DisposableDatabase(
+    internal sealed record DisposableDatabase(
         string AdminConnectionString,
         string ConnectionString,
         string Name);
@@ -546,7 +546,7 @@ public sealed class RegistrarCumplimientoSqlServerTests
         public DateOnly ObtenerHoy(string timeZoneId) => today;
     }
 
-    private sealed class SqlServerIntegrationFactAttribute : FactAttribute
+    internal sealed class SqlServerIntegrationFactAttribute : FactAttribute
     {
         public SqlServerIntegrationFactAttribute()
         {
