@@ -270,11 +270,12 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
                 .Where(habito => habito.Usuario.Id == usuarioId && habito.FechaInicio <= fecha)
                 .ToArray());
 
-        public Task<IReadOnlySet<Guid>> ListarIdsCumplidosAsync(
-            Guid usuarioId, DateOnly fecha, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlySet<Guid>>(factory.CumplimientosPersistidos.Values
-                .Where(cumplimiento => cumplimiento.Fecha == fecha && cumplimiento.Habito.Usuario.Id == usuarioId)
-                .Select(cumplimiento => cumplimiento.Habito.Id)
+        public Task<IReadOnlySet<(Guid HabitoId, DateOnly Fecha)>> ListarCumplidosAsync(
+            Guid usuarioId, DateOnly desde, DateOnly hasta, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<(Guid HabitoId, DateOnly Fecha)>>(factory.CumplimientosPersistidos.Values
+                .Where(cumplimiento => cumplimiento.Fecha >= desde && cumplimiento.Fecha <= hasta &&
+                    cumplimiento.Habito.Usuario.Id == usuarioId)
+                .Select(cumplimiento => (cumplimiento.Habito.Id, cumplimiento.Fecha))
                 .ToHashSet());
     }
 
