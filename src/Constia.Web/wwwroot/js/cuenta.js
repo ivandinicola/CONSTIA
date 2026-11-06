@@ -35,3 +35,34 @@ window.constiaCuenta = (() => {
         }
     };
 })();
+
+
+document.addEventListener("submit", event => {
+    const form = event.target;
+    if (!form.matches("form[data-login]"))
+        return;
+
+    const button = form.querySelector('button[type="submit"]');
+    if (button.disabled) {
+        event.preventDefault();
+        return;
+    }
+
+    button.disabled = true;
+    form.setAttribute("aria-busy", "true");
+    document.getElementById("login-status").textContent = "Iniciando sesión…";
+});
+
+window.addEventListener("pageshow", event => {
+    if (!event.persisted)
+        return;
+
+    const form = document.querySelector("form[data-login]");
+    if (!form)
+        return;
+
+    form.querySelector('button[type="submit"]').disabled = false;
+    form.removeAttribute("aria-busy");
+    document.getElementById("login-status").textContent = "";
+    form.querySelector('input[type="password"]').value = "";
+});
