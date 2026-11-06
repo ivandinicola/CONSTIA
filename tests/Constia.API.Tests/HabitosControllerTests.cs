@@ -1171,6 +1171,136 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     }
 
 
+    [Fact]
+    public async Task Calendario_SinBearer_Devuelve401()
+    {
+        using var client = factory.CreateClient();
+        var response = await client.GetAsync("/api/habitos/calendario?desde=2026-10-09&hasta=2026-10-10");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("?hasta=2026-11-11")]
+    [InlineData("?desde=2026-10-01")]
+    [InlineData("?desde=2026-02-30&hasta=2026-03-01")]
+    [InlineData("?desde=2026-10-01T00:00:00Z&hasta=2026-10-02")]
+    [InlineData("?desde=2026-10-02&hasta=2026-10-01")]
+    [InlineData("?desde=2026-10-01&hasta=2026-11-12")]
+    public async Task Calendario_RangoInvalido_Devuelve400(string query)
+    {
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+        var response = await client.GetAsync("/api/habitos/calendario" + query);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Calendario_Acepta42DiasInclusivosYDevuelveDiasNeutrales()
+    {
+        factory.ReemplazarHabitos([]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var dias = await LeerCalendario(client, "2026-10-01", "2026-11-11");
+        Assert.Equal(Enumerable.Range(0, 42).Select(i => new DateOnly(2026, 10, 1).AddDays(i)),
+            dias.Select(dia => dia.Fecha));
+        Assert.All(dias, dia =>
+        {
+            Assert.Equal(0, dia.Programados);
+            Assert.Equal(0, dia.Cumplidos);
+        });
+    }
+
+    [Fact]
+    public async Task Calendario_AplicaInicioPropiedadYVigencias_ConservaHechosFueraDelConteo()
+    {
+        var viernes = new DateOnly(2026, 10, 30);
+        var sabado = viernes.AddDays(1);
+        var domingo = viernes.AddDays(2);
+        var lunes = viernes.AddDays(3);
+        var propio = HabitoHistorico.Crear(factory.Usuario, "Leer", null, viernes,
+            [DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday]);
+        propio.ActualizarConfiguracionVersionada(propio.Nombre, propio.Descripcion,
+            [DayOfWeek.Sunday, DayOfWeek.Monday], sabado);
+        propio.Desactivar(lunes);
+        var otro = new Usuario("Otro", "calendario-ajeno@example.invalid", "fake-hash", "Etc/UTC");
+        var ajeno = HabitoHistorico.Crear(otro, "Privado", null, viernes, [DayOfWeek.Friday]);
+        factory.ReemplazarHabitos([propio, ajeno]);
+        using var client = ClienteAutenticadoParaCumplimientos(factory.Usuario.Id);
+        foreach (var (habito, fecha) in new[] { (propio, viernes), (propio, sabado), (ajeno, viernes) })
+        {
+            factory.CumplimientosPersistidos[(habito.Id, fecha)] = new Cumplimiento(habito, fecha);
+        }
+
+        var dias = await LeerCalendario(client, "2026-10-29", "2026-11-02");
+        Assert.Equal(
+            [new DiaCalendarioDto(viernes.AddDays(-1), 0, 0), new DiaCalendarioDto(viernes, 1, 1),
+             new DiaCalendarioDto(sabado, 0, 0), new DiaCalendarioDto(domingo, 1, 0),
+             new DiaCalendarioDto(lunes, 0, 0)], dias);
+
+        var historial = await client.GetFromJsonAsync<CumplimientoResponse[]>($"/api/habitos/{propio.Id:D}/cumplimientos");
+        Assert.Contains(Assert.IsType<CumplimientoResponse[]>(historial), item => item.Fecha == sabado);
+    }
+
+    [Fact]
+    public async Task Calendario_FechaFuturaMuestraPlanificacion()
+    {
+        var fecha = new DateOnly(2030, 1, 1);
+        var propio = HabitoHistorico.Crear(factory.Usuario, "Plan", null, fecha.AddDays(-7), [fecha.DayOfWeek]);
+        factory.ReemplazarHabitos([propio]);
+        using var client = ClienteAutenticadoParaCumplimientos(factory.Usuario.Id);
+
+        var dias = await LeerCalendario(client, "2030-01-01", "2030-01-01");
+        Assert.Equal(new DiaCalendarioDto(fecha, 1, 0), Assert.Single(dias));
+    }
+
+    [Fact]
+    public async Task Calendario_EstadoDesconocidoSoloBloqueaUnRangoConOportunidadPosible()
+    {
+        var fecha = new DateOnly(2026, 10, 9);
+        var legado = HabitoHistorico.Crear(factory.Usuario, "Legado", null, fecha, [DayOfWeek.Friday]);
+        var periodos = (List<PeriodoEstadoHabito>)typeof(Habito)
+            .GetField("_periodosEstado", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(legado)!;
+        periodos.Clear();
+        factory.ReemplazarHabitos([legado]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        var dia = Assert.Single(await LeerCalendario(client, "2026-10-10", "2026-10-10"));
+        Assert.Equal(new DiaCalendarioDto(fecha.AddDays(1), 0, 0), dia);
+        var response = await client.GetAsync("/api/habitos/calendario?desde=2026-10-08&hasta=2026-10-10");
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Equal("habit_status_history_unknown",
+            (await response.Content.ReadFromJsonAsync<ProblemDetails>())?.Extensions["code"]?.ToString());
+    }
+
+    [Fact]
+    public async Task Calendario_HistorialGlobalSinInicializar_Devuelve503()
+    {
+        factory.ReemplazarHabitos([]);
+        factory.HistorialCompleto = false;
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+        try
+        {
+            var response = await client.GetAsync("/api/habitos/calendario?desde=2026-10-09&hasta=2026-10-10");
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            Assert.Equal("habit_status_history_not_initialized",
+                (await response.Content.ReadFromJsonAsync<ProblemDetails>())?.Extensions["code"]?.ToString());
+        }
+        finally
+        {
+            factory.HistorialCompleto = true;
+        }
+    }
+
+    private static async Task<DiaCalendarioDto[]> LeerCalendario(HttpClient client, string desde, string hasta)
+    {
+        var response = await client.GetAsync($"/api/habitos/calendario?desde={desde}&hasta={hasta}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return Assert.IsType<DiaCalendarioDto[]>(await response.Content.ReadFromJsonAsync<DiaCalendarioDto[]>());
+    }
+
+    private sealed record DiaCalendarioDto(DateOnly Fecha, int Programados, int Cumplidos);
+
+
     private HttpClient ClienteAutenticado(Guid subject)
     {
         var client = factory.CreateClient();

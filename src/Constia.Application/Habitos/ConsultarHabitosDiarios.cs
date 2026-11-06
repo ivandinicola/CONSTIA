@@ -1,6 +1,3 @@
-using Constia.Application.Cumplimientos;
-using Constia.Domain;
-
 namespace Constia.Application.Habitos;
 
 public sealed class ConsultarHabitosDiarios(
@@ -16,32 +13,17 @@ public sealed class ConsultarHabitosDiarios(
         }
 
         var candidatos = await habitos.ListarCandidatosAsync(usuarioId, fecha, cancellationToken);
-        var activos = new List<Habito>();
-        foreach (var habito in candidatos)
-        {
-            var programacion = habito.ObtenerProgramacionPara(fecha);
-            if (programacion is null || !programacion.DiasProgramados.Any(dia => dia.Dia == fecha.DayOfWeek))
-            {
-                continue;
-            }
+        var activos = candidatos.Where(habito => OportunidadHabito.AplicaA(habito, fecha)).ToArray();
 
-            var estado = habito.ObtenerEstadoPara(fecha)
-                ?? throw new EstadoHabitoHistoricoDesconocidoException();
-            if (estado == EstadoHabito.Activo)
-            {
-                activos.Add(habito);
-            }
-        }
-
-        if (activos.Count == 0)
+        if (activos.Length == 0)
         {
             return [];
         }
 
-        var cumplidos = await habitos.ListarIdsCumplidosAsync(usuarioId, fecha, cancellationToken);
+        var cumplidos = await habitos.ListarCumplidosAsync(usuarioId, fecha, fecha, cancellationToken);
         return activos.Select(habito => new HabitoDiario(
             habito.Id, habito.Nombre, habito.Descripcion, habito.CategoriaId,
-            habito.IconoId, cumplidos.Contains(habito.Id))).ToArray();
+            habito.IconoId, cumplidos.Contains((habito.Id, fecha)))).ToArray();
     }
 }
 

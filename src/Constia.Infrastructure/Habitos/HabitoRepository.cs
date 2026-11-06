@@ -53,16 +53,20 @@ public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoReposi
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlySet<Guid>> ListarIdsCumplidosAsync(
-        Guid usuarioId, DateOnly fecha, CancellationToken cancellationToken)
+    public async Task<IReadOnlySet<(Guid HabitoId, DateOnly Fecha)>> ListarCumplidosAsync(
+        Guid usuarioId, DateOnly desde, DateOnly hasta, CancellationToken cancellationToken)
     {
-        var ids = await dbContext.Set<Cumplimiento>()
-            .Where(cumplimiento => cumplimiento.Fecha == fecha &&
+        var hechos = await dbContext.Set<Cumplimiento>()
+            .Where(cumplimiento => cumplimiento.Fecha >= desde && cumplimiento.Fecha <= hasta &&
                 EF.Property<Guid>(cumplimiento.Habito, "UsuarioId") == usuarioId)
-            .Select(cumplimiento => EF.Property<Guid>(cumplimiento, "HabitoId"))
+            .Select(cumplimiento => new
+            {
+                HabitoId = EF.Property<Guid>(cumplimiento, "HabitoId"),
+                cumplimiento.Fecha
+            })
             .ToListAsync(cancellationToken);
 
-        return ids.ToHashSet();
+        return hechos.Select(hecho => (hecho.HabitoId, hecho.Fecha)).ToHashSet();
     }
 
     public Task<Habito?> BuscarPorIdYUsuarioAsync(

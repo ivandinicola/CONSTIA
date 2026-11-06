@@ -343,6 +343,64 @@ public sealed class HabitosController(
         }
     }
 
+    [HttpGet("calendario")]
+    [ProducesResponseType(typeof(IReadOnlyList<DiaCalendarioResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<IReadOnlyList<DiaCalendarioResponse>>> ConsultarCalendario(
+        [FromQuery] string? desde,
+        [FromQuery] string? hasta,
+        [FromServices] ConsultarCalendarioHabitos consulta,
+        CancellationToken cancellationToken)
+    {
+        if (usuarioActual.UsuarioId is not Guid usuarioId)
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "No se pudo identificar al usuario autenticado."
+            });
+        }
+
+        const int maximoDias = 42;
+        if (!DateOnly.TryParseExact(desde, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var inicio)
+            || !DateOnly.TryParseExact(hasta, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fin)
+            || inicio > fin || fin.DayNumber - inicio.DayNumber >= maximoDias)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Se requiere un rango inclusivo de hasta 42 días en formato yyyy-MM-dd."
+            });
+        }
+
+        try
+        {
+            var dias = await consulta.EjecutarAsync(usuarioId, inicio, fin, cancellationToken);
+            return Ok(dias.Select(dia => new DiaCalendarioResponse(dia.Fecha, dia.Programados, dia.Cumplidos)).ToArray());
+        }
+        catch (HistorialEstadoHabitoNoInicializadoException)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new ProblemDetails
+            {
+                Status = StatusCodes.Status503ServiceUnavailable,
+                Title = "El historial de estados todavía no está disponible.",
+                Extensions = { ["code"] = "habit_status_history_not_initialized" }
+            });
+        }
+        catch (EstadoHabitoHistoricoDesconocidoException)
+        {
+            return UnprocessableEntity(new ProblemDetails
+            {
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Title = "No se conoce el estado histórico de un hábito para el rango solicitado.",
+                Extensions = { ["code"] = "habit_status_history_unknown" }
+            });
+        }
+    }
+
     [HttpGet("{id:guid}/cumplimientos")]
     [ProducesResponseType(typeof(IReadOnlyList<CumplimientoResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

@@ -11,6 +11,12 @@ Accept: application/json
 
 ###
 
+GET {{Constia.API_HostAddress}}/api/habitos/calendario?desde=2026-10-29&hasta=2026-11-02
+Authorization: Bearer {{token}}
+Accept: application/json
+
+###
+
 GET {{Constia.API_HostAddress}}/api/habitos/{{habitoId}}/cumplimientos
 Authorization: Bearer {{token}}
 Accept: application/json
