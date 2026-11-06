@@ -247,6 +247,12 @@ SQL Server
 
 El selector de zona horaria IANA de `/registro` requiere que el navegador implemente `Intl.supportedValuesOf("timeZone")`. Si la función no está disponible, el formulario muestra un aviso y deshabilita el alta. La zona horaria se elige explícitamente.
 
+### Sesiones web (UI-003)
+
+Ejecutá una sola instancia de `Constia.Web`. La validez de cada sesión se guarda en memoria del proceso hasta el vencimiento del ticket. Un reinicio o una actualización obliga a volver a iniciar sesión, al igual que el paso desde una versión anterior sin marca de sesión. Para desplegar réplicas se necesitan un almacén de sesiones y claves de ASP.NET Core Data Protection compartidos y una prueba de revocación entre instancias.
+
+La regresión manual `tests/Constia.Web.Tests/Test-LogoutHttps.ps1` requiere PowerShell 7, Constia.Web en HTTPS local y una cuenta de prueba verificada. Pasá el origen, el correo y una contraseña como `SecureString`. Usá `-SkipCertificateCheck` solo con un certificado local de prueba.
+
 ---
 
 ## 12. Flujo de trabajo

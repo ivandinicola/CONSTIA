@@ -28,12 +28,12 @@
         </div>
         <button type="submit">Iniciar sesión</button>
     </fieldset>
-    <p role="status" hidden>Iniciando sesión…</p>
     @if (error is not null)
     {
         <p class="cuenta-error" role="alert">@error</p>
     }
 </form>
+<p id="login-status" role="status"></p>
 
 <p>¿Todavía no tenés cuenta? <a href="registro">Creá tu cuenta</a></p>
 

@@ -50,7 +50,7 @@ document.addEventListener("submit", event => {
 
     button.disabled = true;
     form.setAttribute("aria-busy", "true");
-    form.querySelector('[role="status"]').hidden = false;
+    document.getElementById("login-status").textContent = "Iniciando sesión…";
 });
 
 window.addEventListener("pageshow", event => {
@@ -63,6 +63,6 @@ window.addEventListener("pageshow", event => {
 
     form.querySelector('button[type="submit"]').disabled = false;
     form.removeAttribute("aria-busy");
-    form.querySelector('[role="status"]').hidden = true;
+    document.getElementById("login-status").textContent = "";
     form.querySelector('input[type="password"]').value = "";
 });
