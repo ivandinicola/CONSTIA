@@ -10,3 +10,9 @@ Authorization: Bearer {{token}}
 Accept: application/json
 
 ###
+
+GET {{Constia.API_HostAddress}}/api/habitos/{{habitoId}}/cumplimientos
+Authorization: Bearer {{token}}
+Accept: application/json
+
+###

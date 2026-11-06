@@ -44,6 +44,7 @@ builder.Services.AddScoped<IHabitosDiariosReadRepository, HabitoRepository>();
 builder.Services.AddScoped<ConsultarHabitosDiarios>();
 builder.Services.AddScoped<ICategoriaHabitoReadRepository, CategoriaHabitoReadRepository>();
 builder.Services.AddScoped<ICumplimientoRepository, CumplimientoRepository>();
+builder.Services.AddScoped<IHistorialCumplimientosRepository, CumplimientoRepository>();
 builder.Services.AddScoped<IEstadoHabitoReadinessRepository, EstadoHabitoReadinessRepository>();
 builder.Services.AddScoped<IUsuarioActual, HttpContextUsuarioActual>();
 builder.Services.AddScoped<IUsuarioPasswordHasher, AspNetCorePasswordHasher>();
