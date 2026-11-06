@@ -1,0 +1,128 @@
+@page "/login"
+@layout CuentaLayout
+@using System.Net
+@using System.Security.Claims
+@using System.Text.Json
+@using Constia.Web.Configuration
+@using Microsoft.AspNetCore.Authentication
+@inject IHttpClientFactory Clients
+@inject NavigationManager Navigation
+
+<PageTitle>Iniciar sesión · CONSTIA</PageTitle>
+<h1 tabindex="-1">Iniciá sesión</h1>
+
+<form method="post" @formname="login" @onsubmit="IniciarSesionAsync" data-login>
+    <AntiforgeryToken />
+    <fieldset>
+        <div>
+            <label for="login-email">Correo electrónico</label>
+            <input id="login-email" name="Datos.Email" type="email" value="@Datos?.Email" autocomplete="username"
+                   aria-invalid="@(errorEmail is null ? null : "true")" aria-describedby="login-email-error" required />
+            <div id="login-email-error" class="cuenta-error">@errorEmail</div>
+        </div>
+        <div>
+            <label for="login-password">Contraseña</label>
+            <input id="login-password" name="Datos.Password" type="password" autocomplete="current-password"
+                   aria-invalid="@(errorPassword is null ? null : "true")" aria-describedby="login-password-error" required />
+            <div id="login-password-error" class="cuenta-error">@errorPassword</div>
+        </div>
+        <button type="submit">Iniciar sesión</button>
+    </fieldset>
+    <p role="status" hidden>Iniciando sesión…</p>
+    @if (error is not null)
+    {
+        <p class="cuenta-error" role="alert">@error</p>
+    }
+</form>
+
+<p>¿Todavía no tenés cuenta? <a href="registro">Creá tu cuenta</a></p>
+
+@code {
+    [CascadingParameter] private HttpContext Http { get; set; } = default!;
+    [SupplyParameterFromForm(FormName = "login")] private DatosLogin? Datos { get; set; }
+    private string? errorEmail;
+    private string? errorPassword;
+    private string? error;
+
+    protected override void OnInitialized() => Http.Response.Headers.CacheControl = "no-store";
+
+    private async Task IniciarSesionAsync()
+    {
+        var email = Datos?.Email;
+        var password = Datos?.Password;
+        if (Datos is not null)
+            Datos.Password = null;
+
+        if (string.IsNullOrWhiteSpace(email))
+            errorEmail = "Ingresá tu correo electrónico.";
+        if (string.IsNullOrWhiteSpace(password))
+            errorPassword = "Ingresá tu contraseña.";
+        if (errorEmail is not null || errorPassword is not null)
+            return;
+
+        var cancellation = Http.RequestAborted;
+        try
+        {
+            using var client = Clients.CreateClient(ApiOptions.ClientName);
+            using var response = await client.PostAsJsonAsync("api/auth/login", new { email, password }, cancellation);
+            switch (response.StatusCode)
+            {
+                case HttpStatusCode.OK:
+                    var login = await response.Content.ReadFromJsonAsync<RespuestaLogin>(cancellation);
+                    if (login is not null && login.UserId != Guid.Empty &&
+                        !string.IsNullOrWhiteSpace(login.AccessToken) && login.ExpiresAt > DateTimeOffset.UtcNow)
+                    {
+                        var identity = new ClaimsIdentity(
+                        [
+                            new Claim(ClaimTypes.NameIdentifier, login.UserId.ToString()),
+                            new Claim(ClaimTypes.Name, login.Name ?? login.Email ?? ""),
+                            new Claim(ClaimTypes.Email, login.Email ?? "")
+                        ], "Cookies");
+                        var properties = new AuthenticationProperties { ExpiresUtc = login.ExpiresAt };
+                        properties.StoreTokens([new AuthenticationToken { Name = "access_token", Value = login.AccessToken }]);
+                        await Http.SignInAsync(new ClaimsPrincipal(identity), properties);
+                        Navigation.NavigateTo("/cuenta");
+                        return;
+                    }
+                    break;
+                case HttpStatusCode.BadRequest:
+                    var details = await response.Content.ReadFromJsonAsync<ErrorLogin>(cancellation);
+                    foreach (var field in details?.Errors?.Keys ?? Enumerable.Empty<string>())
+                    {
+                        if (field.Equals("email", StringComparison.OrdinalIgnoreCase))
+                            errorEmail = "Revisá tu correo electrónico.";
+                        if (field.Equals("password", StringComparison.OrdinalIgnoreCase))
+                            errorPassword = "Revisá tu contraseña.";
+                    }
+                    error = "Revisá los datos ingresados.";
+                    return;
+                case HttpStatusCode.Unauthorized:
+                    error = "El correo o la contraseña son incorrectos.";
+                    return;
+                case HttpStatusCode.Forbidden:
+                    var problem = await response.Content.ReadFromJsonAsync<ErrorLogin>(cancellation);
+                    if (problem?.Code == "email_verification_required")
+                    {
+                        error = "Verificá tu correo. Buscá el mensaje original de CONSTIA y abrí su enlace de confirmación.";
+                        return;
+                    }
+                    break;
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or JsonException or InvalidOperationException)
+        {
+            // Mostrar un mensaje controlado. La respuesta y las credenciales no se registran.
+        }
+
+        error = "No pudimos iniciar sesión en este momento. Volvé a intentar.";
+    }
+
+    private sealed class DatosLogin
+    {
+        public string? Email { get; set; }
+        public string? Password { get; set; }
+    }
+
+    private sealed record RespuestaLogin(string AccessToken, DateTimeOffset ExpiresAt, Guid UserId, string? Name, string? Email);
+    private sealed record ErrorLogin(string? Code, Dictionary<string, string[]>? Errors);
+}

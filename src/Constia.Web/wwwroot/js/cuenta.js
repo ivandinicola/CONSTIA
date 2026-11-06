@@ -35,3 +35,34 @@ window.constiaCuenta = (() => {
         }
     };
 })();
+
+
+document.addEventListener("submit", event => {
+    const form = event.target;
+    if (!form.matches("form[data-login]"))
+        return;
+
+    const button = form.querySelector('button[type="submit"]');
+    if (button.disabled) {
+        event.preventDefault();
+        return;
+    }
+
+    button.disabled = true;
+    form.setAttribute("aria-busy", "true");
+    form.querySelector('[role="status"]').hidden = false;
+});
+
+window.addEventListener("pageshow", event => {
+    if (!event.persisted)
+        return;
+
+    const form = document.querySelector("form[data-login]");
+    if (!form)
+        return;
+
+    form.querySelector('button[type="submit"]').disabled = false;
+    form.removeAttribute("aria-busy");
+    form.querySelector('[role="status"]').hidden = true;
+    form.querySelector('input[type="password"]').value = "";
+});

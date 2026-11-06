@@ -1,5 +1,8 @@
 using Constia.Web.Components;
 using Constia.Web.Configuration;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -30,6 +33,19 @@ builder.Services.AddHttpClient(ApiOptions.ClientName, (services, client) =>
     client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
 });
 
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/login";
+        options.Cookie.Name = "__Host-Constia.Session";
+        options.Cookie.Path = "/";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.SlidingExpiration = false;
+    });
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
@@ -40,7 +56,18 @@ if (!app.Environment.IsDevelopment())
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
+
+app.MapPost("/logout", async (HttpContext http, IAntiforgery antiforgery) =>
+{
+    if (!await antiforgery.IsRequestValidAsync(http))
+        return Results.BadRequest();
+
+    await http.SignOutAsync();
+    return Results.LocalRedirect("/login");
+}).RequireAuthorization();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

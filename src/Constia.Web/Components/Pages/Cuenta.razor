@@ -1,0 +1,18 @@
+@page "/cuenta"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@layout CuentaLayout
+
+<PageTitle>Mi cuenta · CONSTIA</PageTitle>
+<h1 tabindex="-1">Mi cuenta</h1>
+<p>Hola, @Http.User.Identity?.Name.</p>
+
+<form method="post" action="/logout">
+    <AntiforgeryToken />
+    <button type="submit">Cerrar sesión</button>
+</form>
+
+@code {
+    [CascadingParameter] private HttpContext Http { get; set; } = default!;
+
+    protected override void OnInitialized() => Http.Response.Headers.CacheControl = "no-store";
+}
