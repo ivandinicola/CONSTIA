@@ -966,6 +966,138 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
         }
     }
 
+    [Fact]
+    public async Task ConsultaDiaria_SinBearer_Devuelve401()
+    {
+        using var client = factory.CreateClient();
+        var response = await client.GetAsync("/api/habitos/diarios?fecha=2026-10-09");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("?fecha=2026-02-30")]
+    [InlineData("?fecha=2026-10-09T00:00:00Z")]
+    public async Task ConsultaDiaria_SinFechaCivilValida_Devuelve400(string query)
+    {
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+        var response = await client.GetAsync("/api/habitos/diarios" + query);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ConsultaDiaria_AplicaPropiedadInicioYVigenciasYLeeElCumplimientoDeLaFecha()
+    {
+        var viernes = new DateOnly(2026, 10, 9);
+        var sabado = viernes.AddDays(1);
+        var propio = HabitoHistorico.Crear(factory.Usuario, "Leer", null, viernes, [DayOfWeek.Friday]);
+        propio.ActualizarConfiguracionVersionada(propio.Nombre, propio.Descripcion, [DayOfWeek.Saturday], sabado);
+        var otro = new Usuario("Otro", "diario-otro@example.invalid", "fake-hash", "Etc/UTC");
+        var ajeno = HabitoHistorico.Crear(otro, "Privado", null, viernes, [DayOfWeek.Friday]);
+        var posterior = HabitoHistorico.Crear(factory.Usuario, "Posterior", null, sabado.AddDays(7),
+            [DayOfWeek.Friday, DayOfWeek.Saturday]);
+        factory.ReemplazarHabitos([propio, ajeno, posterior]);
+        using var client = ClienteAutenticadoParaCumplimientos(factory.Usuario.Id);
+        factory.CumplimientosPersistidos[(propio.Id, viernes)] = new Cumplimiento(propio, viernes);
+        factory.CumplimientosPersistidos[(ajeno.Id, viernes)] = new Cumplimiento(ajeno, viernes);
+
+        Assert.Empty(await ConsultarDia(client, "2026-10-02"));
+
+        var cumplido = Assert.Single(await ConsultarDia(client, "2026-10-09"));
+        Assert.Equal(propio.Id, cumplido.GetProperty("id").GetGuid());
+        Assert.True(cumplido.GetProperty("cumplido").GetBoolean());
+
+        var pendiente = Assert.Single(await ConsultarDia(client, "2026-10-10"));
+        Assert.Equal(propio.Id, pendiente.GetProperty("id").GetGuid());
+        Assert.False(pendiente.GetProperty("cumplido").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ConsultaDiaria_MuestraActivoHistoricoAunqueElPostLoRechace()
+    {
+        var viernes = new DateOnly(2026, 10, 9);
+        var habito = HabitoHistorico.Crear(factory.Usuario, "Leer", null, viernes,
+            [DayOfWeek.Friday, DayOfWeek.Saturday]);
+        habito.Desactivar(viernes.AddDays(1));
+        factory.ReemplazarHabitos([habito]);
+        using var client = ClienteAutenticadoParaCumplimientos(factory.Usuario.Id);
+
+        var historico = Assert.Single(await ConsultarDia(client, "2026-10-09"));
+        Assert.Equal(habito.Id, historico.GetProperty("id").GetGuid());
+        Assert.Empty(await ConsultarDia(client, "2026-10-10"));
+
+        var post = await client.PostAsJsonAsync($"/api/habitos/{habito.Id:D}/cumplimientos",
+            new { fecha = "2026-10-09" });
+        Assert.Equal(HttpStatusCode.Conflict, post.StatusCode);
+        Assert.Empty(factory.CumplimientosPersistidos);
+    }
+
+    [Fact]
+    public async Task ConsultaDiaria_ExcluyeCumplimientoConservadoAlCambiarProgramacion()
+    {
+        var viernes = new DateOnly(2026, 10, 9);
+        var habito = HabitoHistorico.Crear(factory.Usuario, "Leer", null, viernes, [DayOfWeek.Friday]);
+        factory.ReemplazarHabitos([habito]);
+        using var client = ClienteAutenticadoParaCumplimientos(factory.Usuario.Id);
+        var post = await client.PostAsJsonAsync($"/api/habitos/{habito.Id:D}/cumplimientos",
+            new { fecha = "2026-10-09" });
+        Assert.Equal(HttpStatusCode.Created, post.StatusCode);
+
+        habito.ActualizarConfiguracionVersionada(habito.Nombre, habito.Descripcion,
+            [DayOfWeek.Saturday], viernes);
+
+        Assert.Empty(await ConsultarDia(client, "2026-10-09"));
+        Assert.Contains((habito.Id, viernes), factory.CumplimientosPersistidos.Keys);
+    }
+
+    [Fact]
+    public async Task ConsultaDiaria_HistorialDesconocidoSoloBloqueaCuandoElHabitoEstaProgramado()
+    {
+        var habit = CrearHabitoConIdYFecha(factory.Usuario, "Legado", Guid.NewGuid(), DateTimeOffset.UtcNow,
+            [DayOfWeek.Friday]);
+        var periodos = (List<PeriodoEstadoHabito>)typeof(Habito)
+            .GetField("_periodosEstado", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(habit)!;
+        periodos.Clear();
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        Assert.Empty(await ConsultarDia(client, "2026-10-10"));
+
+        var response = await client.GetAsync("/api/habitos/diarios?fecha=2026-10-09");
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Equal("habit_status_history_unknown",
+            (await response.Content.ReadFromJsonAsync<ProblemDetails>())?.Extensions["code"]?.ToString());
+    }
+
+    [Fact]
+    public async Task ConsultaDiaria_HistorialGlobalNoInicializado_Devuelve503InclusoSinHabitos()
+    {
+        factory.ReemplazarHabitos([]);
+        factory.HistorialCompleto = false;
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+
+        try
+        {
+            var response = await client.GetAsync("/api/habitos/diarios?fecha=2026-10-09");
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            Assert.Equal("habit_status_history_not_initialized",
+                (await response.Content.ReadFromJsonAsync<ProblemDetails>())?.Extensions["code"]?.ToString());
+        }
+        finally
+        {
+            factory.HistorialCompleto = true;
+        }
+    }
+
+    private static async Task<System.Text.Json.JsonElement[]> ConsultarDia(HttpClient client, string fecha)
+    {
+        var response = await client.GetAsync($"/api/habitos/diarios?fecha={fecha}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement[]>())!;
+    }
+
+
     private HttpClient ClienteAutenticado(Guid subject)
     {
         var client = factory.CreateClient();

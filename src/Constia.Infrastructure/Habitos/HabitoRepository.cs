@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Constia.Infrastructure.Habitos;
 
-public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoRepository
+public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoRepository, IHabitosDiariosReadRepository
 {
     public async Task AgregarAsync(Habito habito, CancellationToken cancellationToken)
     {
@@ -39,6 +39,30 @@ public sealed class HabitoRepository(ConstiaDbContext dbContext) : IHabitoReposi
             .OrderBy(habito => habito.FechaCreacion)
             .ThenBy(habito => habito.Id)
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Habito>> ListarCandidatosAsync(
+        Guid usuarioId, DateOnly fecha, CancellationToken cancellationToken)
+    {
+        return await HabitosConProgramaciones(includeStateHistory: true)
+            .Where(habito => EF.Property<Guid>(habito, "UsuarioId") == usuarioId && habito.FechaInicio <= fecha)
+            .AsNoTracking()
+            .AsSplitQuery()
+            .OrderBy(habito => habito.FechaCreacion)
+            .ThenBy(habito => habito.Id)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlySet<Guid>> ListarIdsCumplidosAsync(
+        Guid usuarioId, DateOnly fecha, CancellationToken cancellationToken)
+    {
+        var ids = await dbContext.Set<Cumplimiento>()
+            .Where(cumplimiento => cumplimiento.Fecha == fecha &&
+                EF.Property<Guid>(cumplimiento.Habito, "UsuarioId") == usuarioId)
+            .Select(cumplimiento => EF.Property<Guid>(cumplimiento, "HabitoId"))
+            .ToListAsync(cancellationToken);
+
+        return ids.ToHashSet();
     }
 
     public Task<Habito?> BuscarPorIdYUsuarioAsync(

@@ -40,6 +40,8 @@ builder.Services.AddSingleton<IFechaLocalUsuario, FechaLocalUsuario>();
 
 builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
 builder.Services.AddScoped<IHabitoRepository, HabitoRepository>();
+builder.Services.AddScoped<IHabitosDiariosReadRepository, HabitoRepository>();
+builder.Services.AddScoped<ConsultarHabitosDiarios>();
 builder.Services.AddScoped<ICategoriaHabitoReadRepository, CategoriaHabitoReadRepository>();
 builder.Services.AddScoped<ICumplimientoRepository, CumplimientoRepository>();
 builder.Services.AddScoped<IEstadoHabitoReadinessRepository, EstadoHabitoReadinessRepository>();

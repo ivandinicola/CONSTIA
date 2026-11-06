@@ -1,3 +1,4 @@
+using System.Globalization;
 using Constia.API.Authentication;
 using Constia.API.Contracts;
 using Constia.Application.Cumplimientos;
@@ -284,6 +285,62 @@ public sealed class HabitosController(
             habito.IconoId)).ToArray();
 
         return Ok(response);
+    }
+
+    [HttpGet("diarios")]
+    [ProducesResponseType(typeof(IReadOnlyList<HabitoDiarioResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<IReadOnlyList<HabitoDiarioResponse>>> ConsultarDiarios(
+        [FromQuery] string? fecha,
+        [FromServices] ConsultarHabitosDiarios consulta,
+        CancellationToken cancellationToken)
+    {
+        if (usuarioActual.UsuarioId is not Guid usuarioId)
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "No se pudo identificar al usuario autenticado."
+            });
+        }
+
+        if (!DateOnly.TryParseExact(fecha, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dia))
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Se requiere una fecha civil en formato yyyy-MM-dd."
+            });
+        }
+
+        try
+        {
+            var habitos = await consulta.EjecutarAsync(usuarioId, dia, cancellationToken);
+            return Ok(habitos.Select(habito => new HabitoDiarioResponse(
+                habito.Id, habito.Nombre, habito.Descripcion, habito.CategoriaId,
+                habito.IconoId, habito.Cumplido)).ToArray());
+        }
+        catch (HistorialEstadoHabitoNoInicializadoException)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new ProblemDetails
+            {
+                Status = StatusCodes.Status503ServiceUnavailable,
+                Title = "El historial de estados todavía no está disponible.",
+                Extensions = { ["code"] = "habit_status_history_not_initialized" }
+            });
+        }
+        catch (EstadoHabitoHistoricoDesconocidoException)
+        {
+            return UnprocessableEntity(new ProblemDetails
+            {
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Title = "No se conoce el estado histórico del hábito para esa fecha.",
+                Extensions = { ["code"] = "habit_status_history_unknown" }
+            });
+        }
     }
 
     [HttpPost("{id:guid}/cumplimientos")]
