@@ -1,0 +1,76 @@
+.cuenta {
+    max-inline-size: 30rem;
+    margin-inline: auto;
+    padding: var(--constia-space-lg) max(var(--constia-space-lg), env(safe-area-inset-right));
+    text-align: center;
+}
+
+header {
+    margin-block-end: var(--constia-space-lg);
+}
+
+.cuenta ::deep p {
+    margin-block: var(--constia-space-sm);
+    color: var(--constia-text-secondary);
+}
+
+.cuenta ::deep fieldset {
+    display: grid;
+    gap: var(--constia-space-md);
+    min-inline-size: 0;
+    margin: var(--constia-space-lg) 0 0;
+    padding: 0;
+    border: 0;
+    text-align: start;
+}
+
+.cuenta ::deep label {
+    display: block;
+    font-size: var(--constia-type-label);
+    font-weight: 700;
+    margin-block-end: 4px;
+}
+
+.cuenta ::deep input,
+.cuenta ::deep select {
+    inline-size: 100%;
+    min-block-size: 48px;
+    padding: var(--constia-space-xs) var(--constia-space-sm);
+    color: var(--constia-ink);
+    background: var(--constia-surface);
+    border: 1px solid var(--constia-border);
+    border-radius: var(--constia-radius-control);
+}
+
+.cuenta ::deep input[aria-invalid="true"],
+.cuenta ::deep select[aria-invalid="true"] {
+    border-color: #a72a36;
+}
+
+.cuenta ::deep .validation-message,
+.cuenta ::deep .cuenta-error {
+    color: #a72a36;
+    font-size: var(--constia-type-label);
+}
+
+.cuenta ::deep small {
+    display: block;
+    margin-block-start: 4px;
+    color: var(--constia-text-secondary);
+}
+
+.cuenta ::deep button[type="submit"] {
+    min-block-size: 56px;
+    padding: var(--constia-space-xs) var(--constia-space-sm);
+    border: 0;
+    border-radius: 999px;
+    background: var(--constia-brand-violet);
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.cuenta ::deep button:disabled {
+    cursor: default;
+    opacity: .72;
+}
