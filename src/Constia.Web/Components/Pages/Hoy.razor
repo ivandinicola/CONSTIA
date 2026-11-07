@@ -1,0 +1,126 @@
+@page "/hoy"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [StreamRendering]
+@layout AppLayout
+@using System.Globalization
+@using System.Net
+@using System.Net.Http.Headers
+@using System.Text.Json
+@using Constia.Web.Configuration
+@using Microsoft.AspNetCore.Authentication
+@inject IHttpClientFactory Clients
+@inject NavigationManager Navigation
+
+<PageTitle>Mi día · CONSTIA</PageTitle>
+
+<section class="today" aria-labelledby="today-title">
+    <header class="today-header">
+        <a href="/cuenta">Mi cuenta</a>
+        <h1 id="today-title" tabindex="-1">Mi día</h1>
+        <p>¡Hola, @Http.User.Identity?.Name!</p>
+        @if (dia is not null)
+        {
+            <time datetime="@dia.Fecha.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)">
+                @dia.Fecha.ToString("dddd d 'de' MMMM", CultureInfo.GetCultureInfo("es-AR"))
+            </time>
+        }
+    </header>
+
+    @if (error is not null)
+    {
+        <p role="alert">@error</p>
+        <a href="/hoy" data-enhance-nav="false">Reintentar</a>
+    }
+    else if (dia is null)
+    {
+        <p role="status">Cargando tus hábitos de hoy…</p>
+    }
+    else if (dia.Habitos.Length == 0)
+    {
+        <p role="status">No tenés hábitos programados para hoy.</p>
+    }
+    else
+    {
+        var cumplidos = dia.Habitos.Count(habito => habito.Cumplido);
+        <section class="today-progress" aria-labelledby="today-progress">
+            <h2 id="today-progress">Progreso de hoy</h2>
+            <p>@cumplidos de @dia.Habitos.Length hábitos realizados</p>
+            <progress value="@cumplidos" max="@dia.Habitos.Length" aria-hidden="true"></progress>
+        </section>
+
+        <section aria-labelledby="today-habits">
+            <h2 id="today-habits">Tus hábitos de hoy</h2>
+            <ul class="today-habits">
+                @foreach (var habito in dia.Habitos)
+                {
+                    <li class="today-habit" @key="habito.Id">
+                        <h3>@habito.Nombre</h3>
+                        @if (!string.IsNullOrWhiteSpace(habito.Descripcion))
+                        {
+                            <p>@habito.Descripcion</p>
+                        }
+                        <span class="habit-status">@(habito.Cumplido ? "Realizado" : "Pendiente")</span>
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+</section>
+
+@code {
+    [CascadingParameter] private HttpContext Http { get; set; } = default!;
+    private Dia? dia;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Http.Response.Headers.CacheControl = "no-store";
+        var token = await Http.GetTokenAsync("access_token");
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            Navigation.NavigateTo("/login", forceLoad: true);
+            return;
+        }
+
+        try
+        {
+            using var client = Clients.CreateClient(ApiOptions.ClientName);
+            if (client.BaseAddress is not { } api || (api.Scheme != Uri.UriSchemeHttps && !api.IsLoopback))
+                throw new InvalidOperationException("El acceso autenticado a la API requiere HTTPS fuera de localhost.");
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, "api/habitos/diarios/hoy");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var response = await client.SendAsync(request, Http.RequestAborted);
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                Navigation.NavigateTo("/login", forceLoad: true);
+                return;
+            }
+
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                var resultado = await response.Content.ReadFromJsonAsync<Dia>(Http.RequestAborted);
+                if (resultado?.Habitos is not null && resultado.Fecha != default)
+                {
+                    dia = resultado;
+                    return;
+                }
+            }
+
+            error = response.StatusCode switch
+            {
+                HttpStatusCode.UnprocessableEntity => "No se conoce el estado de uno o más hábitos para hoy.",
+                HttpStatusCode.ServiceUnavailable => "Los hábitos de hoy todavía no están disponibles.",
+                _ => "No pudimos cargar tus hábitos de hoy."
+            };
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or JsonException or InvalidOperationException)
+        {
+            error = "No pudimos cargar tus hábitos de hoy. Volvé a intentar.";
+        }
+    }
+
+    private sealed record Dia(DateOnly Fecha, HabitoDelDia[] Habitos);
+    private sealed record HabitoDelDia(Guid Id, string Nombre, string? Descripcion, bool Cumplido);
+}

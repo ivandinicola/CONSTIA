@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -1090,6 +1091,105 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
         }
     }
 
+    [Fact]
+    public async Task ConsultaHoy_UsaLaZonaPersistidaActual_YAislaPropietariosConElMismoReloj()
+    {
+        using var escenario = new JwtApiFactory();
+        var viernes = new DateOnly(2026, 10, 9);
+        var sabado = viernes.AddDays(1);
+        escenario.Usuario.CambiarZonaHoraria("America/Los_Angeles");
+        var otro = new Usuario("Otro", "hoy-otro@example.invalid", "fake-hash", "Asia/Tokyo");
+        escenario.UsuariosPersistidos[otro.Id] = otro;
+        var propioViernes = HabitoHistorico.Crear(escenario.Usuario, "Leer", null, viernes, [DayOfWeek.Friday]);
+        var propioSabado = HabitoHistorico.Crear(escenario.Usuario, "Meditar", null, viernes, [DayOfWeek.Saturday]);
+        var ajeno = HabitoHistorico.Crear(otro, "Privado", null, viernes, [DayOfWeek.Saturday]);
+        escenario.ReemplazarHabitos([propioViernes, propioSabado, ajeno]);
+        using var client = ClienteAutenticado(escenario.Usuario.Id, escenario);
+        using var clienteOtro = ClienteAutenticado(otro.Id, escenario);
+        escenario.CumplimientosPersistidos[(propioViernes.Id, viernes)] = new Cumplimiento(propioViernes, viernes);
+
+        var oeste = await ConsultarHoy(client);
+        Assert.Equal(viernes, DateOnly.ParseExact(oeste.GetProperty("fecha").GetString()!, "yyyy-MM-dd"));
+        var hecho = Assert.Single(oeste.GetProperty("habitos").EnumerateArray());
+        Assert.Equal(propioViernes.Id, hecho.GetProperty("id").GetGuid());
+        Assert.True(hecho.GetProperty("cumplido").GetBoolean());
+
+        var este = await ConsultarHoy(clienteOtro);
+        Assert.Equal(sabado, DateOnly.ParseExact(este.GetProperty("fecha").GetString()!, "yyyy-MM-dd"));
+        Assert.Equal(ajeno.Id, Assert.Single(este.GetProperty("habitos").EnumerateArray()).GetProperty("id").GetGuid());
+
+        using var cambio = await client.PutAsJsonAsync("/api/usuarios/mi-zona-horaria", new { timeZoneId = "Asia/Tokyo" });
+        Assert.Equal(HttpStatusCode.NoContent, cambio.StatusCode);
+        var actualizado = await ConsultarHoy(client);
+        Assert.Equal(sabado, DateOnly.ParseExact(actualizado.GetProperty("fecha").GetString()!, "yyyy-MM-dd"));
+        var pendiente = Assert.Single(actualizado.GetProperty("habitos").EnumerateArray());
+        Assert.Equal(propioSabado.Id, pendiente.GetProperty("id").GetGuid());
+        Assert.False(pendiente.GetProperty("cumplido").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, pendiente.GetProperty("categoriaId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, pendiente.GetProperty("iconoId").ValueKind);
+    }
+
+    [Fact]
+    public async Task ConsultaHoy_SinBearerOSinUsuarioPersistido_Devuelve401()
+    {
+        using var escenario = new JwtApiFactory();
+        using var anonimo = escenario.CreateClient();
+        using var usuarioAusente = ClienteAutenticado(Guid.NewGuid(), escenario);
+
+        foreach (var client in new[] { anonimo, usuarioAusente })
+        {
+            using var response = await client.GetAsync("/api/habitos/diarios/hoy");
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task ConsultaHoy_DistingueVacio_HistorialDesconocido_YNoInicializado()
+    {
+        using var escenario = new JwtApiFactory();
+        escenario.Usuario.CambiarZonaHoraria("Etc/UTC");
+        escenario.ReemplazarHabitos([]);
+        using var client = ClienteAutenticado(escenario.Usuario.Id, escenario);
+
+        var conocido = await ConsultarHoy(client);
+        Assert.Equal(new DateOnly(2026, 10, 10), DateOnly.ParseExact(conocido.GetProperty("fecha").GetString()!, "yyyy-MM-dd"));
+        Assert.Empty(conocido.GetProperty("habitos").EnumerateArray());
+
+        var habit = CrearHabitoConIdYFecha(escenario.Usuario, "Legado", Guid.NewGuid(), DateTimeOffset.UtcNow,
+            [DayOfWeek.Saturday]);
+        var periodos = (List<PeriodoEstadoHabito>)typeof(Habito)
+            .GetField("_periodosEstado", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(habit)!;
+        periodos.Clear();
+        escenario.ReemplazarHabitos([habit]);
+
+        using var desconocido = await client.GetAsync("/api/habitos/diarios/hoy");
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, desconocido.StatusCode);
+        Assert.Equal("habit_status_history_unknown",
+            (await desconocido.Content.ReadFromJsonAsync<ProblemDetails>())?.Extensions["code"]?.ToString());
+
+        escenario.HistorialCompleto = false;
+        try
+        {
+            using var noInicializado = await client.GetAsync("/api/habitos/diarios/hoy");
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, noInicializado.StatusCode);
+            Assert.Equal("habit_status_history_not_initialized",
+                (await noInicializado.Content.ReadFromJsonAsync<ProblemDetails>())?.Extensions["code"]?.ToString());
+        }
+        finally
+        {
+            escenario.HistorialCompleto = true;
+        }
+    }
+
+    private static async Task<JsonElement> ConsultarHoy(HttpClient client)
+    {
+        using var response = await client.GetAsync("/api/habitos/diarios/hoy");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return await response.Content.ReadFromJsonAsync<JsonElement>();
+    }
+
+
     private static async Task<System.Text.Json.JsonElement[]> ConsultarDia(HttpClient client, string fecha)
     {
         var response = await client.GetAsync($"/api/habitos/diarios?fecha={fecha}");
@@ -1301,9 +1401,9 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     private sealed record DiaCalendarioDto(DateOnly Fecha, int Programados, int Cumplidos);
 
 
-    private HttpClient ClienteAutenticado(Guid subject)
+    private HttpClient ClienteAutenticado(Guid subject, JwtApiFactory? escenario = null)
     {
-        var client = factory.CreateClient();
+        var client = (escenario ?? factory).CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CrearToken(subject));
         return client;
     }

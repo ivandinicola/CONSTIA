@@ -1,0 +1,69 @@
+.today {
+    display: grid;
+    gap: var(--constia-space-lg);
+}
+
+.today-header,
+.today-progress {
+    padding: var(--constia-space-md);
+    border-radius: 20px;
+    background: var(--constia-selection-soft);
+}
+
+.today-header a {
+    display: inline-block;
+    margin-block-end: var(--constia-space-sm);
+}
+
+.today-header p,
+.today-progress p,
+.today-habit p {
+    margin-block: var(--constia-space-xs);
+}
+
+.today-header time,
+.today-habit p {
+    color: var(--constia-text-secondary);
+}
+
+.today h2,
+.today h3 {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.today h2 {
+    font-size: var(--constia-type-heading);
+}
+
+.today-progress progress {
+    inline-size: 100%;
+    accent-color: var(--constia-brand-violet);
+}
+
+.today-habits {
+    display: grid;
+    gap: var(--constia-space-xs);
+    margin-block: var(--constia-space-sm) 0;
+    padding: 0;
+    list-style: none;
+}
+
+.today-habit {
+    min-block-size: 66px;
+    padding: var(--constia-space-sm) var(--constia-space-md);
+    border: 1px solid var(--constia-border);
+    border-radius: 20px;
+    background: var(--constia-surface);
+    box-shadow: var(--constia-shadow-soft);
+    overflow-wrap: anywhere;
+}
+
+.today-habit h3 {
+    font-size: var(--constia-type-body);
+}
+
+.habit-status {
+    color: var(--constia-text-secondary);
+    font-size: var(--constia-type-label);
+}

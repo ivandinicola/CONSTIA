@@ -82,6 +82,79 @@ public sealed class ConsultaDiariaSqlServerTests(ITestOutputHelper output)
         }
     }
 
+    [SqlServerIntegrationFact]
+    public async Task GetHoy_UsaZonaPersistidaVigenteYAislaLosHabitosPorPropietario()
+    {
+        var database = await CreateReadyDatabaseAsync();
+        try
+        {
+            var viernes = new DateOnly(2026, 10, 9);
+            var sabado = viernes.AddDays(1);
+            var oeste = new Usuario("Oeste", "oeste@example.invalid", "hash-de-prueba", "America/Los_Angeles");
+            var este = new Usuario("Este", "este@example.invalid", "hash-de-prueba", "Asia/Tokyo");
+            var oesteViernes = HabitoHistorico.Crear(oeste, "Oeste viernes", null, viernes, [DayOfWeek.Friday]);
+            var oesteSabado = HabitoHistorico.Crear(oeste, "Oeste sábado", null, viernes, [DayOfWeek.Saturday]);
+            var esteViernes = HabitoHistorico.Crear(este, "Este viernes", null, viernes, [DayOfWeek.Friday]);
+            var esteSabado = HabitoHistorico.Crear(este, "Este sábado", null, viernes, [DayOfWeek.Saturday]);
+
+            await using (var db = CreateContext(database.ConnectionString))
+            {
+                db.AddRange(oeste, este);
+                await db.SaveChangesAsync();
+                var repositorio = new HabitoRepository(db);
+                foreach (var habito in new[] { oesteViernes, oesteSabado, esteViernes, esteSabado })
+                    await repositorio.AgregarAsync(habito, CancellationToken.None);
+
+                db.Add(new Cumplimiento(oesteViernes, viernes));
+                await db.SaveChangesAsync();
+            }
+
+            using var fixture = new HostSql(database.ConnectionString, new ConsultasEjecutadas());
+            using var host = fixture.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+                services.AddSingleton<TimeProvider>(new RelojFijo(
+                    new DateTimeOffset(2026, 10, 10, 0, 5, 0, TimeSpan.Zero)))));
+            using var clientOeste = host.CreateClient(new() { BaseAddress = new Uri("https://localhost") });
+            using var clientEste = host.CreateClient(new() { BaseAddress = new Uri("https://localhost") });
+            using (var scope = host.Services.CreateScope())
+            {
+                var tokens = scope.ServiceProvider.GetRequiredService<IAccessTokenService>();
+                clientOeste.DefaultRequestHeaders.Authorization = new("Bearer",
+                    tokens.Emitir(oeste.Id, oeste.Nombre, oeste.Email).Value);
+                clientEste.DefaultRequestHeaders.Authorization = new("Bearer",
+                    tokens.Emitir(este.Id, este.Nombre, este.Email).Value);
+            }
+
+            await VerificarHoy(clientOeste, viernes, oesteViernes.Id, cumplido: true);
+            await VerificarHoy(clientEste, sabado, esteSabado.Id, cumplido: false);
+
+            using var cambio = await clientOeste.PutAsJsonAsync("/api/usuarios/mi-zona-horaria",
+                new { timeZoneId = "Asia/Tokyo" });
+            Assert.Equal(HttpStatusCode.NoContent, cambio.StatusCode);
+            await VerificarHoy(clientOeste, sabado, oesteSabado.Id, cumplido: false);
+            output.WriteLine("00:05 UTC. Oeste: 2026-10-09, Este: 2026-10-10, Oeste tras el PUT con el mismo Bearer: 2026-10-10.");
+        }
+        finally
+        {
+            await DropDisposableDatabaseAsync(database);
+        }
+    }
+
+    private static async Task VerificarHoy(HttpClient client, DateOnly fecha, Guid habitId, bool cumplido)
+    {
+        using var response = await client.GetAsync("/api/habitos/diarios/hoy");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var hoy = Assert.IsType<HabitosHoyResponse>(await response.Content.ReadFromJsonAsync<HabitosHoyResponse>());
+        Assert.Equal(fecha, hoy.Fecha);
+        var habito = Assert.Single(hoy.Habitos);
+        Assert.Equal(habitId, habito.Id);
+        Assert.Equal(cumplido, habito.Cumplido);
+    }
+
+    private sealed class RelojFijo(DateTimeOffset instante) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => instante;
+    }
+
     internal sealed class HostSql(string connection, ConsultasEjecutadas consultas) : WebApplicationFactory<Program>
     {
         protected override IHost CreateHost(IHostBuilder builder)
