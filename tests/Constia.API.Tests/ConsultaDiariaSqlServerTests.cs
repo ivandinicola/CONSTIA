@@ -139,6 +139,58 @@ public sealed class ConsultaDiariaSqlServerTests(ITestOutputHelper output)
         }
     }
 
+    [SqlServerIntegrationFact]
+    public async Task PostDesdeDosPestanas_PersisteUnaSolaVezYHoyConfirmaElProgreso()
+    {
+        var database = await CreateReadyDatabaseAsync();
+        try
+        {
+            var fecha = new DateOnly(2026, 10, 10);
+            var propietario = new Usuario("UI-009", "ui009@example.invalid", "hash-de-prueba", "Etc/UTC");
+            var habito = HabitoHistorico.Crear(propietario, "Leer", null, fecha, [fecha.DayOfWeek]);
+            await using (var db = CreateContext(database.ConnectionString))
+            {
+                db.Add(propietario);
+                await db.SaveChangesAsync();
+                await new HabitoRepository(db).AgregarAsync(habito, CancellationToken.None);
+            }
+            using var fixture = new HostSql(database.ConnectionString, new ConsultasEjecutadas());
+            using var host = fixture.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+                services.AddSingleton<TimeProvider>(new RelojFijo(
+                    new DateTimeOffset(2026, 10, 10, 12, 0, 0, TimeSpan.Zero)))));
+            using var primera = host.CreateClient(new() { BaseAddress = new Uri("https://localhost") });
+            using var segunda = host.CreateClient(new() { BaseAddress = new Uri("https://localhost") });
+            using (var scope = host.Services.CreateScope())
+            {
+                var token = scope.ServiceProvider.GetRequiredService<IAccessTokenService>()
+                    .Emitir(propietario.Id, propietario.Nombre, propietario.Email).Value;
+                primera.DefaultRequestHeaders.Authorization = new("Bearer", token);
+                segunda.DefaultRequestHeaders.Authorization = new("Bearer", token);
+            }
+            var respuestas = await Task.WhenAll(
+                primera.PostAsJsonAsync($"/api/habitos/{habito.Id}/cumplimientos", new { fecha }),
+                segunda.PostAsJsonAsync($"/api/habitos/{habito.Id}/cumplimientos", new { fecha }));
+            try
+            {
+                Assert.Single(respuestas, r => r.StatusCode == HttpStatusCode.Created);
+                Assert.Single(respuestas, r => r.StatusCode == HttpStatusCode.Conflict);
+                await VerificarHoy(primera, fecha, habito.Id, cumplido: true);
+                await using var verificacion = CreateContext(database.ConnectionString);
+                Assert.Equal(1, await verificacion.Set<Cumplimiento>().CountAsync());
+                output.WriteLine("Dos POST concurrentes: 201 y 409. Una fila persistida. GET Hoy confirma 1 de 1.");
+            }
+            finally
+            {
+                foreach (var respuesta in respuestas)
+                    respuesta.Dispose();
+            }
+        }
+        finally
+        {
+            await DropDisposableDatabaseAsync(database);
+        }
+    }
+
     private static async Task VerificarHoy(HttpClient client, DateOnly fecha, Guid habitId, bool cumplido)
     {
         using var response = await client.GetAsync("/api/habitos/diarios/hoy");

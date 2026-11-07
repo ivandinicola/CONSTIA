@@ -3,6 +3,15 @@
     gap: var(--constia-space-lg);
 }
 
+.today > form {
+    display: grid;
+    gap: var(--constia-space-lg);
+}
+
+#completion-status {
+    margin: 0;
+}
+
 .today-header,
 .today-progress {
     padding: var(--constia-space-md);
@@ -66,4 +75,22 @@
 .habit-status {
     color: var(--constia-text-secondary);
     font-size: var(--constia-type-label);
+}
+
+.today-habit button,
+.uncertain-completion button {
+    display: block;
+    margin-block-start: var(--constia-space-sm);
+    min-block-size: 44px;
+    padding: 8px 16px;
+    border: 0;
+    border-radius: var(--constia-radius-control);
+    background: var(--constia-ink);
+    color: var(--constia-surface);
+    cursor: pointer;
+}
+
+.today-habit button:disabled {
+    opacity: 0.65;
+    cursor: wait;
 }
