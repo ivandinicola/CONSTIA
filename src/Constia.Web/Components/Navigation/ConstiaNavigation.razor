@@ -1,8 +1,9 @@
+@inject NavigationManager Navigation
 <nav class="constia-navigation" aria-label="Navegación principal" aria-describedby="navigation-availability">
     <p id="navigation-availability" class="visually-hidden">Calendario, Progreso, Logros y Más todavía no están disponibles.</p>
     <ul class="navigation-items">
         <li>
-            <NavLink href="/hoy" Match="NavLinkMatch.All">
+            <NavLink href="/hoy" Match="NavLinkMatch.All" class="@(EnHabitos ? "active" : null)" aria-current="@(EnHabitos ? "location" : null)">
                 <img src="@Assets["assets/constia-iconos-v1/constia-hoy.png"]" width="22" height="22" alt="" />
                 <span>Hoy</span>
             </NavLink>
@@ -20,6 +21,7 @@
 </nav>
 
 @code {
+    private bool EnHabitos => new Uri(Navigation.Uri).AbsolutePath.TrimEnd('/') == "/habitos";
     private static readonly (string Label, string Icon)[] Items =
     [
         ("Calendario", "constia-calendario.png"),
