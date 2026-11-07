@@ -3,12 +3,8 @@
 @attribute [StreamRendering]
 @layout AppLayout
 @using System.Globalization
-@using System.Net
-@using System.Net.Http.Headers
-@using System.Text.Json
-@using Constia.Web.Configuration
-@using Microsoft.AspNetCore.Authentication
-@inject IHttpClientFactory Clients
+@using Constia.Web.Habitos
+@inject CumplirHabito Cumplir
 @inject NavigationManager Navigation
 
 <PageTitle>Mi día · CONSTIA</PageTitle>
@@ -26,101 +22,66 @@
         }
     </header>
 
-    @if (error is not null)
-    {
-        <p role="alert">@error</p>
-        <a href="/hoy" data-enhance-nav="false">Reintentar</a>
-    }
-    else if (dia is null)
-    {
-        <p role="status">Cargando tus hábitos de hoy…</p>
-    }
-    else if (dia.Habitos.Length == 0)
-    {
-        <p role="status">No tenés hábitos programados para hoy.</p>
-    }
-    else
-    {
-        var cumplidos = dia.Habitos.Count(habito => habito.Cumplido);
-        <section class="today-progress" aria-labelledby="today-progress">
-            <h2 id="today-progress">Progreso de hoy</h2>
-            <p>@cumplidos de @dia.Habitos.Length hábitos realizados</p>
-            <progress value="@cumplidos" max="@dia.Habitos.Length" aria-hidden="true"></progress>
-        </section>
+    <p id="completion-status" role="status" tabindex="-1" class="@(string.IsNullOrWhiteSpace(mensaje) ? "visually-hidden" : null)">@mensaje</p>
+    <form method="post" @formname="cumplir" @onsubmit="RegistrarAsync" data-completion data-enhance aria-busy="@(enProceso ? "true" : null)">
+        <AntiforgeryToken />
+        @foreach (var envio in Cumplir.ListarInciertos(usuario))
+        {
+            <div class="uncertain-completion">
+                <p>El resultado de «@envio.Nombre» del @envio.Fecha.ToString("dd/MM/yyyy") sigue incierto.</p>
+                <button type="submit" name="Solicitud" value="@($"{envio.Habito}|{envio.Fecha:yyyy-MM-dd}")"
+                        aria-label="@($"Comprobar estado de {envio.Nombre}, {envio.Fecha:dd/MM/yyyy}")">Comprobar estado</button>
+            </div>
+        }
+        @if (error is not null)
+        {
+            <p role="alert">@error</p>
+            <a href="/hoy" data-enhance-nav="false">Reintentar</a>
+        }
+        else if (dia is null)
+        {
+            <p role="status">Cargando tus hábitos de hoy…</p>
+        }
+        else if (dia.Habitos.Length == 0)
+        {
+            <p role="status">No tenés hábitos programados para hoy.</p>
+        }
+        else
+        {
+            var cumplidos = dia.Habitos.Count(habito => habito.Cumplido);
+            <section class="today-progress" aria-labelledby="today-progress">
+                <h2 id="today-progress">Progreso de hoy</h2>
+                <p>@cumplidos de @dia.Habitos.Length hábitos realizados</p>
+                <progress value="@cumplidos" max="@dia.Habitos.Length" aria-hidden="true"></progress>
+            </section>
 
-        <section aria-labelledby="today-habits">
-            <h2 id="today-habits">Tus hábitos de hoy</h2>
-            <ul class="today-habits">
-                @foreach (var habito in dia.Habitos)
-                {
-                    <li class="today-habit" @key="habito.Id">
-                        <h3>@habito.Nombre</h3>
-                        @if (!string.IsNullOrWhiteSpace(habito.Descripcion))
-                        {
-                            <p>@habito.Descripcion</p>
-                        }
-                        <span class="habit-status">@(habito.Cumplido ? "Realizado" : "Pendiente")</span>
-                    </li>
-                }
-            </ul>
-        </section>
-    }
+            <section aria-labelledby="today-habits">
+                <h2 id="today-habits">Tus hábitos de hoy</h2>
+                <ul class="today-habits">
+                    @foreach (var habito in dia.Habitos)
+                    {
+                        <li class="today-habit" @key="habito.Id">
+                            <h3>@habito.Nombre</h3>
+                            @if (!string.IsNullOrWhiteSpace(habito.Descripcion))
+                            {
+                                <p>@habito.Descripcion</p>
+                            }
+                            <span class="habit-status">@(habito.Cumplido ? "Realizado" : "Pendiente")</span>
+                            @if (!habito.Cumplido)
+                            {
+                                var incierto = Cumplir.EstaIncierto(usuario, habito.Id, dia.Fecha);
+                                @if (!incierto)
+                                {
+                                <button type="submit" name="Solicitud" value="@($"{habito.Id}|{dia.Fecha:yyyy-MM-dd}")"
+                                        aria-label="@($"Marcar como realizado de {habito.Nombre}, {dia.Fecha:dd/MM/yyyy}")">
+                                    Marcar como realizado
+                                </button>
+                                }
+                            }
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
+    </form>
 </section>
-
-@code {
-    [CascadingParameter] private HttpContext Http { get; set; } = default!;
-    private Dia? dia;
-    private string? error;
-
-    protected override async Task OnInitializedAsync()
-    {
-        Http.Response.Headers.CacheControl = "no-store";
-        var token = await Http.GetTokenAsync("access_token");
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            Navigation.NavigateTo("/login", forceLoad: true);
-            return;
-        }
-
-        try
-        {
-            using var client = Clients.CreateClient(ApiOptions.ClientName);
-            if (client.BaseAddress is not { } api || (api.Scheme != Uri.UriSchemeHttps && !api.IsLoopback))
-                throw new InvalidOperationException("El acceso autenticado a la API requiere HTTPS fuera de localhost.");
-
-            using var request = new HttpRequestMessage(HttpMethod.Get, "api/habitos/diarios/hoy");
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            using var response = await client.SendAsync(request, Http.RequestAborted);
-
-            if (response.StatusCode == HttpStatusCode.Unauthorized)
-            {
-                Navigation.NavigateTo("/login", forceLoad: true);
-                return;
-            }
-
-            if (response.StatusCode == HttpStatusCode.OK)
-            {
-                var resultado = await response.Content.ReadFromJsonAsync<Dia>(Http.RequestAborted);
-                if (resultado?.Habitos is not null && resultado.Fecha != default)
-                {
-                    dia = resultado;
-                    return;
-                }
-            }
-
-            error = response.StatusCode switch
-            {
-                HttpStatusCode.UnprocessableEntity => "No se conoce el estado de uno o más hábitos para hoy.",
-                HttpStatusCode.ServiceUnavailable => "Los hábitos de hoy todavía no están disponibles.",
-                _ => "No pudimos cargar tus hábitos de hoy."
-            };
-        }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or JsonException or InvalidOperationException)
-        {
-            error = "No pudimos cargar tus hábitos de hoy. Volvé a intentar.";
-        }
-    }
-
-    private sealed record Dia(DateOnly Fecha, HabitoDelDia[] Habitos);
-    private sealed record HabitoDelDia(Guid Id, string Nombre, string? Descripcion, bool Cumplido);
-}
