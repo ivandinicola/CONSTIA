@@ -12,6 +12,95 @@ public sealed class CumplirHabitoTests
     private static readonly HabitosHoy Today = new(Date, [new(Habit, "Leer", null, false)]);
 
     [Fact]
+    public async Task ConsultasYCombinacionesInvalidas_NoAumentanElEstadoConservado()
+    {
+        using var scenario = new Scenario();
+        for (var i = 0; i < 500; i++)
+        {
+            var user = Guid.NewGuid();
+            Assert.False(scenario.Service.EstaIncierto(user, Guid.NewGuid(), Date.AddDays(i)));
+            Assert.Empty(scenario.Service.ListarInciertos(user));
+        }
+        Assert.Equal(0, scenario.Cache.Count);
+
+        scenario.Handler.Responses.Enqueue(_ => Json(Today));
+        scenario.Handler.Responses.Enqueue(_ => Json(new Cumplimiento(Guid.NewGuid(), Date), HttpStatusCode.Created));
+        scenario.Handler.Responses.Enqueue(_ => Json(Today));
+        await scenario.Service.RegistrarAsync(scenario.Client, scenario.User, Habit, Date, default);
+        var entradasAntes = EntradasConservadas(scenario.Cache);
+        Assert.Equal(1, entradasAntes);
+        var usuariosAntes = scenario.Cache.Count;
+        for (var i = 0; i < 500; i++)
+        {
+            scenario.Handler.Responses.Enqueue(_ => Json(Today));
+            await scenario.Service.RegistrarAsync(scenario.Client, scenario.User,
+                i % 2 == 0 ? Guid.NewGuid() : Habit, Date.AddDays(i + 1), default);
+            scenario.Handler.Responses.Enqueue(_ => Json(Today));
+            await scenario.Service.RegistrarAsync(scenario.Client, Guid.NewGuid(), Guid.NewGuid(), Date, default);
+            Assert.False(scenario.Service.EstaIncierto(scenario.User, Guid.NewGuid(), Date));
+        }
+        Assert.Equal(usuariosAntes, scenario.Cache.Count);
+        Assert.Equal(entradasAntes, EntradasConservadas(scenario.Cache));
+        Assert.Single(scenario.Handler.Requests, r => r.Method == HttpMethod.Post);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ConsultaHoyPausada_RecompruebaElEstadoQueOtraSolicitudAdelanto(bool confirmado)
+    {
+        using var scenario = new Scenario();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        scenario.Handler.GetRelease = release;
+        scenario.Handler.Responses.Enqueue(_ => Json(Today));
+        var primera = scenario.Service.RegistrarAsync(scenario.Client, scenario.User, Habit, Date, default);
+        await scenario.Handler.GetStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        scenario.Handler.Responses.Enqueue(_ => Json(Today));
+        scenario.Handler.Responses.Enqueue(_ => confirmado
+            ? Json(new Cumplimiento(Guid.NewGuid(), Date), HttpStatusCode.Created)
+            : throw new HttpRequestException("Respuesta perdida"));
+        if (!confirmado)
+            scenario.Handler.Responses.Enqueue(_ => new(HttpStatusCode.ServiceUnavailable));
+        scenario.Handler.Responses.Enqueue(_ => Json(Today));
+        await scenario.Service.RegistrarAsync(scenario.Client, scenario.User, Habit, Date, default);
+
+        if (!confirmado)
+            scenario.Handler.Responses.Enqueue(_ => Json(new[] { new Cumplimiento(Guid.NewGuid(), Date) }));
+        scenario.Handler.Responses.Enqueue(_ => Json(Today));
+        release.SetResult();
+        var result = await primera;
+        Assert.Contains("confirmado", result.Mensaje);
+        Assert.Single(scenario.Handler.Requests, r => r.Method == HttpMethod.Post);
+        Assert.Equal(1, EntradasConservadas(scenario.Cache));
+    }
+
+    [Fact]
+    public async Task IncertidumbreDeUnUsuario_NoBloqueaNiConfirmaElEnvioDeOtro()
+    {
+        using var scenario = new Scenario();
+        scenario.Handler.Responses.Enqueue(_ => Json(Today));
+        scenario.Handler.Responses.Enqueue(_ => throw new HttpRequestException());
+        scenario.Handler.Responses.Enqueue(_ => new(HttpStatusCode.ServiceUnavailable));
+        scenario.Handler.Responses.Enqueue(_ => Json(Today));
+        await scenario.Service.RegistrarAsync(scenario.Client, scenario.User, Habit, Date, default);
+        var otro = Guid.NewGuid();
+        Assert.Empty(scenario.Service.ListarInciertos(otro));
+        Assert.False(scenario.Service.EstaIncierto(otro, Habit, Date));
+        scenario.Handler.Responses.Enqueue(_ => Json(Today));
+        scenario.Handler.Responses.Enqueue(_ => Json(new Cumplimiento(Guid.NewGuid(), Date), HttpStatusCode.Created));
+        scenario.Handler.Responses.Enqueue(_ => Json(Today));
+        var resultado = await scenario.Service.RegistrarAsync(scenario.Client, otro, Habit, Date, default);
+        Assert.Contains("confirmado", resultado.Mensaje);
+        Assert.True(scenario.Service.EstaIncierto(scenario.User, Habit, Date));
+        Assert.False(scenario.Service.EstaIncierto(otro, Habit, Date));
+        Assert.Equal(2, scenario.Handler.Requests.Count(r => r.Method == HttpMethod.Post));
+    }
+
+    private static int EntradasConservadas(MemoryCache cache) => cache.Keys
+        .Select(key => cache.Get(key)).OfType<System.Collections.IDictionary>().Sum(value => value.Count);
+
+    [Fact]
     public async Task DosPestanas_MientrasElPostEstaPendiente_NoGeneranUnaSegundaEscritura()
     {
         using var scenario = new Scenario();
@@ -162,6 +251,8 @@ public sealed class CumplirHabitoTests
 
     private sealed class FakeHandler : HttpMessageHandler
     {
+        public TaskCompletionSource GetStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource? GetRelease { get; set; }
         public TaskCompletionSource PostStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource? PostRelease { get; set; }
         public string? PostBody { get; private set; }
@@ -171,6 +262,12 @@ public sealed class CumplirHabitoTests
         {
             Requests.Add((request.Method, request.RequestUri!.AbsolutePath));
             var response = Responses.Dequeue();
+            if (request.Method == HttpMethod.Get && GetRelease is { } release)
+            {
+                GetRelease = null;
+                GetStarted.TrySetResult();
+                await release.Task.WaitAsync(cancellation);
+            }
             if (request.Method == HttpMethod.Post)
             {
                 PostBody = await request.Content!.ReadAsStringAsync(cancellation);

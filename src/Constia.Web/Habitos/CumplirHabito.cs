@@ -24,9 +24,6 @@ public sealed class CumplirHabito(IMemoryCache cache)
     }
 
     private Envio ObtenerEnvio(Guid usuario, Guid habito, DateOnly fecha)
-        => EnviosUsuario(usuario).GetOrAdd((habito, fecha), _ => new Envio());
-
-    private ConcurrentDictionary<(Guid Habito, DateOnly Fecha), Envio> EnviosUsuario(Guid usuario)
     {
         lock (accesoCache)
         {
@@ -39,16 +36,26 @@ public sealed class CumplirHabito(IMemoryCache cache)
             foreach (var item in envios)
                 if (item.Value.Expira <= DateTimeOffset.UtcNow && item.Value.Gate.CurrentCount == 1)
                     envios.TryRemove(item.Key, out _);
-            return envios;
+            return envios.GetOrAdd((habito, fecha), _ => new Envio());
         }
     }
 
-    public EnvioIncierto[] ListarInciertos(Guid usuario) => EnviosUsuario(usuario)
-        .Where(e => Volatile.Read(ref e.Value.Incierto))
-        .Select(e => new EnvioIncierto(e.Key.Habito, e.Key.Fecha, e.Value.Nombre)).ToArray();
+    private ConcurrentDictionary<(Guid Habito, DateOnly Fecha), Envio>? BuscarEnvios(Guid usuario) =>
+        cache.TryGetValue(("cumplimientos-web", usuario),
+            out ConcurrentDictionary<(Guid, DateOnly), Envio>? envios) ? envios : null;
 
-    public bool EstaIncierto(Guid usuario, Guid habito, DateOnly fecha) =>
-        Volatile.Read(ref ObtenerEnvio(usuario, habito, fecha).Incierto);
+    private Envio? BuscarEnvio(Guid usuario, Guid habito, DateOnly fecha) =>
+        BuscarEnvios(usuario)?.TryGetValue((habito, fecha), out var envio) == true ? envio : null;
+
+    public EnvioIncierto[] ListarInciertos(Guid usuario) => BuscarEnvios(usuario)?
+        .Where(e => Volatile.Read(ref e.Value.Incierto))
+        .Select(e => new EnvioIncierto(e.Key.Habito, e.Key.Fecha, e.Value.Nombre)).ToArray() ?? [];
+
+    public bool EstaIncierto(Guid usuario, Guid habito, DateOnly fecha)
+    {
+        var envio = BuscarEnvio(usuario, habito, fecha);
+        return envio is not null && Volatile.Read(ref envio.Incierto);
+    }
 
     public async Task<ResultadoHoy> CargarAsync(HttpClient client, CancellationToken cancellation)
     {
@@ -75,7 +82,22 @@ public sealed class CumplirHabito(IMemoryCache cache)
     {
         if (usuario == Guid.Empty || habito == Guid.Empty || fecha == default)
             return new(null, Error: "Revisá los datos del cumplimiento.");
-        var envio = ObtenerEnvio(usuario, habito, fecha);
+        var envio = BuscarEnvio(usuario, habito, fecha);
+        HabitoDelDia? candidato = null;
+        if (envio is null || (!Volatile.Read(ref envio.Confirmado) && !Volatile.Read(ref envio.Incierto)))
+        {
+            var actual = await CargarAsync(client, cancellation);
+            if (actual.Dia is not { } dia)
+                return actual;
+            if (dia.Fecha != fecha)
+                return actual with { Mensaje = "Cambió la fecha local. Revisá el día actualizado y hacé una nueva activación." };
+            candidato = dia.Habitos.SingleOrDefault(h => h.Id == habito);
+            if (candidato is null)
+                return actual with { Mensaje = "La acción ya no está disponible. Actualizamos tus hábitos." };
+            if (candidato.Cumplido)
+                return actual with { Mensaje = $"«{candidato.Nombre}» ya figura realizado para el {fecha:dd/MM/yyyy}." };
+            envio = ObtenerEnvio(usuario, habito, fecha);
+        }
         if (!await envio.Gate.WaitAsync(0, cancellation))
             return await RefrescarAsync(client, "Ya hay una solicitud para este hábito. Comprobá su estado antes de volver a intentarlo.", cancellation);
         try
@@ -84,16 +106,9 @@ public sealed class CumplirHabito(IMemoryCache cache)
                 return await RefrescarAsync(client, Confirmacion(envio, fecha), cancellation);
             if (envio.Incierto)
                 return await ComprobarAsync(client, envio, habito, fecha, false, cancellation);
-            var actual = await CargarAsync(client, cancellation);
-            if (actual.Dia is not { } dia)
-                return actual;
-            if (dia.Fecha != fecha)
-                return actual with { Mensaje = "Cambió la fecha local. Revisá el día actualizado y hacé una nueva activación." };
-            var candidato = dia.Habitos.SingleOrDefault(h => h.Id == habito);
             if (candidato is null)
-                return actual with { Mensaje = "La acción ya no está disponible. Actualizamos tus hábitos." };
-            if (candidato.Cumplido)
-                return actual with { Mensaje = $"«{candidato.Nombre}» ya figura realizado para el {fecha:dd/MM/yyyy}." };
+                return await RefrescarAsync(client,
+                    "El estado de la solicitud cambió. Revisá la pantalla y hacé una nueva activación.", cancellation);
             envio.Nombre = candidato.Nombre;
             envio.Incierto = true;
             try
