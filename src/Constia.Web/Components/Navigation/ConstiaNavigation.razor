@@ -1,6 +1,12 @@
 <nav class="constia-navigation" aria-label="Navegación principal" aria-describedby="navigation-availability">
-    <p id="navigation-availability" class="visually-hidden">Vista preliminar. Las cinco secciones todavía no están disponibles.</p>
+    <p id="navigation-availability" class="visually-hidden">Calendario, Progreso, Logros y Más todavía no están disponibles.</p>
     <ul class="navigation-items">
+        <li>
+            <NavLink href="/hoy" Match="NavLinkMatch.All">
+                <img src="@Assets["assets/constia-iconos-v1/constia-hoy.png"]" width="22" height="22" alt="" />
+                <span>Hoy</span>
+            </NavLink>
+        </li>
         @foreach (var item in Items)
         {
             <li @key="item.Icon">
@@ -16,7 +22,6 @@
 @code {
     private static readonly (string Label, string Icon)[] Items =
     [
-        ("Hoy", "constia-hoy.png"),
         ("Calendario", "constia-calendario.png"),
         ("Progreso", "constia-progreso.png"),
         ("Logros", "constia-logros.png"),

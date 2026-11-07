@@ -81,7 +81,7 @@
                         var properties = new AuthenticationProperties { ExpiresUtc = login.ExpiresAt };
                         properties.StoreTokens([new AuthenticationToken { Name = "access_token", Value = login.AccessToken }]);
                         await Http.SignInAsync(new ClaimsPrincipal(identity), properties);
-                        Navigation.NavigateTo("/cuenta");
+                        Navigation.NavigateTo("/hoy");
                         return;
                     }
                     break;

@@ -28,6 +28,10 @@
     scroll-margin-block: var(--constia-space-md);
 }
 
+.app-content:has(> .today) {
+    align-content: start;
+}
+
 .app-navigation {
     padding: var(--constia-dock-inset);
     padding-block-end: max(10px, env(safe-area-inset-bottom));

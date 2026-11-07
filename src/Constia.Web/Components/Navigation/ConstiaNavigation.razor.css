@@ -19,6 +19,7 @@
     min-inline-size: 0;
 }
 
+.navigation-items ::deep a,
 .navigation-items button {
     display: flex;
     flex-direction: column;
@@ -36,7 +37,20 @@
     font-size: var(--constia-type-navigation);
     font-weight: 500;
     line-height: 1.35;
+}
+
+.navigation-items button {
     cursor: not-allowed;
+}
+
+.navigation-items ::deep a {
+    text-decoration: none;
+}
+
+.navigation-items ::deep a.active {
+    color: var(--constia-ink);
+    background: var(--constia-selection-soft);
+    font-weight: 700;
 }
 
 .navigation-items img {
@@ -54,6 +68,7 @@
         padding-inline: var(--constia-space-xs);
     }
 
+    .navigation-items ::deep a,
     .navigation-items button {
         min-inline-size: 44px;
     }
@@ -70,6 +85,7 @@
         gap: var(--constia-space-xs);
     }
 
+    .navigation-items ::deep a,
     .navigation-items button {
         flex-direction: row;
         justify-content: flex-start;

@@ -4,6 +4,7 @@ using Constia.API.Contracts;
 using Constia.Application.Cumplimientos;
 using Constia.Application.Habitos;
 using Constia.Application.Temporal;
+using Constia.Application.Usuarios;
 using Constia.Domain;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -316,12 +317,62 @@ public sealed class HabitosController(
             });
         }
 
+        return await ResponderDiariosAsync(usuarioId, dia, consulta, habitos => habitos, cancellationToken);
+    }
+
+    [HttpGet("diarios/hoy")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ProducesResponseType(typeof(HabitosHoyResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<HabitosHoyResponse>> ConsultarHoy(
+        [FromServices] IUsuarioRepository usuarios,
+        [FromServices] IFechaLocalUsuario fechaLocal,
+        [FromServices] ConsultarHabitosDiarios consulta,
+        CancellationToken cancellationToken)
+    {
+        if (usuarioActual.UsuarioId is not Guid usuarioId ||
+            await usuarios.BuscarPorIdAsync(usuarioId, cancellationToken) is not { } usuario)
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "No se pudo identificar al usuario autenticado."
+            });
+        }
+
+        DateOnly dia;
+        try
+        {
+            dia = fechaLocal.ObtenerHoy(usuario.TimeZoneId);
+        }
+        catch (ZonaHorariaPersistidaInvalidaException)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "No se pudo determinar la fecha local del usuario.");
+        }
+
+        return await ResponderDiariosAsync(usuarioId, dia, consulta,
+            habitos => new HabitosHoyResponse(dia, habitos), cancellationToken);
+    }
+
+    private async Task<ActionResult> ResponderDiariosAsync(
+        Guid usuarioId,
+        DateOnly dia,
+        ConsultarHabitosDiarios consulta,
+        Func<HabitoDiarioResponse[], object> crearRespuesta,
+        CancellationToken cancellationToken)
+    {
         try
         {
             var habitos = await consulta.EjecutarAsync(usuarioId, dia, cancellationToken);
-            return Ok(habitos.Select(habito => new HabitoDiarioResponse(
+            var respuesta = habitos.Select(habito => new HabitoDiarioResponse(
                 habito.Id, habito.Nombre, habito.Descripcion, habito.CategoriaId,
-                habito.IconoId, habito.Cumplido)).ToArray());
+                habito.IconoId, habito.Cumplido)).ToArray();
+            return Ok(crearRespuesta(respuesta));
         }
         catch (HistorialEstadoHabitoNoInicializadoException)
         {
