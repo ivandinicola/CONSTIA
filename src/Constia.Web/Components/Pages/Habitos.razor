@@ -11,7 +11,7 @@
 <section class="habits" aria-labelledby="habits-title">
     <header><h1 id="habits-title">Mis hábitos</h1><p>Gestioná tus hábitos y mantené el foco.</p></header>
     <nav aria-label="Estado de hábitos"><span aria-current="page">Activos</span><button disabled>Inactivos · no disponible</button></nav>
-    <button class="new-habit" disabled>+ Nuevo hábito · no disponible</button>
+    <button class="new-habit" disabled><img src="@Assets["assets/pen005/nuevo-habito.svg"]" width="20" height="20" alt="" />Nuevo hábito · no disponible</button>
     <p id="habits-status" role="status" tabindex="-1" class="@(string.IsNullOrEmpty(mensaje) ? "visually-hidden" : null)">@mensaje</p>
     @if (volverFoco is not null) { <span id="habits-return" data-target="habito-@volverFoco" hidden></span> }
     <form method="post" @formname="gestionar-habitos" @onsubmit="EjecutarAsync" data-habits data-enhance>
@@ -19,6 +19,7 @@
         @if (confirmar is not null)
         {
             <section class="confirmation" aria-labelledby="habits-confirm">
+                <img class="warning-art" src="@Assets["assets/pen005/advertencia.svg"]" width="32" height="32" alt="" />
                 <h2 id="habits-confirm" tabindex="-1">Desactivar hábito</h2>
                 <p>«@confirmar.Nombre»</p>
                 <p>Desde hoy, en tu fecha local, dejará de aparecer entre activos. Se conservan los cumplimientos anteriores. No se puede reactivar en V1.</p>
@@ -34,7 +35,7 @@
         }
         @if (error is not null)
         {
-            <div role="alert"><h2>No pudimos cargar tus hábitos</h2><p>@error</p><a href="/habitos">Reintentar</a></div>
+            <div role="alert"><img class="warning-art" src="@Assets["assets/pen005/advertencia.svg"]" width="32" height="32" alt="" /><h2>No pudimos cargar tus hábitos</h2><p>@error</p><a href="/habitos">Reintentar</a></div>
         }
         else if (habitos is null)
         {
@@ -42,7 +43,7 @@
         }
         else if (habitos.Length == 0)
         {
-            <div class="empty"><h2>Todavía no tenés hábitos activos</h2><p>Cuando crees un hábito, aparecerá acá.</p><p>Crear hábitos todavía no está disponible.</p></div>
+            <div class="empty"><img class="empty-art" src="@Assets["assets/pen005/vacio.svg"]" width="84" height="84" alt="" /><h2>Todavía no tenés hábitos activos</h2><p>Cuando crees un hábito, aparecerá acá.</p><p>Crear hábitos todavía no está disponible.</p></div>
         }
         else
         {

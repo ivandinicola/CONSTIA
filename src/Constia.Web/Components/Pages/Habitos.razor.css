@@ -32,3 +32,7 @@
 .habits .state-switch { min-width:48px; min-height:44px; padding:0; border:0; background:transparent; display:inline-flex; align-items:center; justify-content:center; }
 .switch-track { display:block; position:relative; width:40px; height:22px; border-radius:11px; background:var(--constia-secondary-action); }
 .switch-track > span { position:absolute; width:16px; height:16px; top:3px; right:3px; border-radius:50%; background:var(--constia-surface); }
+.new-habit { display:inline-flex; align-items:center; justify-content:center; gap:8px; }
+.new-habit img, .warning-art, .empty-art { flex:none; object-fit:contain; }
+.empty-art { margin-block-end:12px; }
+.warning-art { display:block; }

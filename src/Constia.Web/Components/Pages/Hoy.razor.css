@@ -94,3 +94,8 @@
     opacity: 0.65;
     cursor: wait;
 }
+.today-habits-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 12px; }
+.today-habits-heading h2 { font-size:18px; line-height:22px; font-weight:700; min-width:0; }
+.today-habits-heading a { display:inline-flex; align-items:center; gap:8px; min-height:44px; margin-inline-start:auto; color:var(--constia-secondary-action); font-size:12px; line-height:22px; font-weight:700; text-decoration:none; }
+.habits-chevron { display:inline-flex; align-items:center; justify-content:center; width:14px; height:22px; }
+.today-habits-heading a:focus-visible { outline:var(--constia-focus-ring); outline-offset:4px; border-radius:4px; }
