@@ -39,6 +39,7 @@ builder.Services.AddHttpClient(ApiOptions.ClientName, (services, client) =>
 // shortcut: sesiones de un solo proceso; usar almacenamiento y claves compartidas antes de desplegar réplicas.
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<Constia.Web.Habitos.CumplirHabito>();
+builder.Services.AddSingleton<Constia.Web.Habitos.GestionHabitos>();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {

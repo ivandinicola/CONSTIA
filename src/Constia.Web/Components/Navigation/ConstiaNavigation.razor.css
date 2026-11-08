@@ -64,8 +64,8 @@
 @media (max-width: 23.999rem) {
     .navigation-items {
         grid-template-columns: minmax(44px, 1fr) max-content max-content minmax(44px, 1fr) minmax(44px, 1fr);
-        column-gap: var(--constia-space-xs);
-        padding-inline: var(--constia-space-xs);
+        column-gap: 3px;
+        padding-inline: 0;
     }
 
     .navigation-items ::deep a,

@@ -469,3 +469,9 @@ La API usa `CompletedAtUtc` como barrera global; no vuelve a auditar toda la con
 ### Seguridad de rollback
 
 Al revertir ambas migraciones TEMP-005 en orden inverso, el `Down()` de `ConstrainPeriodoEstadoHabitoState` retira su restricción y el `Down()` de `AddHabitoEstadoHistory` elimina `PeriodoEstadoHabito`, `SnapshotEstadoHabito` e `InicializacionEstadoHabito`. Después de iniciar la captura o generar períodos históricos, completar esa reversión elimina información que ya no puede reconstruirse necesariamente desde el estado actual. No usar rollback en ese punto sin un procedimiento específico, aprobado y probado, que preserve y permita recuperar todos esos datos. La reversión de estas migraciones no es un mecanismo de reparación del backfill; esta tarea no incorpora un mecanismo alternativo de rollback.
+
+## UI-005 — Mis hábitos
+
+`/habitos` requiere la sesión web vigente. Consume el listado completo de activos; la expansión usa sus datos y no genera una consulta de detalle por tarjeta. Crear, editar y consultar inactivos permanecen no disponibles hasta UI-006, UI-007 y UI-014.
+
+La desactivación usa una confirmación explícita, POST del mismo origen con antifalsificación y DELETE autenticado solo desde Web. Un 204 confirma; si se pierde la respuesta, el detalle solo acredita el estado final. Los resultados inciertos se conservan y se consultan sin reenviar automáticamente. La coordinación comparte el alcance de una instancia de las sesiones: reiniciar invalida las sesiones; antes de desplegar réplicas hacen falta sesiones, claves y coordinación compartidas. No hay reactivación en V1.

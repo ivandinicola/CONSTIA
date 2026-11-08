@@ -56,7 +56,7 @@
             </section>
 
             <section aria-labelledby="today-habits">
-                <h2 id="today-habits">Tus hábitos de hoy</h2>
+                <div class="today-habits-heading"><h2 id="today-habits">Tus hábitos de hoy</h2><a href="/habitos">Mis hábitos<span class="habits-chevron" aria-hidden="true"><img src="@Assets["assets/pen005/chevron.svg"]" width="10" height="14" alt="" /></span></a></div>
                 <ul class="today-habits">
                     @foreach (var habito in dia.Habitos)
                     {
