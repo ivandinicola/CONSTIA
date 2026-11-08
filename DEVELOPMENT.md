@@ -472,6 +472,16 @@ Al revertir ambas migraciones TEMP-005 en orden inverso, el `Down()` de `Constra
 
 ## UI-005 — Mis hábitos
 
-`/habitos` requiere la sesión web vigente. Consume el listado completo de activos; la expansión usa sus datos y no genera una consulta de detalle por tarjeta. Crear, editar y consultar inactivos permanecen no disponibles hasta UI-006, UI-007 y UI-014.
+`/habitos` requiere la sesión web vigente. Consume el listado completo de activos; la expansión usa sus datos y no genera una consulta de detalle por tarjeta. Crear está disponible mediante UI-006/UI-008 en `/habitos/nuevo`; editar y consultar inactivos permanecen no disponibles hasta UI-007 y UI-014.
 
 La desactivación usa una confirmación explícita, POST del mismo origen con antifalsificación y DELETE autenticado solo desde Web. Un 204 confirma; si se pierde la respuesta, el detalle solo acredita el estado final. Los resultados inciertos se conservan y se consultan sin reenviar automáticamente. La coordinación comparte el alcance de una instancia de las sesiones: reiniciar invalida las sesiones; antes de desplegar réplicas hacen falta sesiones, claves y coordinación compartidas. No hay reactivación en V1.
+
+## UI-006 y UI-008 — Crear hábitos
+
+`/habitos/nuevo` requiere sesión y abre un borrador sin selecciones: nombre/categoría, ícono, lunes–domingo y resumen. No se envían descripción, FechaInicio ni propietario. La confirmación y fecha provienen de un 201 válido. Los catálogos se consultan desde el servidor; el JWT permanece en el ticket protegido y nunca llega al formulario. Los POST Web usan antifalsificación.
+
+La coordinación retiene como máximo ocho borradores por sesión, cada uno por una hora o hasta el vencimiento de la sesión, lo que ocurra primero. IDs vencidos no se reconstruyen. Confirmados e inciertos bloquean un segundo POST; las revisiones evitan que un formulario obsoleto sobrescriba un paso posterior. No se infiere autoría por coincidencia en el listado ni se reenvía automáticamente un resultado incierto.
+
+El alcance es una sola instancia, como las sesiones Web. Un reinicio invalida sesiones y pierde esta coordinación; la API no tiene idempotencia durable de creación. Revisar Mis hábitos antes de iniciar otro borrador tras una incertidumbre o un reinicio. Antes de réplicas o reintentos durables hacen falta almacenamiento/coordinación compartidos y un contrato de idempotencia API; esta entrega no los incorpora.
+
+Recursos: dieciséis PNG existentes; check original del master Control · Realizado · PNG de Penpot (media 129977ce-683b-806a-8008-c92f778e5bc6), y confeti oficial aprobado. Sin ilustraciones sustitutas.

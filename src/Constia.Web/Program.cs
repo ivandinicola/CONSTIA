@@ -40,6 +40,8 @@ builder.Services.AddHttpClient(ApiOptions.ClientName, (services, client) =>
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<Constia.Web.Habitos.CumplirHabito>();
 builder.Services.AddSingleton<Constia.Web.Habitos.GestionHabitos>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<Constia.Web.Habitos.AltaHabito>();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {

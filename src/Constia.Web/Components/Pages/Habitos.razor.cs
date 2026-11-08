@@ -18,18 +18,9 @@ public partial class Habitos
     private string? error;
     private string? mensaje;
     private Guid usuario;
-    private static readonly (DayOfWeek Dia, string Corto, string Nombre)[] Semana =
-    [ (DayOfWeek.Monday,"Lun","lunes"), (DayOfWeek.Tuesday,"Mar","martes"), (DayOfWeek.Wednesday,"Mié","miércoles"),
-      (DayOfWeek.Thursday,"Jue","jueves"), (DayOfWeek.Friday,"Vie","viernes"), (DayOfWeek.Saturday,"Sáb","sábado"), (DayOfWeek.Sunday,"Dom","domingo") ];
-    private static string Resumen(DayOfWeek[] dias) => dias.Distinct().Count() == 7 ? "Todos los días" :
-        string.Join(" · ", Semana.Where(d => dias.Contains(d.Dia)).Select(d => d.Corto));
-    private static string? Icono(string? id) => id switch
-    {
-        "libro" => "constia-lectura.png", "fuerza" => "constia-movimiento.png", "agua" => "constia-agua.png",
-        "loto" => "constia-meditacion.png", "manzana" => "constia-alimentacion.png", "musica" => "constia-nota-musical.png",
-        "luna" or "cafe" or "corredor" or "corazon" or "cerebro" or "sol" or "huella" or "brote" or "portatil" or "billete" => $"constia-{id}.png",
-        _ => null
-    };
+    private static readonly (DayOfWeek Dia, string Corto, string Nombre)[] Semana = PresentacionHabitos.Semana;
+    private static string Resumen(DayOfWeek[] dias) => dias.Distinct().Count() == 7 ? "Todos los días" : PresentacionHabitos.Resumen(dias);
+    private static string? Icono(string? id) => PresentacionHabitos.Icono(id);
     protected override async Task OnInitializedAsync()
     {
         Http.Response.Headers.CacheControl = "no-store";
