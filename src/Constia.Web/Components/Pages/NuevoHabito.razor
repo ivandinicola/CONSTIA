@@ -1,0 +1,105 @@
+@page "/habitos/nuevo"
+@page "/habitos/nuevo/{Id:guid}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [StreamRendering]
+@layout AppLayout
+@using Constia.Web.Habitos
+@using System.Globalization
+@using static Constia.Web.Habitos.PresentacionHabitos
+@inject AltaHabito Alta
+@inject NavigationManager Navigation
+
+<PageTitle>Crear hábito · CONSTIA</PageTitle>
+<section class="create-habit" aria-labelledby="create-title">
+    <a href="/habitos">Volver a Mis hábitos</a>
+    @if (b?.Estado != "confirmado") { <h1 id="create-title" tabindex="-1">Crear hábito</h1> }
+    <p id="create-status" role="status" tabindex="-1" class="visually-hidden">@aviso</p>
+    @if (b is null)
+    {
+        @if (error is not null) { <p role="alert">@error</p><a href="/habitos">Ir a Mis hábitos</a> }
+        else { <p role="status"><span class="spinner" aria-hidden="true"></span>Cargando las opciones…</p> }
+    }
+    else if (b.Estado == "incierto")
+    {
+        <div role="alert"><h2>No conocemos el resultado del alta</h2><p>@b.Error</p></div>
+        <a class="primary" href="/habitos">Revisar Mis hábitos</a>
+    }
+    else if (b.Estado == "enviando")
+    {
+        <p>Hay un envío en curso. No volvimos a enviarlo.</p><a href="@($"/habitos/nuevo/{b.Id}")">Consultar el resultado</a>
+    }
+    else if (b.Estado == "confirmado" && b.Resultado is { } creado)
+    {
+        <div class="success-art" aria-hidden="true"><img class="confetti" src="@Assets["assets/pen006/confeti-exito-constia.png"]" width="190" height="156" alt="" /><img class="check" src="@Assets["assets/pen006/realizado.png"]" width="96" height="96" alt="" /></div>
+        <h1 id="create-title" tabindex="-1">¡Hábito creado!</h1>
+        <p class="intro">Tu hábito se creó correctamente.</p>
+        <div class="review">
+            <img src="@Assets[$"assets/constia-iconos-v1/{Icono(creado.IconoId)}"]" width="56" height="56" alt="" />
+            <h2>@creado.Nombre</h2><p>@b.Catalogos?.Categorias.Single(c => c.Id == creado.CategoriaId).Nombre</p>
+            <p>Días programados<br /><strong>@Resumen(creado.DiasProgramados)</strong></p>
+            <p>Fecha de inicio: <time datetime="@creado.StartDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)">@creado.StartDate.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)</time></p>
+        </div>
+        <div class="success-actions"><a class="primary" href="/habitos">Ir a Mis hábitos</a><a class="secondary" href="/habitos/nuevo">Crear otro hábito</a></div>
+    }
+    else
+    {
+        <p class="intro">@(b.Paso switch { 1 => "Dale un nombre y elegí una categoría.", 2 => "Elegí un ícono que lo represente.", 3 => "Seleccioná los días en los que lo realizarás.", _ => "Revisá la información y creá tu hábito." })</p>
+        <ol class="steps" aria-label="Pasos para crear un hábito">
+            @for (var i = 1; i <= 4; i++) { <li aria-current="@(b.Paso == i ? "step" : null)"><span>@i</span></li> }
+        </ol>
+        <p class="step-count">Paso @b.Paso de 4</p>
+        <p id="create-error" role="alert" tabindex="-1" class="@(b.Error is null ? "visually-hidden" : null)">@b.Error</p>
+        <form method="post" @formname="crear-habito" @onsubmit="EjecutarAsync" data-create data-enhance>
+            <AntiforgeryToken />
+            <input type="hidden" name="Revision" value="@b.Revision" />
+            @if (b.Catalogos is null)
+            {
+                <button type="submit" name="Accion" value="catalogos">Reintentar carga de opciones</button>
+            }
+            else
+            {
+                @if (b.Paso == 1)
+                {
+                    <label for="create-name">Nombre del hábito</label>
+                    <input id="create-name" name="Nombre" type="text" value="@b.Datos.Nombre" placeholder="Ej. Leer 20 minutos" required aria-describedby="create-error" aria-invalid="@(b.Campo == "nombre" ? "true" : null)" />
+                    <fieldset class="categories" aria-describedby="create-error"><legend>Categoría</legend>
+                        <div class="category-scroll">
+                        @foreach (var c in b.Catalogos.Categorias)
+                        {
+                            <label class="category" @key="c.Id"><span>@c.Nombre</span><input type="radio" name="CategoriaId" value="@c.Id" checked="@(b.Datos.CategoriaId == c.Id)" required /></label>
+                        }
+                        </div>
+                    </fieldset>
+                }
+                else if (b.Paso == 2)
+                {
+                    <fieldset aria-describedby="create-error"><legend>Ícono</legend><div class="icons">
+                    @foreach (var icono in b.Catalogos.Iconos)
+                    {
+                        <label class="icon-choice" @key="icono.Id"><input type="radio" name="IconoId" value="@icono.Id" checked="@(b.Datos.IconoId == icono.Id)" required /><span class="icon-halo"><img src="@Assets[$"assets/constia-iconos-v1/{Icono(icono.Id)}"]" width="44" height="44" alt="" /></span><span>@icono.Nombre</span></label>
+                    }
+                    </div></fieldset>
+                }
+                else if (b.Paso == 3)
+                {
+                    <fieldset aria-describedby="create-error"><legend>Días de la semana</legend><div class="days">
+                    @foreach (var dia in Semana)
+                    {
+                        <label class="day-choice"><input type="checkbox" name="Dias" value="@((int)dia.Dia)" checked="@(b.Datos.DiasProgramados.Contains(dia.Dia))" /><span aria-hidden="true">@(dia.Nombre == "miércoles" ? "X" : dia.Nombre[..1].ToUpperInvariant())</span><span class="day-name" aria-hidden="true">@dia.Corto</span><span class="visually-hidden">@dia.Nombre</span></label>
+                    }
+                    </div><p>Elegí al menos un día.</p></fieldset>
+                    <p>La fecha de inicio se calcula al crear, con tu zona horaria vigente. Puede ser un día no programado.</p>
+                }
+                else
+                {
+                    <div class="review"><img src="@Assets[$"assets/constia-iconos-v1/{Icono(b.Datos.IconoId)}"]" width="56" height="56" alt="" /><h2>@b.Datos.Nombre</h2><p>@b.Catalogos.Categorias.Single(c => c.Id == b.Datos.CategoriaId).Nombre</p><p>Días programados<br /><strong>@Resumen(b.Datos.DiasProgramados)</strong></p></div>
+                    <p>La fecha de inicio será la fecha local que determine el servidor al guardar.</p>
+                }
+                <div class="actions">
+                    @if (b.Paso > 1) { <button class="secondary" type="submit" name="Accion" value="volver" formnovalidate>Volver</button> }
+                    <button class="primary" type="submit" name="Accion" value="@(b.Paso == 4 ? "crear" : "continuar")">@(b.Paso == 4 ? "Crear hábito" : "Continuar")</button>
+                </div>
+            }
+        </form>
+    }
+</section>

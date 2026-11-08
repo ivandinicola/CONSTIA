@@ -36,3 +36,4 @@
 .new-habit img, .warning-art, .empty-art { flex:none; object-fit:contain; }
 .empty-art { margin-block-end:12px; }
 .warning-art { display:block; }
+.habits a.new-habit { padding:10px 16px; border:1px solid var(--constia-secondary-action); border-radius:16px; background:var(--constia-secondary-action); color:white; text-decoration:none; }

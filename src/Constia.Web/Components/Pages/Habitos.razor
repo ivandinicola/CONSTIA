@@ -11,7 +11,7 @@
 <section class="habits" aria-labelledby="habits-title">
     <header><h1 id="habits-title">Mis hábitos</h1><p>Gestioná tus hábitos y mantené el foco.</p></header>
     <nav aria-label="Estado de hábitos"><span aria-current="page">Activos</span><button disabled>Inactivos · no disponible</button></nav>
-    <button class="new-habit" disabled><img src="@Assets["assets/pen005/nuevo-habito.svg"]" width="20" height="20" alt="" />Nuevo hábito · no disponible</button>
+    <a class="new-habit" href="/habitos/nuevo"><img src="@Assets["assets/pen005/nuevo-habito.svg"]" width="20" height="20" alt="" />Nuevo hábito</a>
     <p id="habits-status" role="status" tabindex="-1" class="@(string.IsNullOrEmpty(mensaje) ? "visually-hidden" : null)">@mensaje</p>
     @if (volverFoco is not null) { <span id="habits-return" data-target="habito-@volverFoco" hidden></span> }
     <form method="post" @formname="gestionar-habitos" @onsubmit="EjecutarAsync" data-habits data-enhance>
@@ -43,7 +43,7 @@
         }
         else if (habitos.Length == 0)
         {
-            <div class="empty"><img class="empty-art" src="@Assets["assets/pen005/vacio.svg"]" width="84" height="84" alt="" /><h2>Todavía no tenés hábitos activos</h2><p>Cuando crees un hábito, aparecerá acá.</p><p>Crear hábitos todavía no está disponible.</p></div>
+            <div class="empty"><img class="empty-art" src="@Assets["assets/pen005/vacio.svg"]" width="84" height="84" alt="" /><h2>Todavía no tenés hábitos activos</h2><p>Cuando crees un hábito, aparecerá acá.</p><a href="/habitos/nuevo">Crear mi primer hábito</a></div>
         }
         else
         {
