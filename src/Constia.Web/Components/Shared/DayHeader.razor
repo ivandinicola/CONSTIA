@@ -1,0 +1,17 @@
+<header class="day-header">
+    <a class="day-brand" href="/" aria-label="CONSTIA, inicio">
+        <img src="@Assets["assets/constia-iconos-v1/constia-marca.png"]" width="32" height="32" alt="" />
+    </a>
+    <div class="day-heading">
+        <p class="day-greeting">¡Hola, @Name!</p>
+        <h1 id="@TitleId" tabindex="-1">@Title</h1>
+        @ChildContent
+    </div>
+</header>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public string TitleId { get; set; } = "";
+    [Parameter] public string? Name { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

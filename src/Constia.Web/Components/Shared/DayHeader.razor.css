@@ -1,0 +1,59 @@
+.day-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    text-align: start;
+}
+
+.day-brand img {
+    display: block;
+}
+
+.day-heading {
+    min-inline-size: 0;
+    flex: 1;
+    overflow-wrap: anywhere;
+}
+
+.day-heading h1,
+.day-greeting {
+    margin: 0;
+    font-size: 1.125rem;
+    line-height: 1.25;
+    font-weight: 700;
+}
+
+.day-heading h1 {
+    margin-block-start: 2px;
+    font-size: .875rem;
+}
+
+@media (max-width: 63.999rem) {
+    .day-header {
+        position: relative;
+        isolation: isolate;
+        min-block-size: 176px;
+        padding-block: max(24px, env(safe-area-inset-top)) 68px;
+        padding-inline-start: max(18px, env(safe-area-inset-left));
+        padding-inline-end: max(18px, env(safe-area-inset-right));
+        margin-inline-start: calc(-1 * max(12px, env(safe-area-inset-left)));
+        margin-inline-end: calc(-1 * max(12px, env(safe-area-inset-right)));
+    }
+
+    .day-header::before {
+        content: "";
+        position: absolute;
+        inset: auto 0 0;
+        block-size: 108px;
+        z-index: -1;
+        background:
+            linear-gradient(var(--constia-page), transparent 42%, transparent 82%, var(--constia-page)),
+            url("assets/constia-iconos-v1/constia-mi-dia-paisaje-v3.jpg") center / cover no-repeat;
+    }
+}
+
+@media (min-width: 64rem) {
+    .day-brand {
+        display: none;
+    }
+}

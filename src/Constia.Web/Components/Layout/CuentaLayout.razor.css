@@ -74,3 +74,119 @@ header {
     cursor: default;
     opacity: .72;
 }
+
+.cuenta:has(.cuenta-entrada) {
+    --cuenta-lavanda: rgb(239 234 255 / .72);
+    --cuenta-rosa: rgb(251 234 245 / .72);
+    max-inline-size: 24.375rem;
+    padding-block-start: 50px;
+    padding-inline: max(clamp(20px, 9.23vw, 36px), env(safe-area-inset-left))
+                    max(clamp(20px, 9.23vw, 36px), env(safe-area-inset-right));
+    background:
+        radial-gradient(circle 39px at 14px 120px, var(--cuenta-lavanda) 99%, transparent),
+        radial-gradient(circle 39px at calc(100% - 14px) 123px, var(--cuenta-rosa) 99%, transparent);
+}
+
+.cuenta:has(#nombre) {
+    --cuenta-lavanda: #efeaff;
+    --cuenta-rosa: #fbeaf5;
+}
+
+.cuenta:has(.cuenta-entrada) header {
+    margin-block-end: 20px;
+}
+
+.cuenta ::deep .cuenta-entrada {
+    font-size: 1.75rem;
+    line-height: 1.35;
+}
+
+.cuenta ::deep .cuenta-intro {
+    max-inline-size: 26ch;
+    margin: 2px auto 0;
+    line-height: 1.35;
+}
+
+.cuenta:has(.cuenta-entrada) ::deep fieldset {
+    gap: 12px;
+    margin-block-start: 24px;
+}
+
+.cuenta:has([data-login]) ::deep fieldset {
+    gap: 20px;
+}
+
+.cuenta ::deep .cuenta-persona { --cuenta-icono: url('/assets/cuenta/persona.svg'); }
+.cuenta ::deep .cuenta-email { --cuenta-icono: url('/assets/cuenta/correo.svg'); }
+.cuenta ::deep .cuenta-password { --cuenta-icono: url('/assets/cuenta/candado.svg'); }
+.cuenta ::deep .cuenta-zona { --cuenta-icono: url('/assets/cuenta/zona.svg'); }
+
+.cuenta ::deep :is(.cuenta-persona, .cuenta-email, .cuenta-password, .cuenta-zona) {
+    padding-inline-start: 45px;
+    background-image: var(--cuenta-icono);
+    background-position: left 11px center;
+    background-repeat: no-repeat;
+    background-size: 24px;
+}
+
+.cuenta:has(.cuenta-entrada) ::deep p.cuenta-error[role="alert"] {
+    display: grid;
+    grid-template-columns: 24px 1fr;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
+    background: var(--constia-surface);
+    border: 1px solid currentColor;
+    border-radius: var(--constia-radius-control);
+    text-align: start;
+}
+
+.cuenta:has(.cuenta-entrada) ::deep p.cuenta-error[role="alert"]::before {
+    content: "";
+    inline-size: 24px;
+    block-size: 24px;
+    background: url('/assets/pen005/advertencia.svg') center / contain no-repeat;
+}
+
+.cuenta ::deep .cuenta-carga:empty {
+    margin: 0;
+}
+
+.cuenta ::deep .cuenta-carga:not(:empty) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.cuenta ::deep .cuenta-carga:not(:empty)::before {
+    content: "";
+    flex: none;
+    inline-size: 24px;
+    block-size: 24px;
+    border: 3px solid var(--constia-border);
+    border-top-color: var(--constia-secondary-action);
+    border-radius: 50%;
+    animation: cuenta-giro 1s linear infinite;
+}
+
+@keyframes cuenta-giro {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cuenta ::deep .cuenta-carga::before { animation: none; }
+}
+
+.cuenta ::deep .cuenta-pie {
+    margin-block-start: 20px;
+    font-size: var(--constia-type-label);
+}
+
+.cuenta:has([data-login]) ::deep .cuenta-pie {
+    margin-inline: -16px;
+    padding: 16px;
+    background: var(--constia-surface);
+    border-radius: 20px;
+    box-shadow: 0 2px 10px rgb(17 27 114 / .12);
+}

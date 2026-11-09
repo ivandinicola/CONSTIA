@@ -18,11 +18,29 @@ function restoreHabits() {
     delete form.dataset.pending; form.removeAttribute("aria-busy");
     form.querySelector("[data-habits-selection]")?.remove();
     form.querySelectorAll('button[type="submit"]').forEach(b => b.disabled = false);
-    const confirmation = document.getElementById("habits-confirm");
+    const confirmation = form.querySelector("dialog.confirmation");
+    if (confirmation) {
+        if (!confirmation.matches(":modal")) {
+            confirmation.close();
+            confirmation.showModal();
+        }
+        confirmation.querySelector("[data-cancel-confirmation]").focus();
+        return;
+    }
     const status = document.getElementById("habits-status");
     const returnTarget = document.getElementById(document.getElementById("habits-return")?.dataset.target);
-    const target = confirmation || returnTarget || (status?.textContent.trim() ? status : document.getElementById(location.hash.slice(1)));
+    const details = returnTarget?.closest("details");
+    if (details) details.open = true;
+    const target = details?.querySelector(".state-switch") || returnTarget || (status?.textContent.trim() ? status : document.getElementById(location.hash.slice(1)));
     if(target) requestAnimationFrame(() => target.focus());
 }
+document.addEventListener("cancel", event => {
+    const dialog = event.target;
+    if (!dialog.matches("form[data-habits] dialog.confirmation")) return;
+    event.preventDefault();
+    const form = dialog.closest("form");
+    if (form.dataset.pending !== "true")
+        form.requestSubmit(dialog.querySelector("[data-cancel-confirmation]"));
+}, true);
 Blazor.addEventListener("enhancedload", restoreHabits);
 window.addEventListener("pageshow", restoreHabits);

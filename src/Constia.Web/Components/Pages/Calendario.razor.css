@@ -1,23 +1,68 @@
 .calendar { display:grid; gap:20px; max-width:46rem; width:100%; margin-inline:auto; }
-.calendar header { text-align:center; }
+.calendar-intro { margin: 0; font-size: var(--constia-type-navigation); color: var(--constia-text-secondary); }
+@media (max-width: 63.999rem) {
+    .calendar {
+        row-gap: 8px;
+    }
+
+    .calendar ::deep .day-header {
+        min-block-size: 146px;
+        padding-block-end: 60px;
+    }
+}
 .calendar h1, .calendar h2, .calendar h3 { margin:0; }
 .calendar h2 { font-size:1.25rem; }
-.month-nav { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.month-panel {
+    min-inline-size: 0;
+    padding: 8px;
+    border: 1px solid var(--constia-border);
+    border-radius: 22px;
+    background: var(--constia-surface);
+    box-shadow: var(--constia-shadow-soft);
+}
+.month-nav { display:grid; grid-template-columns:44px minmax(0,1fr) 44px; align-items:center; gap:6px; }
 .month-nav h2 { text-align:center; text-transform:capitalize; }
 .calendar a { min-height:44px; display:inline-flex; align-items:center; }
-.month-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px; }
-.weekday { text-align:center; font-size:.875rem; }
-.calendar a.day { display:flex; flex-direction:column; justify-content:flex-start; text-decoration:none; min-height:76px; padding:4px 0; border:1px solid var(--constia-secondary-action); border-radius:16px; color:var(--constia-ink); background:white; }
-.day-number { display:grid; place-items:center; width:32px; height:32px; border-radius:50%; font-weight:700; }
-.day-count, .chosen { font-size:.7rem; text-align:center; overflow-wrap:anywhere; }
-.day.selected { outline:2px solid var(--constia-secondary-action); outline-offset:1px; }
-.day.selected .day-number { background:#7141F3; color:white; }
+.month-nav a {
+    justify-content: center;
+    border: 1px solid var(--constia-border);
+    border-radius: 50%;
+}
+.month-prev img { transform: rotate(180deg); }
+.month-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; margin-block-start:6px; }
+.weekday { text-align:center; font-size:.75rem; font-weight:700; color:var(--constia-text-secondary); }
+.calendar a.day {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    min-block-size: 46px;
+    padding-block: 2px;
+    border-radius: 12px;
+    color: var(--constia-ink);
+    text-decoration: none;
+}
+.day-number {
+    display: grid;
+    place-items: center;
+    inline-size: min(30px, 100%);
+    block-size: 28px;
+    border-radius: 50%;
+    font-weight: 700;
+    background: #f1f4fa;
+}
+.day-count, .chosen { font-size:.6875rem; line-height:1.15; text-align:center; overflow-wrap:anywhere; }
+.day.selected { box-shadow: inset 0 0 0 2px var(--constia-secondary-action); }
+.day.selected .day-number { color:white; }
 .day.today .day-number { border:2px solid #3F63F5; }
-.day.adjacent { border-style:dashed; }
-.day.future { background:var(--constia-selection-soft); }
+.calendar a.day.adjacent { color:var(--constia-text-secondary); }
 .chosen { font-weight:700; }
-.daily { display:grid; gap:16px; }
-.daily-progress, .planning { padding:16px; background:var(--constia-selection-soft); border-radius:20px; }
+.month-tools { display:flex; flex-wrap:wrap; align-items:center; gap:0 10px; margin-block-start:4px; }
+.month-tools .back-today { font-size:.75rem; }
+.daily { display:grid; gap:10px; }
+.daily-summary { position:relative; padding:10px 12px; min-block-size:68px; }
+.daily-summary:has(.percentage) { padding-inline-end:72px; }
+.daily-summary h2 { font-size:1rem; }
+.daily-summary p { margin:3px 0 0; font-size:.8125rem; color:var(--constia-text-secondary); }
 .daily-list { display:grid; gap:12px; padding:0; list-style:none; margin:0; }
 .daily-list li { background:white; border:1px solid var(--constia-secondary-action); border-radius:20px; padding:16px; overflow-wrap:anywhere; }
 .daily-list h3 { font-size:1rem; }
@@ -27,22 +72,33 @@
 .spinner { display:inline-block; width:24px; height:24px; border:3px solid var(--constia-border); border-top-color:var(--constia-secondary-action); border-radius:50%; animation:spin 1s linear infinite; margin-right:8px; }
 @keyframes spin { to { transform:rotate(360deg); } }
 @media(prefers-reduced-motion:reduce) { .spinner { animation:none; } }
-@media(max-width:380px) { .month-grid { gap:3px; } .weekday { font-size:.7rem; } .day-count, .chosen { font-size:.625rem; } .calendar a.day { border-radius:12px; } .day-number { width:26px; height:26px; } .month-nav h2 { order:-1; width:100%; } }
+@media(max-width:380px) {
+    .month-grid { gap:3px; }
+    .weekday { font-size:.6875rem; }
+    .month-nav h2 { font-size:1rem; }
+}
 .day.complete .day-number { background:#DDF9F1; }
 .day.partial .day-number { background:#F0ECFF; }
 .day.none .day-number { background:#FFF1E7; }
 .day.neutral .day-number { background:#F4F2F8; }
 .day.future .day-number { background:#F6F8FC; }
 .day.selected .day-number { background:#7141F3; }
-.day-count, .chosen { font-size:.75rem; }
-.daily-progress { display:flex; gap:12px; align-items:center; justify-content:space-between; }
-.percentage { border:4px solid #E9E4FA; border-radius:50%; width:58px; height:58px; flex:none; display:grid; place-items:center; font-weight:700; }
-.calendar-key { margin:0; color:var(--constia-text-secondary); font-size:.875rem; }
+.percentage {
+    position: absolute;
+    inset-inline-end: 10px;
+    inset-block-start: 8px;
+    inline-size: 52px;
+    block-size: 52px;
+    display: grid;
+    place-items: center;
+    font-size: .8125rem;
+    font-weight: 700;
+}
+.calendar-key { flex:1 1 180px; margin:0; color:var(--constia-text-secondary); font-size:.6875rem; }
 .daily-list li { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 12px; padding:14px; }
 .daily-list h3 { grid-column:1; }
 .daily-list .completion-state { grid-column:2; grid-row:1; margin:0; }
 .daily-list p:not(.completion-state) { grid-column:1 / -1; margin:4px 0; }
-.percentage { border:0; position:relative; }
 .percentage svg { position:absolute; inset:0; width:100%; height:100%; fill:none; stroke-width:4.5px; }
 .ring-track { stroke:#E9E4FA; }
 .ring-value { stroke:#7141F3; }
