@@ -1,0 +1,61 @@
+@page "/calendario"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [StreamRendering]
+@layout AppLayout
+@using System.Globalization
+@using Constia.Web.Habitos
+@inject ConsultarCalendario Consulta
+@inject NavigationManager Navigation
+
+<PageTitle>Calendario · CONSTIA</PageTitle>
+<section class="calendar" aria-labelledby="calendar-title">
+    <header><h1 id="calendar-title" tabindex="-1">Calendario</h1><p>¡Hola, @Http.User.Identity?.Name!</p><p>Un pequeño paso hace la diferencia.</p></header>
+    <p id="calendar-status" role="status" class="visually-hidden">@anuncio</p>
+    @if (error is not null)
+    { <div role="alert"><h2>No pudimos cargar el calendario</h2><p>@error</p><a href="@Navigation.Uri">Reintentar</a></div> }
+    else if (vista is null)
+    { <p role="status"><span class="spinner" aria-hidden="true"></span>Cargando tu calendario…</p> }
+    else
+    {
+        <nav class="month-nav" aria-label="Navegación mensual">
+            @if (vista.Mes > DateOnly.MinValue) { <a href="@MesUrl(-1)" aria-label="Mes anterior">Anterior</a> } else { <span>Anterior</span> }
+            <h2>@vista.Mes.ToString("MMMM yyyy", Cultura)</h2>
+            @if (vista.Mes.Year != 9999 || vista.Mes.Month != 12) { <a href="@MesUrl(1)" aria-label="Mes siguiente">Siguiente</a> } else { <span>Siguiente</span> }
+        </nav>
+        <a class="back-today" href="/calendario">Volver a hoy</a>
+        @if (vista.ErrorRango is not null)
+        { <div role="alert"><h2>Resumen del rango no disponible</h2><p>@vista.ErrorRango</p><p>No conocemos el resumen completo de este rango. Esto no identifica qué fechas están afectadas.</p><a href="@Navigation.Uri">Reintentar rango</a></div> }
+        <div class="month-grid" aria-label="Fechas del mes">
+            @foreach (var d in PresentacionHabitos.Semana) { <span class="weekday" aria-hidden="true">@d.Corto</span> }
+            @for (var n = vista.Desde.DayNumber; n <= vista.Hasta.DayNumber; n++)
+            {
+                var fecha = DateOnly.FromDayNumber(n);
+                var resumen = vista.Dias?.Single(d => d.Fecha == fecha);
+                <a @key="fecha" class="day @EstadoDia(fecha, resumen) @(fecha.Month != vista.Mes.Month ? "adjacent" : null) @(fecha == vista.Seleccion ? "selected" : null) @(fecha == vista.Hoy ? "today" : null) @(fecha > vista.Hoy ? "future" : null)" href="@FechaUrl(fecha)" aria-label="@Etiqueta(fecha, resumen)" aria-current="@(fecha == vista.Hoy ? "date" : null)">
+                    <span class="day-number">@fecha.Day</span>
+                    <span class="day-count" aria-hidden="true">@(resumen is null ? "—" : resumen.Programados == 0 ? "—" : fecha > vista.Hoy ? $"{resumen.Programados} p." : $"{resumen.Cumplidos}/{resumen.Programados}")</span>
+                    @if (fecha == vista.Seleccion) { <span class="chosen" aria-hidden="true">Sel.</span> }
+                </a>
+            }
+        </div>
+        <p class="calendar-key">Conteos: realizados/programados. —: sin programación cuando el rango está disponible. p.: planificación futura. Sel.: fecha seleccionada.</p>
+        <section class="daily" aria-labelledby="selected-date">
+            <h2 id="selected-date">@vista.Seleccion.ToString("dddd d 'de' MMMM yyyy", Cultura)</h2>
+            @if (vista.Seleccion > vista.Hoy) { <p class="planning">Planificación futura</p> }
+            @if (vista.ErrorDetalle is not null)
+            { <div role="alert"><p>@vista.ErrorDetalle</p><a href="@Navigation.Uri">Reintentar detalle</a></div> }
+            else if (vista.Habitos is { Length: 0 }) { <p>No hay hábitos programados para esta fecha.</p> }
+            else if (vista.Habitos is { } habitos)
+            {
+                var hechos = habitos.Count(h => h.Cumplido);
+                <div class="daily-progress">@if (vista.Seleccion > vista.Hoy) { <p>@habitos.Length hábitos programados</p> } else { <p>@hechos de @habitos.Length hábitos realizados</p> }@if (vista.Seleccion <= vista.Hoy) { <span class="percentage"><svg viewBox="0 0 60 60" aria-hidden="true"><circle cx="30" cy="30" r="25" class="ring-track" /><circle cx="30" cy="30" r="25" pathLength="100" class="ring-value" stroke-dasharray="@($"{hechos * 100 / habitos.Length} 100")" transform="rotate(-90 30 30)" /></svg><span>@(hechos * 100 / habitos.Length)%</span></span> }</div>
+                <ul class="daily-list">
+                    @foreach (var h in habitos)
+                    { <li @key="h.Id"><h3>@h.Nombre</h3>@if (!string.IsNullOrWhiteSpace(h.Descripcion)) { <p>@h.Descripcion</p> }<p class="completion-state">@(h.Cumplido ? vista.Seleccion > vista.Hoy ? "Con registro" : "Realizado" : vista.Seleccion > vista.Hoy ? "Programado" : "Sin registro")</p></li> }
+                </ul>
+            }
+            <p class="read-only">Esta vista es de consulta. Para registrar un cumplimiento de hoy, entrá a Hoy.</p>
+        </section>
+    }
+    <nav class="account-links" aria-label="Navegación de cuenta"><a href="/hoy">Ir a Hoy</a><a href="/cuenta">Cuenta y cerrar sesión</a></nav>
+</section>

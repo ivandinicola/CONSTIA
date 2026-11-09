@@ -485,3 +485,11 @@ La coordinación retiene como máximo ocho borradores por sesión, cada uno por 
 El alcance es una sola instancia, como las sesiones Web. Un reinicio invalida sesiones y pierde esta coordinación; la API no tiene idempotencia durable de creación. Revisar Mis hábitos antes de iniciar otro borrador tras una incertidumbre o un reinicio. Antes de réplicas o reintentos durables hacen falta almacenamiento/coordinación compartidos y un contrato de idempotencia API; esta entrega no los incorpora.
 
 Recursos: dieciséis PNG existentes; check original del master Control · Realizado · PNG de Penpot (media 129977ce-683b-806a-8008-c92f778e5bc6), y confeti oficial aprobado. Sin ilustraciones sustitutas.
+
+## UI-010 — Calendario de consulta
+
+`/calendario` requiere sesión y consume desde el servidor tres lecturas: `/api/usuarios/mi-fecha-local`, STAT-005 para el rango visible de hasta 42 días y COMP-007 para la fecha seleccionada. La fecha civil usa la zona IANA persistida vigente, independientemente de la inicialización del historial; nunca el reloj del navegador. Navegar o recargar vuelve a consultar esta autoridad temporal.
+
+Adaptación autorizada de PEN-002: conteos y detalle de solo lectura, sin puntos ni colores por categoría y sin acciones de registro. No se infieren categorías históricas desde metadatos actuales. Se conservan grilla lunes–domingo, Hoy/selección, estados diferenciados y neutralidad; las fechas futuras son planificación, no incumplimiento. El porcentaje del detalle se muestra solo para fechas no futuras y con oportunidades conocidas. La fecha elegida tiene contorno y texto «Elegido», además de color.
+
+Un 422 de STAT-005 impide acreditar el resumen de todo el rango: no identifica celdas desconocidas. El detalle seleccionado usa su propia respuesta y puede estar disponible aun con error del rango. Inversamente, un error del detalle no invalida por sí solo los conteos acreditados. 503 se distingue de historia desconocida; vacío requiere 200 válido. Sin POST de cumplimiento, sin escritura, sin idempotencia nueva ni cambio de los contratos COMP-007/STAT-005. El dock activa Calendario y conserva Hoy/Cuenta.

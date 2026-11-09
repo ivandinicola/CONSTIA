@@ -16,6 +16,23 @@ public sealed class UsuariosController(
     CambiarZonaHorariaUsuario cambiarZonaHorariaUsuario,
     IUsuarioActual usuarioActual) : ControllerBase
 {
+    [Authorize]
+    [HttpGet("mi-fecha-local")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ProducesResponseType(typeof(FechaCivilLocalResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<FechaCivilLocalResponse>> ConsultarFechaLocal(
+        [FromServices] IUsuarioRepository usuarios,
+        [FromServices] IFechaLocalUsuario fechaLocal,
+        CancellationToken cancellationToken)
+    {
+        if (usuarioActual.UsuarioId is not Guid id || await usuarios.BuscarPorIdAsync(id, cancellationToken) is not { } usuario)
+            return Unauthorized();
+        try { return Ok(new FechaCivilLocalResponse(fechaLocal.ObtenerHoy(usuario.TimeZoneId))); }
+        catch (ZonaHorariaPersistidaInvalidaException)
+        { return Problem(statusCode: StatusCodes.Status500InternalServerError, title: "No se pudo determinar la fecha local del usuario."); }
+    }
     [HttpPost]
     [EnableRateLimiting("correo")]
     [ProducesResponseType(typeof(RegistroUsuarioResponse), StatusCodes.Status201Created)]
