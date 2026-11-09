@@ -7,7 +7,7 @@
 <section class="edit-habit" aria-labelledby="edit-title">
     <a href="/habitos">Volver a Mis hábitos</a>
     <h1 id="edit-title" tabindex="-1">Editar hábito</h1>
-    @if (error is not null)
+    @if (error is not null && !revisar)
     {
         <p role="alert">@error</p>
     }
@@ -31,7 +31,7 @@
                 <select id="edit-category" name="Datos.CategoriaId">
                     @if (datos.CategoriaId is null || actual?.CategoriaId is null || categorias.Length == 0)
                     {
-                        <option value="">@(actual?.CategoriaId is null ? "Sin categoría" : "Conservar categoría actual")</option>
+                        <option value="">@(actual?.CategoriaId is null ? "Sin categoría · Elegir" : "Conservar categoría actual")</option>
                     }
                     @foreach (var categoria in categorias.OrderBy(c => c.Orden))
                     {
@@ -45,6 +45,10 @@
             </div>
             <fieldset>
                 <legend>Ícono</legend>
+                <details class="edit-icon-picker">
+                    <summary>@(string.IsNullOrEmpty(datos.IconoId)
+                        ? "Sin ícono · Elegir"
+                        : $"{iconos.FirstOrDefault(i => i.Id == datos.IconoId)?.Nombre ?? "Ícono del borrador"} · Cambiar")</summary>
                 @if (string.IsNullOrEmpty(datos.IconoId) || actual?.IconoId is null || iconos.Length == 0)
                 {
                     <label><input type="radio" name="Datos.IconoId" value="" checked="@(string.IsNullOrEmpty(datos.IconoId))" /> @(actual?.IconoId is null ? "Sin ícono" : "Conservar ícono actual")</label>
@@ -69,6 +73,7 @@
                         </label>
                     }
                 </div>
+                </details>
             </fieldset>
             <fieldset>
                 <legend>Días programados</legend>
@@ -100,13 +105,21 @@
                         <p>Los días nuevos rigen desde tu fecha local al guardar.</p>
                     }
                     <p>Se conservan tus cumplimientos.</p>
-                    <button type="submit" name="Accion" value="volver" formnovalidate autofocus>Volver a editar</button>
-                    <button type="submit" name="Accion" value="confirmar">Guardar cambios</button>
+                    <div class="edit-saving" aria-hidden="true"><span class="habits-spinner"></span>Guardando cambios…</div>
+                    <div id="edit-dialog-status" class="visually-hidden" role="status"></div>
+                    <div class="edit-actions">
+                        <button type="submit" name="Accion" value="volver" formnovalidate autofocus>Volver a editar</button>
+                        <button type="submit" name="Accion" value="confirmar">Guardar cambios</button>
+                    </div>
                 </dialog>
             }
             else if (revisar)
             {
-                <button type="submit" name="Accion" value="revisar" formnovalidate>Revisar versión actual</button>
+                <p class="edit-conflict" role="alert" tabindex="-1" autofocus>@error</p>
+                <div class="edit-actions">
+                    <a href="/habitos">Cancelar</a>
+                    <button type="submit" name="Accion" value="revisar" formnovalidate>Revisar versión actual</button>
+                </div>
             }
             else
             {
@@ -124,6 +137,7 @@
                 }
                 @if (actual is not null && categorias.Length > 0 && iconos.Length > 0)
                 {
+                    <div class="edit-saving" aria-hidden="true"><span class="habits-spinner"></span>Guardando cambios…</div>
                     <button type="submit" name="Accion" value="guardar" autofocus="@(Accion == "volver")">Guardar cambios</button>
                 }
                 else
@@ -132,7 +146,7 @@
                 }
             }
         </form>
-        <p id="edit-status" role="status"></p>
+        <div id="edit-status" class="visually-hidden" role="status"></div>
     }
     else if (error is not null)
     {

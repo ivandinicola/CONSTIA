@@ -60,6 +60,10 @@
         padding-inline-start: max(12px, env(safe-area-inset-left));
         padding-inline-end: max(12px, env(safe-area-inset-right));
     }
+
+    .app-content:has(> .edit-habit) {
+        padding-block-start: 8px;
+    }
 }
 
 .app-navigation {

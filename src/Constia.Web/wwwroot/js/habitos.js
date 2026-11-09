@@ -53,11 +53,22 @@ document.addEventListener("submit", event => {
         event.preventDefault();
         return;
     }
-    form.dataset.pending = "true";
-    const status = document.getElementById("edit-status");
-    status.textContent = event.submitter?.value === "confirmar" || event.submitter?.value === "guardar"
-        ? "Procesando los cambios…" : "Consultando el hábito…";
-    form.setAttribute("aria-busy", "true");
+    const action = event.submitter?.value;
+    const saving = action === "confirmar" || action === "guardar";
+    form.dataset.pending = saving ? "saving" : "request";
+    const dialog = form.querySelector("dialog:modal");
+    const busy = dialog?.querySelector(".edit-actions") ?? form;
+    const status = document.getElementById(dialog ? "edit-dialog-status" : "edit-status");
+    busy.setAttribute("aria-busy", "true");
+    status.textContent = saving ? "Guardando cambios…" : "Consultando el hábito…";
+    if (saving) (dialog ?? form).querySelector(".edit-saving")?.scrollIntoView({ block: "nearest" });
+});
+document.addEventListener("change", event => {
+    const input = event.target;
+    if (!input.matches('.edit-icon-picker input[name="Datos.IconoId"]:checked')) return;
+    input.closest("details").querySelector("summary").textContent = input.value
+        ? `${input.labels[0].textContent.trim()} · Cambiar`
+        : `${input.labels[0].textContent.trim()} · Elegir`;
 });
 window.addEventListener("pageshow", event => {
     if (!event.persisted) return;
@@ -65,7 +76,10 @@ window.addEventListener("pageshow", event => {
     if (!form) return;
     delete form.dataset.pending;
     form.removeAttribute("aria-busy");
+    form.querySelector(".edit-dialog .edit-actions")?.removeAttribute("aria-busy");
     document.getElementById("edit-status").textContent = "";
+    const dialogStatus = document.getElementById("edit-dialog-status");
+    if (dialogStatus) dialogStatus.textContent = "";
 });
 
 window.addEventListener("pageshow", () => {

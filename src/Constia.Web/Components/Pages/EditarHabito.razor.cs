@@ -38,6 +38,8 @@ public partial class EditarHabito
 
     private async Task CargarAsync()
     {
+        if (Datos is { } borrador) borrador.Dias ??= [];
+
         var token = await Http.GetTokenAsync("access_token");
         if (string.IsNullOrWhiteSpace(token))
         {
