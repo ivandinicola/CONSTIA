@@ -5,12 +5,14 @@
 .habits button, .habits a { min-height:44px; }
 .habits button { padding:10px 16px; border:1px solid var(--constia-secondary-action); border-radius:16px; background:var(--constia-secondary-action); color:white; font:inherit; cursor:pointer; }
 .habits button:disabled { background:var(--constia-selection-soft); color:var(--constia-text-secondary); border-color:var(--constia-border); cursor:default; }
-.new-habit { justify-self:center; }
 .habit-list { padding:0; margin:0; display:grid; gap:14px; list-style:none; }
 .habit-list > li { border:1px solid var(--constia-secondary-action); border-radius:20px; background:white; }
-.habit-list summary { padding:14px; cursor:pointer; min-height:66px; }
-.habit-list summary img { vertical-align:middle; margin-inline-end:12px; object-fit:contain; }
-.habit-list summary > span { display:inline-block; vertical-align:middle; max-width:80%; overflow-wrap:anywhere; }
+.habit-list summary { display:flex; align-items:center; gap:10px; padding:8px 14px; cursor:pointer; min-height:66px; list-style:none; }
+.habit-list summary::-webkit-details-marker { display:none; }
+.habit-list summary img { flex:none; object-fit:contain; }
+.habit-summary-text { flex:1; min-inline-size:0; overflow-wrap:anywhere; }
+.habit-chevron { transform:rotate(90deg); }
+details[open] .habit-chevron { transform:rotate(-90deg); }
 .schedule { display:block; margin-top:4px; font-size:.875rem; color:var(--constia-text-secondary); }
 .habit-detail { padding:0 16px 16px; }
 .habit-detail h2 { font-size:1rem; }
@@ -18,8 +20,36 @@
 .week li { padding:6px; border-radius:10px; border:1px solid var(--constia-border); }
 .week .scheduled { background:var(--constia-selection-soft); border-color:var(--constia-secondary-action); font-weight:700; }
 .habit-state { margin-top:16px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
-.confirmation, .uncertain { padding:20px; border:2px solid var(--constia-secondary-action); border-radius:20px; margin-bottom:20px; background:white; }
-.confirmation > button + button { margin-inline-start:16px; background:var(--constia-surface); color:var(--constia-ink); }
+.uncertain { padding:20px; border:2px solid var(--constia-secondary-action); border-radius:20px; margin-bottom:20px; background:white; }
+.confirmation {
+    inline-size: min(342px, calc(100% - 32px));
+    max-block-size: calc(100dvh - 32px);
+    padding: 20px 23px 16px;
+    border: 1px solid var(--constia-border);
+    border-radius: 24px;
+    background: var(--constia-surface);
+    color: var(--constia-ink);
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+.confirmation[open]:not(:modal) { position:static; margin-block-end:16px; }
+.confirmation::backdrop { background: rgb(17 27 72 / 34%); }
+.confirmation-icon {
+    display:grid;
+    place-items:center;
+    inline-size:76px;
+    block-size:76px;
+    margin-inline:auto;
+    border-radius:50%;
+    background:#feeeee;
+}
+.confirmation h2 { margin:12px 0; font-size:1.125rem; }
+.confirmation p { margin:8px 0; font-size:.875rem; }
+.confirmation p[id] { color:var(--constia-text-secondary); }
+.habits .confirmation button { display:block; inline-size:100%; font-weight:700; }
+.habits .confirmation button:first-of-type { margin-block-start:20px; background:var(--constia-brand-coral); color:var(--constia-ink); }
+.habits .confirmation button + button { margin-block-start:16px; background:var(--constia-surface); color:var(--constia-ink); }
+.habits .confirmation button:disabled { opacity:.65; cursor:wait; }
 .loading, .empty { min-height:300px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
 .spinner { width:32px; height:32px; border:3px solid var(--constia-border); border-top-color:var(--constia-secondary-action); border-radius:50%; animation:spin 1s linear infinite; }
 @keyframes spin { to { transform:rotate(360deg); } }
@@ -36,4 +66,4 @@
 .new-habit img, .warning-art, .empty-art { flex:none; object-fit:contain; }
 .empty-art { margin-block-end:12px; }
 .warning-art { display:block; }
-.habits a.new-habit { padding:10px 16px; border:1px solid var(--constia-secondary-action); border-radius:16px; background:var(--constia-secondary-action); color:white; text-decoration:none; }
+.habits a.new-habit { padding:8px 16px; border-radius:14px; background:var(--constia-selection-soft); color:var(--constia-ink); font-weight:700; text-decoration:none; }

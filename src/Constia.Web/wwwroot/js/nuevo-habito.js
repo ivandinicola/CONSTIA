@@ -11,6 +11,11 @@ document.addEventListener("submit", event => {
     const status = document.getElementById("create-status");
     status.textContent = button.value === "crear" ? "Creando tu hábito…" : "Preparando el siguiente paso…";
 }, true);
+document.addEventListener("focusin", event => {
+    const option = event.target.closest(".create-step :is(.category, .icon-choice, .day-choice)");
+    if (option) option.scrollIntoView({ block: "nearest", inline: "nearest" });
+});
+
 function restoreCreate() {
     const form = document.querySelector("form[data-create]");
     if (form) {

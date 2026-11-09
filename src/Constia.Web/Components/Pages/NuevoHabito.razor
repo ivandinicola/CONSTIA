@@ -43,15 +43,16 @@
     }
     else
     {
-        <p class="intro">@(b.Paso switch { 1 => "Dale un nombre y elegí una categoría.", 2 => "Elegí un ícono que lo represente.", 3 => "Seleccioná los días en los que lo realizarás.", _ => "Revisá la información y creá tu hábito." })</p>
-        <ol class="steps" aria-label="Pasos para crear un hábito">
-            @for (var i = 1; i <= 4; i++) { <li aria-current="@(b.Paso == i ? "step" : null)"><span>@i</span></li> }
-        </ol>
-        <p class="step-count">Paso @b.Paso de 4</p>
-        <p id="create-error" role="alert" tabindex="-1" class="@(b.Error is null ? "visually-hidden" : null)">@b.Error</p>
         <form method="post" @formname="crear-habito" @onsubmit="EjecutarAsync" data-create data-enhance>
             <AntiforgeryToken />
             <input type="hidden" name="Revision" value="@b.Revision" />
+            <div class="create-step">
+            <p class="intro">@(b.Paso switch { 1 => "Dale un nombre y elegí una categoría.", 2 => "Elegí un ícono que lo represente.", 3 => "Seleccioná los días en los que lo realizarás.", _ => "Revisá la información y creá tu hábito." })</p>
+            <ol class="steps" aria-label="Pasos para crear un hábito">
+                @for (var i = 1; i <= 4; i++) { <li aria-current="@(b.Paso == i ? "step" : null)"><span>@i</span></li> }
+            </ol>
+            <p class="step-count">Paso @b.Paso de 4</p>
+            <p id="create-error" role="alert" tabindex="-1" class="@(b.Error is null ? "visually-hidden" : null)">@b.Error</p>
             @if (b.Catalogos is null)
             {
                 <button type="submit" name="Accion" value="catalogos">Reintentar carga de opciones</button>
@@ -95,6 +96,10 @@
                     <div class="review"><img src="@Assets[$"assets/constia-iconos-v1/{Icono(b.Datos.IconoId)}"]" width="56" height="56" alt="" /><h2>@b.Datos.Nombre</h2><p>@b.Catalogos.Categorias.Single(c => c.Id == b.Datos.CategoriaId).Nombre</p><p>Días programados<br /><strong>@Resumen(b.Datos.DiasProgramados)</strong></p></div>
                     <p>La fecha de inicio será la fecha local que determine el servidor al guardar.</p>
                 }
+            }
+            </div>
+            @if (b.Catalogos is not null)
+            {
                 <div class="actions">
                     @if (b.Paso > 1) { <button class="secondary" type="submit" name="Accion" value="volver" formnovalidate>Volver</button> }
                     <button class="primary" type="submit" name="Accion" value="@(b.Paso == 4 ? "crear" : "continuar")">@(b.Paso == 4 ? "Crear hábito" : "Continuar")</button>

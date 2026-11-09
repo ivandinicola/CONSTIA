@@ -9,20 +9,21 @@
 @inject NavigationManager Navigation
 
 <PageTitle>Iniciar sesión · CONSTIA</PageTitle>
-<h1 tabindex="-1">Iniciá sesión</h1>
+<h1 class="cuenta-entrada" tabindex="-1">Iniciá sesión</h1>
+<p class="cuenta-intro">Ingresá a tu cuenta para continuar con tus hábitos.</p>
 
 <form method="post" @formname="login" @onsubmit="IniciarSesionAsync" data-login>
     <AntiforgeryToken />
     <fieldset>
         <div>
             <label for="login-email">Correo electrónico</label>
-            <input id="login-email" name="Datos.Email" type="email" value="@Datos?.Email" autocomplete="username"
+            <input id="login-email" class="cuenta-email" name="Datos.Email" type="email" value="@Datos?.Email" autocomplete="username"
                    aria-invalid="@(errorEmail is null ? null : "true")" aria-describedby="login-email-error" required />
             <div id="login-email-error" class="cuenta-error">@errorEmail</div>
         </div>
         <div>
             <label for="login-password">Contraseña</label>
-            <input id="login-password" name="Datos.Password" type="password" autocomplete="current-password"
+            <input id="login-password" class="cuenta-password" name="Datos.Password" type="password" autocomplete="current-password"
                    aria-invalid="@(errorPassword is null ? null : "true")" aria-describedby="login-password-error" required />
             <div id="login-password-error" class="cuenta-error">@errorPassword</div>
         </div>
@@ -33,9 +34,9 @@
         <p class="cuenta-error" role="alert">@error</p>
     }
 </form>
-<p id="login-status" role="status"></p>
+<p id="login-status" class="cuenta-carga" role="status"></p>
 
-<p>¿Todavía no tenés cuenta? <a href="registro">Creá tu cuenta</a></p>
+<p class="cuenta-pie">¿Todavía no tenés cuenta? <a href="registro">Creá tu cuenta</a></p>
 
 @code {
     [CascadingParameter] private HttpContext Http { get; set; } = default!;

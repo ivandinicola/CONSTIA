@@ -2,13 +2,15 @@
 @layout MainLayout
 
 <div class="app-shell">
-    <header class="app-header">
-        <ConstiaBrand />
-    </header>
+    <div class="app-scroll">
+        <header class="app-header">
+            <ConstiaBrand />
+        </header>
 
-    <main id="contenido-principal" class="app-content" tabindex="-1">
-        @Body
-    </main>
+        <main id="contenido-principal" class="app-content" tabindex="-1">
+            @Body
+        </main>
+    </div>
 
     <footer class="app-navigation">
         <ConstiaNavigation />

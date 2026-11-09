@@ -5,7 +5,7 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace Constia.Web.Habitos;
 
-public sealed record HabitoDelDia(Guid Id, string Nombre, string? Descripcion, bool Cumplido);
+public sealed record HabitoDelDia(Guid Id, string Nombre, string? Descripcion, bool Cumplido, string? IconoId = null);
 public sealed record HabitosHoy(DateOnly Fecha, HabitoDelDia[] Habitos);
 public sealed record Cumplimiento(Guid Id, DateOnly Fecha);
 public sealed record ResultadoHoy(HabitosHoy? Dia, string? Mensaje = null, string? Error = null, bool LoginRequerido = false);

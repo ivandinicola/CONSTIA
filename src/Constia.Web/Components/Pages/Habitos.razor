@@ -18,14 +18,14 @@
         <AntiforgeryToken />
         @if (confirmar is not null)
         {
-            <section class="confirmation" aria-labelledby="habits-confirm">
-                <img class="warning-art" src="@Assets["assets/pen005/advertencia.svg"]" width="32" height="32" alt="" />
-                <h2 id="habits-confirm" tabindex="-1">Desactivar hábito</h2>
-                <p>«@confirmar.Nombre»</p>
-                <p>Desde hoy, en tu fecha local, dejará de aparecer entre activos. Se conservan los cumplimientos anteriores. No se puede reactivar en V1.</p>
+            <dialog class="confirmation" open aria-labelledby="habits-confirm" aria-describedby="habits-confirm-description">
+                <div class="confirmation-icon" aria-hidden="true"><img class="warning-art" src="@Assets["assets/pen005/advertencia.svg"]" width="32" height="32" alt="" /></div>
+                <h2 id="habits-confirm">Desactivar hábito</h2>
+                <p><strong>@confirmar.Nombre</strong></p>
+                <p id="habits-confirm-description">Desde hoy, en tu fecha local, dejará de aparecer entre activos. Se conservan los cumplimientos anteriores. No se puede reactivar en V1.</p>
                 <button type="submit" name="Accion" value="confirmar|@confirmar.Id">Desactivar</button>
-                <button type="submit" name="Accion" value="cancelar|@confirmar.Id">Cancelar</button>
-            </section>
+                <button type="submit" name="Accion" value="cancelar|@confirmar.Id" data-cancel-confirmation autofocus>Cancelar</button>
+            </dialog>
         }
         @foreach (var incierto in inciertos)
         {
@@ -53,7 +53,8 @@
                     <li @key="habito.Id"><details>
                         <summary id="habito-@habito.Id">
                             @if (Icono(habito.IconoId) is { } icono) { <img src="@Assets[$"assets/constia-iconos-v1/{icono}"]" width="44" height="44" alt="" /> }
-                            <span><strong>@habito.Nombre</strong><span class="schedule">@Resumen(habito.DiasProgramados)</span></span>
+                            <span class="habit-summary-text"><strong>@habito.Nombre</strong><span class="schedule">@Resumen(habito.DiasProgramados)</span></span>
+                            <img class="habit-chevron" src="@Assets["assets/pen005/chevron.svg"]" width="10" height="14" alt="" />
                         </summary>
                         <div class="habit-detail">
                             @if (!string.IsNullOrWhiteSpace(habito.Descripcion)) { <p>@habito.Descripcion</p> }

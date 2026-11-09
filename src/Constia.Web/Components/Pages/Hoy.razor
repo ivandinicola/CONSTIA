@@ -10,17 +10,17 @@
 <PageTitle>Mi día · CONSTIA</PageTitle>
 
 <section class="today" aria-labelledby="today-title">
-    <header class="today-header">
-        <a href="/cuenta">Mi cuenta</a>
-        <h1 id="today-title" tabindex="-1">Mi día</h1>
-        <p>¡Hola, @Http.User.Identity?.Name!</p>
-        @if (dia is not null)
-        {
-            <time datetime="@dia.Fecha.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)">
-                @dia.Fecha.ToString("dddd d 'de' MMMM", CultureInfo.GetCultureInfo("es-AR"))
-            </time>
-        }
-    </header>
+    <DayHeader Title="Mi día" TitleId="today-title" Name="@Http.User.Identity?.Name">
+        <div class="today-meta">
+            @if (dia is not null)
+            {
+                <time datetime="@dia.Fecha.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)">
+                    @dia.Fecha.ToString("dddd d 'de' MMMM", CultureInfo.GetCultureInfo("es-AR"))
+                </time>
+            }
+            <a href="/cuenta">Mi cuenta</a>
+        </div>
+    </DayHeader>
 
     <p id="completion-status" role="status" tabindex="-1" class="@(string.IsNullOrWhiteSpace(mensaje) ? "visually-hidden" : null)">@mensaje</p>
     <form method="post" @formname="cumplir" @onsubmit="RegistrarAsync" data-completion data-enhance aria-busy="@(enProceso ? "true" : null)">
@@ -60,24 +60,38 @@
                 <ul class="today-habits">
                     @foreach (var habito in dia.Habitos)
                     {
-                        <li class="today-habit" @key="habito.Id">
-                            <h3>@habito.Nombre</h3>
-                            @if (!string.IsNullOrWhiteSpace(habito.Descripcion))
+                        var incierto = !habito.Cumplido && Cumplir.EstaIncierto(usuario, habito.Id, dia.Fecha);
+                        <li class="today-habit @(habito.Cumplido ? "is-complete" : null)" @key="habito.Id">
+                            @if (PresentacionHabitos.Icono(habito.IconoId) is { } icono)
                             {
-                                <p>@habito.Descripcion</p>
+                                <span class="habit-icon" data-icon="@habito.IconoId" aria-hidden="true">
+                                    <img src="@Assets[$"assets/constia-iconos-v1/{icono}"]" width="32" height="32" alt="" />
+                                </span>
                             }
-                            <span class="habit-status">@(habito.Cumplido ? "Realizado" : "Pendiente")</span>
-                            @if (!habito.Cumplido)
-                            {
-                                var incierto = Cumplir.EstaIncierto(usuario, habito.Id, dia.Fecha);
-                                @if (!incierto)
+                            <div class="habit-copy">
+                                <h3>@habito.Nombre</h3>
+                                @if (!string.IsNullOrWhiteSpace(habito.Descripcion))
                                 {
-                                <button type="submit" name="Solicitud" value="@($"{habito.Id}|{dia.Fecha:yyyy-MM-dd}")"
+                                    <p>@habito.Descripcion</p>
+                                }
+                            </div>
+                            <div class="habit-action">
+                            @if (habito.Cumplido)
+                            {
+                                <span class="habit-status">Realizado <img src="@Assets["assets/pen006/realizado.png"]" width="18" height="18" alt="" /></span>
+                            }
+                            else if (incierto)
+                            {
+                                <span class="habit-status">Por comprobar</span>
+                            }
+                            else
+                            {
+                                <button class="habit-complete" type="submit" name="Solicitud" value="@($"{habito.Id}|{dia.Fecha:yyyy-MM-dd}")"
                                         aria-label="@($"Marcar como realizado de {habito.Nombre}, {dia.Fecha:dd/MM/yyyy}")">
                                     Marcar como realizado
                                 </button>
-                                }
                             }
+                            </div>
                         </li>
                     }
                 </ul>

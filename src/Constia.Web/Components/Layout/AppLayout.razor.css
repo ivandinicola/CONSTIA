@@ -32,6 +32,36 @@
     align-content: start;
 }
 
+@media (max-width: 63.999rem) {
+    .app-shell {
+        block-size: 100dvh;
+        min-block-size: 0;
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) auto;
+    }
+
+    .app-scroll {
+        overflow-y: auto;
+        min-inline-size: 0;
+        scroll-padding-block: 8px;
+    }
+
+    .app-scroll:has(> .app-content > :is(.home-intro, .message-page)) {
+        display: grid;
+        grid-template-rows: auto minmax(min-content, 1fr);
+    }
+
+    .app-shell:has(.app-content > :is(.today, .calendar)) .app-header {
+        display: none;
+    }
+
+    .app-content:has(> :is(.today, .calendar)) {
+        padding-block-start: 0;
+        padding-inline-start: max(12px, env(safe-area-inset-left));
+        padding-inline-end: max(12px, env(safe-area-inset-right));
+    }
+}
+
 .app-navigation {
     padding: var(--constia-dock-inset);
     padding-block-end: max(10px, env(safe-area-inset-bottom));
@@ -39,8 +69,26 @@
     padding-inline-end: max(var(--constia-dock-inset), env(safe-area-inset-right));
 }
 
+@media (max-width: 63.999rem) and (min-height: 480px) {
+    .app-scroll:has(> .app-content > .create-habit .actions) {
+        display:grid;
+        grid-template-rows:auto minmax(0, 1fr);
+    }
+
+    .app-content:has(> .create-habit .actions) {
+        display:flex;
+        flex-direction:column;
+        min-block-size:0;
+        padding-block:8px 4px;
+    }
+}
+
 /* Adaptación de UI-001 para revisión: no es un breakpoint aprobado de Penpot. */
 @media (min-width: 64rem) {
+    .app-scroll {
+        display: contents;
+    }
+
     .app-shell {
         display: grid;
         grid-template-columns: 17rem minmax(0, 1fr);
