@@ -135,6 +135,7 @@ public sealed class HabitosController(
 
     [HttpPut("{id:guid}")]
     [ProducesResponseType(typeof(HabitoResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status412PreconditionFailed)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -154,6 +155,25 @@ public sealed class HabitosController(
             });
         }
 
+        long? versionEsperada = null;
+        if (Request.Headers.TryGetValue("If-Match", out var ifMatch))
+        {
+            var tag = ifMatch.ToString();
+            if (tag.Length < 3 || tag[0] != '"' || tag[^1] != '"' ||
+                !long.TryParse(tag.AsSpan(1, tag.Length - 2), System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out var version) ||
+                version < 1 || tag != ETagHabito(version))
+            {
+                return BadRequest(new ProblemDetails
+                {
+                    Status = StatusCodes.Status400BadRequest,
+                    Title = "If-Match debe contener la versión devuelta por el detalle del hábito."
+                });
+            }
+
+            versionEsperada = version;
+        }
+
         try
         {
             var editado = await editarHabito.EjecutarAsync(
@@ -164,7 +184,8 @@ public sealed class HabitosController(
                     request.Descripcion,
                     request.DiasProgramados!,
                     request.CategoriaId,
-                    request.IconoId),
+                    request.IconoId,
+                    versionEsperada),
                 cancellationToken);
 
             if (editado is null)
@@ -197,6 +218,13 @@ public sealed class HabitosController(
                 Detail = "La fecha efectiva entra en conflicto con la programación existente."
             });
         }
+        catch (Exception exception) when (exception is VersionHabitoDesactualizadaException ||
+            (versionEsperada.HasValue && exception is ConflictoEdicionConcurrenteException))
+        {
+            return Problem(
+                statusCode: StatusCodes.Status412PreconditionFailed,
+                title: "El hábito cambió. Revisá la versión actual antes de volver a guardar.");
+        }
         catch (ConflictoEdicionConcurrenteException)
         {
             return Conflict(new ProblemDetails
@@ -223,6 +251,9 @@ public sealed class HabitosController(
         }
     }
 
+    private static string ETagHabito(long version) =>
+        FormattableString.Invariant($"\"{version}\"");
+
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(HabitoResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -246,6 +277,7 @@ public sealed class HabitosController(
             return NotFound();
         }
 
+        Response.Headers.ETag = ETagHabito(habito.Version);
         return Ok(new HabitoResponse(
             habito.Id,
             habito.Nombre,

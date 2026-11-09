@@ -20,6 +20,7 @@ public sealed class ObtenerHabitoPorId(IHabitoRepository habitos)
                 habito.Estado,
                 habito.DiasProgramados.Select(dia => dia.Dia).ToArray(),
                 habito.CategoriaId,
-                habito.IconoId);
+                habito.IconoId,
+                habito.ConcurrencyVersion);
     }
 }

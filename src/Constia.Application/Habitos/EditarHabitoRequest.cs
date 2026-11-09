@@ -5,4 +5,5 @@ public sealed record EditarHabitoRequest(
     string? Descripcion,
     IReadOnlyCollection<DayOfWeek> DiasProgramados,
     Guid? CategoriaId = null,
-    string? IconoId = null);
+    string? IconoId = null,
+    long? VersionEsperada = null);

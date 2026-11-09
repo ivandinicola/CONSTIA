@@ -13,7 +13,7 @@
     <nav aria-label="Estado de hábitos"><span aria-current="page">Activos</span><button disabled>Inactivos · no disponible</button></nav>
     <a class="new-habit" href="/habitos/nuevo"><img src="@Assets["assets/pen005/nuevo-habito.svg"]" width="20" height="20" alt="" />Nuevo hábito</a>
     <p id="habits-status" role="status" tabindex="-1" class="@(string.IsNullOrEmpty(mensaje) ? "visually-hidden" : null)">@mensaje</p>
-    @if (volverFoco is not null) { <span id="habits-return" data-target="habito-@volverFoco" hidden></span> }
+    @if (volverFoco is not null) { <span id="habits-return" data-target="habito-@volverFoco" data-focus-card="@(Edicion is not null ? "true" : null)" hidden></span> }
     <form method="post" @formname="gestionar-habitos" @onsubmit="EjecutarAsync" data-habits data-enhance>
         <AntiforgeryToken />
         @if (confirmar is not null)
@@ -62,7 +62,7 @@
                             <ul class="week" aria-label="Programación semanal">
                                 @foreach (var dia in Semana) { <li class="@(habito.DiasProgramados.Contains(dia.Dia) ? "scheduled" : null)" aria-label="@(dia.Nombre + (habito.DiasProgramados.Contains(dia.Dia) ? ": programado" : ": no programado"))">@(dia.Nombre == "miércoles" ? "X" : dia.Nombre[..1].ToUpperInvariant())</li> }
                             </ul>
-                            <button type="button" disabled>Editar hábito · no disponible</button>
+                            <a href="/habitos/@habito.Id/editar">Editar hábito</a>
                             <div class="habit-state"><span>Estado: Activo</span>
                                 @if (!inciertos.Any(e => e.Id == habito.Id))
                                 {

@@ -1,0 +1,141 @@
+@page "/habitos/{Id:guid}/editar"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@layout AppLayout
+@using Constia.Web.Habitos
+
+<PageTitle>Editar hábito · CONSTIA</PageTitle>
+<section class="edit-habit" aria-labelledby="edit-title">
+    <a href="/habitos">Volver a Mis hábitos</a>
+    <h1 id="edit-title" tabindex="-1">Editar hábito</h1>
+    @if (error is not null)
+    {
+        <p role="alert">@error</p>
+    }
+
+    @if (Datos is { } datos)
+    {
+        <form method="post" @formname="editar-habito" @onsubmit="CargarAsync" data-edit-habit>
+            <AntiforgeryToken />
+            <input type="hidden" name="Datos.Version" value="@datos.Version" />
+            <div class="edit-fields" inert="@confirmar">
+            <div>
+                <label for="edit-name">Nombre del hábito</label>
+                <input id="edit-name" name="Datos.Nombre" value="@datos.Nombre" required />
+            </div>
+            <div>
+                <label for="edit-description">Descripción (opcional)</label>
+                <textarea id="edit-description" name="Datos.Descripcion">@datos.Descripcion</textarea>
+            </div>
+            <div>
+                <label for="edit-category">Categoría</label>
+                <select id="edit-category" name="Datos.CategoriaId">
+                    @if (datos.CategoriaId is null || actual?.CategoriaId is null || categorias.Length == 0)
+                    {
+                        <option value="">@(actual?.CategoriaId is null ? "Sin categoría" : "Conservar categoría actual")</option>
+                    }
+                    @foreach (var categoria in categorias.OrderBy(c => c.Orden))
+                    {
+                        <option value="@categoria.Id" selected="@(categoria.Id == datos.CategoriaId)">@categoria.Nombre</option>
+                    }
+                    @if (datos.CategoriaId is Guid conservada && !categorias.Any(c => c.Id == conservada))
+                    {
+                        <option value="@conservada" selected>Categoría del borrador</option>
+                    }
+                </select>
+            </div>
+            <fieldset>
+                <legend>Ícono</legend>
+                @if (string.IsNullOrEmpty(datos.IconoId) || actual?.IconoId is null || iconos.Length == 0)
+                {
+                    <label><input type="radio" name="Datos.IconoId" value="" checked="@(string.IsNullOrEmpty(datos.IconoId))" /> @(actual?.IconoId is null ? "Sin ícono" : "Conservar ícono actual")</label>
+                }
+                <div class="edit-icons">
+                    @foreach (var icono in iconos.OrderBy(i => i.Orden))
+                    {
+                        if (PresentacionHabitos.Icono(icono.Id) is { } recurso)
+                        {
+                            <label>
+                                <input type="radio" name="Datos.IconoId" value="@icono.Id" checked="@(datos.IconoId == icono.Id)" />
+                                <img src="@Assets[$"assets/constia-iconos-v1/{recurso}"]" width="40" height="40" alt="" />
+                                <span>@icono.Nombre</span>
+                            </label>
+                        }
+                    }
+                    @if (!string.IsNullOrWhiteSpace(datos.IconoId) && !iconos.Any(i => i.Id == datos.IconoId))
+                    {
+                        <label>
+                            <input type="radio" name="Datos.IconoId" value="@datos.IconoId" checked />
+                            Ícono del borrador
+                        </label>
+                    }
+                </div>
+            </fieldset>
+            <fieldset>
+                <legend>Días programados</legend>
+                <div class="edit-days">
+                    @foreach (var dia in PresentacionHabitos.Semana)
+                    {
+                        <label>
+                            <input type="checkbox" name="Datos.Dias" value="@dia.Dia" checked="@datos.Dias.Contains(dia.Dia)" aria-label="@dia.Nombre" />
+                            @dia.Corto
+                        </label>
+                    }
+                </div>
+            </fieldset>
+
+            </div>
+
+            @if (confirmar && actual is { } anterior)
+            {
+                <dialog class="edit-confirm edit-dialog" open aria-labelledby="confirm-edit-title">
+                    <h2 id="confirm-edit-title">Confirmá el cambio de días</h2>
+                    <p>Antes: @PresentacionHabitos.Resumen(anterior.DiasProgramados)</p>
+                    <p>Nueva programación: @PresentacionHabitos.Resumen(datos.Dias)</p>
+                    @if (inicioFuturo is { } inicio)
+                    {
+                        <p>Si el hábito todavía no empezó al guardar, los días nuevos rigen desde su fecha de inicio (@inicio.ToString("dd/MM/yyyy")).</p>
+                    }
+                    else
+                    {
+                        <p>Los días nuevos rigen desde tu fecha local al guardar.</p>
+                    }
+                    <p>Se conservan tus cumplimientos.</p>
+                    <button type="submit" name="Accion" value="volver" formnovalidate autofocus>Volver a editar</button>
+                    <button type="submit" name="Accion" value="confirmar">Guardar cambios</button>
+                </dialog>
+            }
+            else if (revisar)
+            {
+                <button type="submit" name="Accion" value="revisar" formnovalidate>Revisar versión actual</button>
+            }
+            else
+            {
+                @if (comparar && actual is { } vigente)
+                {
+                    <section class="edit-confirm" aria-labelledby="edit-current-title">
+                        <h2 id="edit-current-title" tabindex="-1" autofocus>Versión actual</h2>
+                        <p>@vigente.Nombre</p>
+                        <p>@vigente.Descripcion</p>
+                        <p>@(categorias.FirstOrDefault(c => c.Id == vigente.CategoriaId)?.Nombre ?? "Sin categoría")</p>
+                        <p>@(iconos.FirstOrDefault(i => i.Id == vigente.IconoId)?.Nombre ?? "Sin ícono")</p>
+                        <p>@PresentacionHabitos.Resumen(vigente.DiasProgramados)</p>
+                        <p>Tu borrador sigue en el formulario. Revisá las diferencias antes de guardar.</p>
+                    </section>
+                }
+                @if (actual is not null && categorias.Length > 0 && iconos.Length > 0)
+                {
+                    <button type="submit" name="Accion" value="guardar" autofocus="@(Accion == "volver")">Guardar cambios</button>
+                }
+                else
+                {
+                    <button type="submit" name="Accion" value="volver" formnovalidate>Reintentar carga</button>
+                }
+            }
+        </form>
+        <p id="edit-status" role="status"></p>
+    }
+    else if (error is not null)
+    {
+        <a href="/habitos/@Id/editar">Reintentar carga</a>
+    }
+</section>

@@ -22,6 +22,7 @@ public class Habito
     public DateOnly FechaInicio { get; private set; }
 
     public EstadoHabito Estado { get; private set; }
+    public long ConcurrencyVersion { get; private set; } = 1;
 
     public IReadOnlyCollection<ProgramacionHabito> Programaciones => _programaciones.AsReadOnly();
 
