@@ -11,4 +11,5 @@ public sealed record HabitoListado(
     EstadoHabito Estado,
     IReadOnlyList<DayOfWeek> DiasProgramados,
     Guid? CategoriaId,
-    string? IconoId);
+    string? IconoId,
+    long Version = 1);

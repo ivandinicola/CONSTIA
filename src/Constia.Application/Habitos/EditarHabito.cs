@@ -27,6 +27,9 @@ public sealed class EditarHabito(
             return null;
         }
 
+        if (request.VersionEsperada is long version && version != habito.ConcurrencyVersion)
+            throw new VersionHabitoDesactualizadaException();
+
         var usuario = await usuarios.BuscarPorIdAsync(usuarioId, cancellationToken);
         if (usuario is null)
         {

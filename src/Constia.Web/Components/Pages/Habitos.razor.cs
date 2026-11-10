@@ -4,6 +4,7 @@ using Constia.Web.Configuration;
 using Constia.Web.Habitos;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Constia.Web.Components.Pages;
 
@@ -12,6 +13,8 @@ public partial class Habitos
     [CascadingParameter] private HttpContext Http { get; set; } = default!;
     [Inject] private IHttpClientFactory Clients { get; set; } = default!;
     [SupplyParameterFromForm(FormName = "gestionar-habitos")] private string? Accion { get; set; }
+    [Inject] private IMemoryCache Cache { get; set; } = default!;
+    [SupplyParameterFromQuery(Name = "edicion")] private Guid? Edicion { get; set; }
     private HabitoGestion[]? habitos;
     private HabitoGestion? confirmar;
     private Guid? volverFoco;
@@ -29,6 +32,16 @@ public partial class Habitos
         {
             using var client = await ClienteAsync();
             if (client is not null) Mostrar(await Gestion.ListarAsync(client, Http.RequestAborted));
+            if (Edicion is Guid aviso)
+            {
+                var key = (Http.User.FindFirstValue(ClaimTypes.NameIdentifier), aviso);
+                if (Cache.TryGetValue<Guid>(key, out var editado) && habitos?.Any(h => h.Id == editado) == true)
+                {
+                    Cache.Remove(key);
+                    mensaje = "Cambios guardados.";
+                    volverFoco = editado;
+                }
+            }
         }
     }
     private async Task EjecutarAsync()

@@ -1,0 +1,36 @@
+.edit-habit { display:grid; gap:8px; max-width:390px; width:100%; margin-inline:auto; }
+.edit-habit form { display:grid; gap:12px; min-width:0; }
+.edit-fields { display:grid; gap:8px; min-width:0; }
+.edit-fields > div > label { display:block; font-weight:700; }
+.edit-habit input:not([type=radio], [type=checkbox]), .edit-habit select, .edit-habit textarea {
+    width:100%; min-height:44px; border:1px solid var(--constia-secondary-action); border-radius:14px;
+    background:var(--constia-surface); color:var(--constia-ink); padding:8px 12px;
+}
+.edit-habit fieldset { min-width:0; padding:0; border:0; margin:0; }
+.edit-habit legend { font-weight:700; margin-bottom:8px; }
+.edit-icon-picker summary, .edit-actions a {
+    min-height:44px; padding:8px 12px; border:1px solid var(--constia-secondary-action);
+    border-radius:14px; background:var(--constia-surface); color:var(--constia-ink);
+}
+.edit-icon-picker summary { cursor:pointer; }
+.edit-icon-picker[open] summary { margin-bottom:8px; }
+.edit-icons, .edit-days { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+@media (min-width: 360px) {
+    .edit-days { grid-template-columns:repeat(7,minmax(0,1fr)); }
+}
+.edit-icons label, .edit-days label { display:grid; justify-items:center; align-content:center; gap:4px; min-height:44px; text-align:center; font-size:.75rem; overflow-wrap:anywhere; }
+.edit-icons img { max-width:100%; object-fit:contain; }
+.edit-icons label:has(:checked), .edit-days label:has(:checked) { background:var(--constia-selection-soft); border-radius:10px; }
+.edit-habit button { min-height:44px; border:1px solid var(--constia-secondary-action); border-radius:14px; background:var(--constia-secondary-action); color:white; padding:8px 12px; cursor:pointer; }
+.edit-confirm { padding:12px; border:1px solid var(--constia-secondary-action); border-radius:16px; background:var(--constia-surface); }
+.edit-dialog { max-inline-size:min(390px, calc(100% - 32px)); max-block-size:calc(100dvh - 32px); }
+.edit-confirm h2 { font-size:1rem; }
+.edit-habit [role=alert] { color:#a72a36; }
+.edit-conflict { margin:0; }
+.edit-actions { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1.8fr); gap:8px; }
+.edit-actions a { display:grid; place-items:center; text-decoration:none; }
+.edit-actions :is(a,button) { text-align:center; overflow-wrap:anywhere; }
+.edit-saving { display:none; }
+form[data-pending=saving] .edit-saving {
+    display:grid; min-block-size:96px; gap:8px; place-content:center; justify-items:center; text-align:center;
+}

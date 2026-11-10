@@ -31,7 +31,8 @@ function restoreHabits() {
     const returnTarget = document.getElementById(document.getElementById("habits-return")?.dataset.target);
     const details = returnTarget?.closest("details");
     if (details) details.open = true;
-    const target = details?.querySelector(".state-switch") || returnTarget || (status?.textContent.trim() ? status : document.getElementById(location.hash.slice(1)));
+    const switchTarget = document.getElementById("habits-return")?.hasAttribute("data-focus-card") ? null : details?.querySelector(".state-switch");
+    const target = switchTarget || returnTarget || (status?.textContent.trim() ? status : document.getElementById(location.hash.slice(1)));
     if(target) requestAnimationFrame(() => target.focus());
 }
 document.addEventListener("cancel", event => {
@@ -44,3 +45,50 @@ document.addEventListener("cancel", event => {
 }, true);
 Blazor.addEventListener("enhancedload", restoreHabits);
 window.addEventListener("pageshow", restoreHabits);
+
+document.addEventListener("submit", event => {
+    const form = event.target;
+    if (!form.matches("form[data-edit-habit]")) return;
+    if (form.dataset.pending) {
+        event.preventDefault();
+        return;
+    }
+    const action = event.submitter?.value;
+    const saving = action === "confirmar" || action === "guardar";
+    form.dataset.pending = saving ? "saving" : "request";
+    const dialog = form.querySelector("dialog:modal");
+    const busy = dialog?.querySelector(".edit-actions") ?? form;
+    const status = document.getElementById(dialog ? "edit-dialog-status" : "edit-status");
+    busy.setAttribute("aria-busy", "true");
+    status.textContent = saving ? "Guardando cambios…" : "Consultando el hábito…";
+    if (saving) (dialog ?? form).querySelector(".edit-saving")?.scrollIntoView({ block: "nearest" });
+});
+document.addEventListener("change", event => {
+    const input = event.target;
+    if (!input.matches('.edit-icon-picker input[name="Datos.IconoId"]:checked')) return;
+    input.closest("details").querySelector("summary").textContent = input.value
+        ? `${input.labels[0].textContent.trim()} · Cambiar`
+        : `${input.labels[0].textContent.trim()} · Elegir`;
+});
+window.addEventListener("pageshow", event => {
+    if (!event.persisted) return;
+    const form = document.querySelector("form[data-edit-habit]");
+    if (!form) return;
+    delete form.dataset.pending;
+    form.removeAttribute("aria-busy");
+    form.querySelector(".edit-dialog .edit-actions")?.removeAttribute("aria-busy");
+    document.getElementById("edit-status").textContent = "";
+    const dialogStatus = document.getElementById("edit-dialog-status");
+    if (dialogStatus) dialogStatus.textContent = "";
+});
+
+window.addEventListener("pageshow", () => {
+    const dialog = document.querySelector("form[data-edit-habit] .edit-dialog");
+    if (!dialog || dialog.matches(":modal")) return;
+    dialog.close();
+    dialog.showModal();
+    dialog.addEventListener("cancel", event => {
+        event.preventDefault();
+        dialog.closest("form").requestSubmit(dialog.querySelector('button[value="volver"]'));
+    });
+});

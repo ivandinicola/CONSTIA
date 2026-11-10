@@ -32,7 +32,7 @@ public class HabitoConfiguration : IEntityTypeConfiguration<Habito>
         builder.Property(habito => habito.Estado)
             .IsRequired();
 
-        builder.Property<long>("ConcurrencyVersion")
+        builder.Property(habito => habito.ConcurrencyVersion)
             .HasColumnName("ConcurrencyVersion")
             .IsConcurrencyToken()
             .ValueGeneratedNever()

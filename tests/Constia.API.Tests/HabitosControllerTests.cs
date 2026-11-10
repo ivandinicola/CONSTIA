@@ -175,6 +175,38 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     }
 
     [Fact]
+    public async Task EditarHabito_IfMatch_ExigeVersionDelDetalle()
+    {
+        var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(),
+            new DateTimeOffset(2026, 2, 3, 4, 5, 6, TimeSpan.Zero));
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+        var ruta = $"/api/habitos/{habit.Id:D}";
+        using var detalle = await client.GetAsync(ruta);
+        Assert.Equal(HttpStatusCode.OK, detalle.StatusCode);
+        var etag = Assert.IsType<System.Net.Http.Headers.EntityTagHeaderValue>(detalle.Headers.ETag);
+        Assert.False(etag.IsWeak);
+
+        using var obsoleto = new HttpRequestMessage(HttpMethod.Put, ruta)
+        {
+            Content = JsonContent.Create(CrearRequestEdicion("No sobrescribir", null, [DayOfWeek.Friday]))
+        };
+        obsoleto.Headers.IfMatch.ParseAdd("\"2\"");
+        using var rechazo = await client.SendAsync(obsoleto);
+        Assert.Equal(HttpStatusCode.PreconditionFailed, rechazo.StatusCode);
+        Assert.Equal("Leer", habit.Nombre);
+
+        using var vigente = new HttpRequestMessage(HttpMethod.Put, ruta)
+        {
+            Content = JsonContent.Create(CrearRequestEdicion("Caminar", null, [DayOfWeek.Friday]))
+        };
+        vigente.Headers.IfMatch.Add(etag);
+        using var guardado = await client.SendAsync(vigente);
+        Assert.Equal(HttpStatusCode.OK, guardado.StatusCode);
+        Assert.Equal("Caminar", habit.Nombre);
+    }
+
+    [Fact]
     public async Task EditarHabito_Inexistente_Devuelve404()
     {
         factory.ReemplazarHabitos([]);
