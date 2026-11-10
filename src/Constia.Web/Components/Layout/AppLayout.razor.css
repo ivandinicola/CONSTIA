@@ -61,7 +61,7 @@
         padding-inline-end: max(12px, env(safe-area-inset-right));
     }
 
-    .app-content:has(> .edit-habit) {
+    .app-content:has(> :is(.edit-habit, .inactive-habits)) {
         padding-block-start: 8px;
     }
 }

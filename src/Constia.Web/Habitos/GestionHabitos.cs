@@ -25,15 +25,21 @@ public sealed class GestionHabitos(IMemoryCache cache)
     public DesactivacionIncierta[] Inciertos(Guid usuario) => Buscar(usuario)?
         .Where(e => Volatile.Read(ref e.Value.Incierto)).Select(e => new DesactivacionIncierta(e.Key, e.Value.Nombre)).ToArray() ?? [];
 
-    public async Task<ResultadoGestion> ListarAsync(HttpClient client, CancellationToken ct)
+    public Task<ResultadoGestion> ListarAsync(HttpClient client, CancellationToken ct) =>
+        ListarAsync(client, "api/habitos", 0, ct);
+
+    public Task<ResultadoGestion> ListarInactivosAsync(HttpClient client, CancellationToken ct) =>
+        ListarAsync(client, "api/habitos/inactivos", 1, ct);
+
+    private static async Task<ResultadoGestion> ListarAsync(HttpClient client, string ruta, int estado, CancellationToken ct)
     {
         try
         {
-            using var response = await client.GetAsync("api/habitos", ct);
+            using var response = await client.GetAsync(ruta, ct);
             if (response.StatusCode == HttpStatusCode.OK)
             {
                 var habitos = await response.Content.ReadFromJsonAsync<HabitoGestion[]>(ct);
-                if (habitos is not null && habitos.All(h => Valido(h) && h.Estado == 0) &&
+                if (habitos is not null && habitos.All(h => Valido(h) && h.Estado == estado) &&
                     habitos.Select(h => h.Id).Distinct().Count() == habitos.Length)
                     return new(habitos);
             }
