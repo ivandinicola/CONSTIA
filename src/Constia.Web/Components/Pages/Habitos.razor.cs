@@ -15,6 +15,8 @@ public partial class Habitos
     [SupplyParameterFromForm(FormName = "gestionar-habitos")] private string? Accion { get; set; }
     [Inject] private IMemoryCache Cache { get; set; } = default!;
     [SupplyParameterFromQuery(Name = "edicion")] private Guid? Edicion { get; set; }
+    [SupplyParameterFromQuery(Name = "volver")] private string? Volver { get; set; }
+    private bool inactivos;
     private HabitoGestion[]? habitos;
     private HabitoGestion? confirmar;
     private Guid? volverFoco;
@@ -27,11 +29,16 @@ public partial class Habitos
     protected override async Task OnInitializedAsync()
     {
         Http.Response.Headers.CacheControl = "no-store";
+        inactivos = string.Equals(Http.Request.Path.Value?.TrimEnd('/'), "/habitos/inactivos", StringComparison.OrdinalIgnoreCase);
         Guid.TryParse(Http.User.FindFirstValue(ClaimTypes.NameIdentifier), out usuario);
         if (!HttpMethods.IsPost(Http.Request.Method))
         {
             using var client = await ClienteAsync();
-            if (client is not null) Mostrar(await Gestion.ListarAsync(client, Http.RequestAborted));
+            if (client is not null)
+                Mostrar(inactivos
+                    ? await Gestion.ListarInactivosAsync(client, Http.RequestAborted)
+                    : await Gestion.ListarAsync(client, Http.RequestAborted));
+            if (inactivos) return;
             if (Edicion is Guid aviso)
             {
                 var key = (Http.User.FindFirstValue(ClaimTypes.NameIdentifier), aviso);
@@ -46,6 +53,7 @@ public partial class Habitos
     }
     private async Task EjecutarAsync()
     {
+        if (inactivos) return;
         using var client = await ClienteAsync();
         if (client is null) return;
         var partes = Accion?.Split('|');

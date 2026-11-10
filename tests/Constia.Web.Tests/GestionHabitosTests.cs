@@ -140,6 +140,37 @@ public sealed class GestionHabitosTests
         Assert.Contains("confirmada",r.Mensaje);Assert.Single(s.Service.Inciertos(s.User));Assert.Empty(s.Service.Inciertos(otro));
         Assert.Equal(2,s.Handler.Methods.Count(m=>m==HttpMethod.Delete));
     }
+    [Fact]
+    public async Task Inactivos_ReintentoSoloLeeYConservaLegado()
+    {
+        using var s = new Scenario();
+        s.Handler.Responses.Enqueue(_ => new(HttpStatusCode.ServiceUnavailable));
+        s.Handler.Responses.Enqueue(_ => Json(new[] { Activo with { Estado = 1 } }));
+        var error = await s.Service.ListarInactivosAsync(s.Client, default);
+        Assert.Null(error.Habitos);
+        Assert.NotNull(error.Error);
+        var habito = Assert.Single((await s.Service.ListarInactivosAsync(s.Client, default)).Habitos!);
+        Assert.Equal(Activo.Descripcion, habito.Descripcion);
+        Assert.Equal(Activo.DiasProgramados, habito.DiasProgramados);
+        Assert.Null(habito.IconoId);
+        Assert.Null(habito.CategoriaId);
+        Assert.Equal(2, s.Handler.Methods.Count);
+        Assert.All(s.Handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
+        Assert.All(s.Handler.Paths, path => Assert.Equal("/api/habitos/inactivos", path));
+    }
+
+    [Fact]
+    public async Task Inactivos_DistingueVacioActivoInesperadoYSesionVencida()
+    {
+        using var s = new Scenario();
+        s.Handler.Responses.Enqueue(_ => Json(Array.Empty<HabitoGestion>()));
+        s.Handler.Responses.Enqueue(_ => Json(new[] { Activo }));
+        s.Handler.Responses.Enqueue(_ => new(HttpStatusCode.Unauthorized));
+        Assert.Empty((await s.Service.ListarInactivosAsync(s.Client, default)).Habitos!);
+        Assert.Null((await s.Service.ListarInactivosAsync(s.Client, default)).Habitos);
+        Assert.True((await s.Service.ListarInactivosAsync(s.Client, default)).LoginRequerido);
+    }
+
     private sealed class Scenario : IDisposable
     {
         public MemoryCache Cache { get; } = new(new MemoryCacheOptions());
@@ -155,11 +186,12 @@ public sealed class GestionHabitosTests
     {
         public Queue<Func<HttpRequestMessage,HttpResponseMessage>> Responses { get; } = new();
         public List<HttpMethod> Methods { get; } = [];
+        public List<string> Paths { get; } = [];
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource? Release;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage req,CancellationToken ct)
         {
-            Methods.Add(req.Method); var result = Responses.Dequeue();
+            Methods.Add(req.Method); Paths.Add(req.RequestUri!.AbsolutePath); var result = Responses.Dequeue();
             if(req.Method == HttpMethod.Delete) { Started.TrySetResult(); if(Release is not null) await Release.Task.WaitAsync(ct); }
             return result(req);
         }

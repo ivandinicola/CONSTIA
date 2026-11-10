@@ -64,3 +64,63 @@ details[open] .habit-chevron { transform:rotate(-90deg); }
 .empty-art { margin-block-end:12px; }
 .warning-art { display:block; }
 .habits a.new-habit { padding:8px 16px; border-radius:14px; background:var(--constia-selection-soft); color:var(--constia-ink); font-weight:700; text-decoration:none; }
+
+.habits > .habit-filter {
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:0;
+    border-radius:24px;
+    background:var(--constia-selection-soft);
+    text-align:center;
+}
+.habit-filter > * { display:grid; place-items:center; min-height:44px; padding:4px; border-radius:24px; }
+.habit-filter [aria-current] { background:var(--constia-secondary-action); color:white; }
+.habit-filter a { color:var(--constia-ink); }
+.inactive-habits { gap:14px; }
+.inactive-habits h1 { font-size:1.5rem; }
+.inactive-habits header p { margin:0; font-size:.875rem; }
+.inactive-habits .habit-list { gap:10px; }
+.inactive-habits .habit-list > li { border-color:var(--constia-border); }
+.inactive-habits .habit-list summary { min-height:60px; padding-inline:9px 14px; }
+.inactive-habits .habit-summary-text { font-size:.875rem; }
+.inactive-icon { flex:0 0 48px; min-block-size:48px; display:grid; place-items:center; border-radius:50%; background:var(--constia-selection-soft); }
+.inactive-habits .habit-icon-space { flex-basis:48px; }
+.inactive-habits .week li { border-radius:50%; }
+.habit-icon-space { flex:0 0 44px; }
+.inactive-habits .schedule { color:var(--constia-ink); }
+.inactive-habits .habit-detail p { overflow-wrap:anywhere; }
+.inactive-habits .loading {
+    min-block-size:max(160px, calc(100dvh - 330px));
+    gap:12px;
+}
+.inactive-habits .loading p { margin:0; }
+.inactive-habits .empty,
+.inactive-habits .habit-load-error {
+    min-height:0;
+    padding:24px 16px;
+    border:1px solid var(--constia-border);
+    border-radius:24px;
+    background:var(--constia-surface);
+    text-align:center;
+}
+.inactive-habits :is(.empty,.habit-load-error) h2 { margin:12px 0 0; font-size:1.125rem; }
+.inactive-habits .habit-warning {
+    display:grid;
+    place-items:center;
+    inline-size:74px;
+    block-size:74px;
+    margin-inline:auto;
+    border-radius:50%;
+    background:#feeeee;
+}
+.inactive-habits :is(.inactive-return,.retry-habits) {
+    display:inline-grid;
+    place-items:center;
+    inline-size:min(100%, 278px);
+    padding:8px;
+    border-radius:14px;
+    background:var(--constia-secondary-action);
+    color:white;
+    font-weight:700;
+    text-decoration:none;
+}

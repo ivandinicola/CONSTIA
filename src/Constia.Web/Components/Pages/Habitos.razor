@@ -1,4 +1,5 @@
 @page "/habitos"
+@page "/habitos/inactivos"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @attribute [StreamRendering]
 @layout AppLayout
@@ -6,11 +7,31 @@
 @inject GestionHabitos Gestion
 @inject NavigationManager Navigation
 
-@{ var inciertos = Gestion.Inciertos(usuario); }
-<PageTitle>Mis hábitos · CONSTIA</PageTitle>
-<section class="habits" aria-labelledby="habits-title">
-    <header><h1 id="habits-title">Mis hábitos</h1><p>Gestioná tus hábitos y mantené el foco.</p></header>
-    <nav aria-label="Estado de hábitos"><span aria-current="page">Activos</span><button disabled>Inactivos · no disponible</button></nav>
+@{ var inciertos = inactivos ? [] : Gestion.Inciertos(usuario); }
+<PageTitle>@(inactivos ? "Hábitos inactivos" : "Mis hábitos") · CONSTIA</PageTitle>
+<section class="habits @(inactivos ? "inactive-habits" : null)" aria-labelledby="habits-title">
+    <header>
+        <h1 id="habits-title" tabindex="@(inactivos ? "-1" : null)" autofocus="@inactivos" aria-describedby="@(inactivos ? "habits-intro" : null)">Mis hábitos</h1>
+        <p id="habits-intro">@(inactivos ? "Consultá tus hábitos desactivados." : "Gestioná tus hábitos y mantené el foco.")</p>
+    </header>
+    <nav class="habit-filter" aria-label="Estado de hábitos">
+        @if (inactivos)
+        {
+            <a href="/habitos?volver=inactivos" data-enhance-nav="false">Activos</a>
+            <span aria-current="page">Inactivos</span>
+        }
+        else
+        {
+            <span aria-current="page">Activos</span>
+            <a href="/habitos/inactivos" data-enhance-nav="false" autofocus="@(Volver == "inactivos")">Inactivos</a>
+        }
+    </nav>
+    @if (inactivos)
+    {
+        @Resultados(inciertos)
+    }
+    else
+    {
     <a class="new-habit" href="/habitos/nuevo"><img src="@Assets["assets/pen005/nuevo-habito.svg"]" width="20" height="20" alt="" />Nuevo hábito</a>
     <p id="habits-status" role="status" tabindex="-1" class="@(string.IsNullOrEmpty(mensaje) ? "visually-hidden" : null)">@mensaje</p>
     @if (volverFoco is not null) { <span id="habits-return" data-target="habito-@volverFoco" data-focus-card="@(Edicion is not null ? "true" : null)" hidden></span> }
@@ -33,13 +54,29 @@
                 <button type="submit" name="Accion" value="comprobar|@incierto.Id" aria-label="Comprobar estado de @incierto.Nombre">Comprobar estado</button>
             </section>
         }
+        @Resultados(inciertos)
+    </form>
+    <nav class="back-links" aria-label="Navegación de cuenta"><a href="/hoy">Volver a Hoy</a><a href="/cuenta">Cuenta y cerrar sesión</a></nav>
+    }
+</section>
+
+@code {
+    private RenderFragment Resultados(DesactivacionIncierta[] inciertos) => @<text>
         @if (error is not null)
         {
-            <div role="alert"><img class="warning-art" src="@Assets["assets/pen005/advertencia.svg"]" width="32" height="32" alt="" /><h2>No pudimos cargar tus hábitos</h2><p>@error</p><a href="/habitos">Reintentar</a></div>
+            <div class="habit-load-error" role="alert"><span class="habit-warning"><img class="warning-art" src="@Assets["assets/pen005/advertencia.svg"]" width="32" height="32" alt="" /></span><h2>@(inactivos ? "No pudimos cargar la lista" : "No pudimos cargar tus hábitos")</h2><p>@error</p><a class="retry-habits" href="@(inactivos ? "/habitos/inactivos" : "/habitos")" data-enhance-nav="@(inactivos ? "false" : null)">Reintentar</a></div>
         }
         else if (habitos is null)
         {
-            <div class="loading" role="status"><span class="habits-spinner" aria-hidden="true"></span><p>Cargando tus hábitos…</p></div>
+            <div class="loading" role="status"><span class="habits-spinner" aria-hidden="true"></span><p>@(inactivos ? "Cargando tus hábitos inactivos…" : "Cargando tus hábitos…")</p></div>
+        }
+        else if (habitos.Length == 0 && inactivos)
+        {
+            <div class="empty">
+                <h2>Todavía no tenés hábitos inactivos</h2>
+                <p>Los hábitos que desactives aparecerán acá.</p>
+                <a class="inactive-return" href="/habitos?volver=inactivos" data-enhance-nav="false">Volver a activos</a>
+            </div>
         }
         else if (habitos.Length == 0)
         {
@@ -52,8 +89,19 @@
                 {
                     <li @key="habito.Id"><details>
                         <summary id="habito-@habito.Id">
-                            @if (Icono(habito.IconoId) is { } icono) { <img src="@Assets[$"assets/constia-iconos-v1/{icono}"]" width="44" height="44" alt="" /> }
-                            <span class="habit-summary-text"><strong>@habito.Nombre</strong><span class="schedule">@Resumen(habito.DiasProgramados)</span></span>
+                            @if (Icono(habito.IconoId) is { } icono)
+                            {
+                                @if (inactivos)
+                                {
+                                    <span class="inactive-icon"><img src="@Assets[$"assets/constia-iconos-v1/{icono}"]" width="32" height="32" alt="" /></span>
+                                }
+                                else
+                                {
+                                    <img src="@Assets[$"assets/constia-iconos-v1/{icono}"]" width="44" height="44" alt="" />
+                                }
+                            }
+                            else if (inactivos) { <span class="habit-icon-space" aria-hidden="true"></span> }
+                            <span class="habit-summary-text"><strong>@habito.Nombre</strong><span class="schedule">@(inactivos ? "Inactivo" : Resumen(habito.DiasProgramados))</span></span>
                             <img class="habit-chevron" src="@Assets["assets/pen005/chevron.svg"]" width="10" height="14" alt="" />
                         </summary>
                         <div class="habit-detail">
@@ -62,6 +110,8 @@
                             <ul class="week" aria-label="Programación semanal">
                                 @foreach (var dia in Semana) { <li class="@(habito.DiasProgramados.Contains(dia.Dia) ? "scheduled" : null)" aria-label="@(dia.Nombre + (habito.DiasProgramados.Contains(dia.Dia) ? ": programado" : ": no programado"))">@(dia.Nombre == "miércoles" ? "X" : dia.Nombre[..1].ToUpperInvariant())</li> }
                             </ul>
+                            @if (!inactivos)
+                            {
                             <a href="/habitos/@habito.Id/editar">Editar hábito</a>
                             <div class="habit-state"><span>Estado: Activo</span>
                                 @if (!inciertos.Any(e => e.Id == habito.Id))
@@ -69,11 +119,11 @@
                                     <button type="submit" class="state-switch" role="switch" aria-checked="true" aria-label="Desactivar hábito @habito.Nombre" name="Accion" value="pedir|@habito.Id"><span class="switch-track" aria-hidden="true"><span></span></span><span class="visually-hidden">Desactivar</span></button>
                                 }
                             </div>
+                            }
                         </div>
                     </details></li>
                 }
             </ul>
         }
-    </form>
-    <nav class="back-links" aria-label="Navegación de cuenta"><a href="/hoy">Volver a Hoy</a><a href="/cuenta">Cuenta y cerrar sesión</a></nav>
-</section>
+    </text>;
+}
