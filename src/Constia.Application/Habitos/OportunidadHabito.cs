@@ -5,7 +5,10 @@ namespace Constia.Application.Habitos;
 
 internal static class OportunidadHabito
 {
-    public static bool AplicaA(Habito habito, DateOnly fecha)
+    public static bool AplicaA(Habito habito, DateOnly fecha) =>
+        Evaluar(habito, fecha) ?? throw new EstadoHabitoHistoricoDesconocidoException();
+
+    public static bool? Evaluar(Habito habito, DateOnly fecha)
     {
         var programacion = habito.ObtenerProgramacionPara(fecha);
         if (programacion is null || !programacion.DiasProgramados.Any(dia => dia.Dia == fecha.DayOfWeek))
@@ -13,8 +16,6 @@ internal static class OportunidadHabito
             return false;
         }
 
-        var estado = habito.ObtenerEstadoPara(fecha)
-            ?? throw new EstadoHabitoHistoricoDesconocidoException();
-        return estado == EstadoHabito.Activo;
+        return habito.ObtenerEstadoPara(fecha) is { } estado ? estado == EstadoHabito.Activo : null;
     }
 }

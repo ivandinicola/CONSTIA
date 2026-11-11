@@ -10,6 +10,7 @@ public static class PresentacionHabitos
     {
         "libro" => "constia-lectura.png", "fuerza" => "constia-movimiento.png", "agua" => "constia-agua.png",
         "loto" => "constia-meditacion.png", "manzana" => "constia-alimentacion.png", "musica" => "constia-nota-musical.png",
+        "estiramientos" => "constia-estiramientos.png",
         "luna" or "cafe" or "corredor" or "corazon" or "cerebro" or "sol" or "huella" or "brote" or "portatil" or "billete" => $"constia-{id}.png",
         _ => null
     };

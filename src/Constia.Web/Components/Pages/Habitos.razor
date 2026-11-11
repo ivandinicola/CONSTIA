@@ -11,18 +11,18 @@
 <PageTitle>@(inactivos ? "Hábitos inactivos" : "Mis hábitos") · CONSTIA</PageTitle>
 <section class="habits @(inactivos ? "inactive-habits" : null)" aria-labelledby="habits-title">
     <header>
-        <h1 id="habits-title" tabindex="@(inactivos ? "-1" : null)" autofocus="@inactivos" aria-describedby="@(inactivos ? "habits-intro" : null)">Mis hábitos</h1>
+        <h1 id="habits-title" tabindex="@(inactivos ? "-1" : null)" autofocus="@(inactivos && Historial is null)" aria-describedby="@(inactivos ? "habits-intro" : null)">Mis hábitos</h1>
         <p id="habits-intro">@(inactivos ? "Consultá tus hábitos desactivados." : "Gestioná tus hábitos y mantené el foco.")</p>
     </header>
     <nav class="habit-filter" aria-label="Estado de hábitos">
         @if (inactivos)
         {
             <a href="/habitos?volver=inactivos" data-enhance-nav="false">Activos</a>
-            <span aria-current="page">Inactivos</span>
+            <span aria-current="page" tabindex="-1" data-history-return="@(Historial is not null && !PuedeVolverAHistorial ? "" : null)">Inactivos</span>
         }
         else
         {
-            <span aria-current="page">Activos</span>
+            <span aria-current="page" tabindex="-1" data-history-return="@(Historial is not null && !PuedeVolverAHistorial ? "" : null)">Activos</span>
             <a href="/habitos/inactivos" data-enhance-nav="false" autofocus="@(Volver == "inactivos")">Inactivos</a>
         }
     </nav>
@@ -87,7 +87,7 @@
             <ul class="habit-list">
                 @foreach (var habito in habitos)
                 {
-                    <li @key="habito.Id"><details>
+                    <li @key="habito.Id"><details open="@(Historial == habito.Id)">
                         <summary id="habito-@habito.Id">
                             @if (Icono(habito.IconoId) is { } icono)
                             {
@@ -120,6 +120,9 @@
                                 }
                             </div>
                             }
+                            <a class="history-link" href="/habitos/@habito.Id/historial?origen=@(inactivos ? "inactivos" : "activos")"
+                               aria-label="Ver historial de @habito.Nombre" data-enhance-nav="false"
+                               data-history-return="@(Historial == habito.Id ? "" : null)">Ver historial</a>
                         </div>
                     </details></li>
                 }

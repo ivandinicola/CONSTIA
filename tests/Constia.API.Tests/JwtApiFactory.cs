@@ -246,6 +246,14 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
     private sealed class FakeHistorialCumplimientosRepository(JwtApiFactory factory)
         : IHistorialCumplimientosRepository
     {
+        public Task<IReadOnlySet<DateOnly>> ListarFechasAsync(
+            Guid habitoId, Guid usuarioId, DateOnly desde, DateOnly hasta, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<DateOnly>>(factory.CumplimientosPersistidos.Values
+                .Where(c => c.Habito.Id == habitoId && c.Habito.Usuario.Id == usuarioId
+                    && c.Fecha >= desde && c.Fecha <= hasta)
+                .Select(c => c.Fecha)
+                .ToHashSet());
+
         public Task<IReadOnlyList<CumplimientoListado>?> ListarPorHabitoYUsuarioAsync(
             Guid habitoId, Guid usuarioId, CancellationToken cancellationToken)
         {

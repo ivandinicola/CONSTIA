@@ -16,7 +16,9 @@ public partial class Habitos
     [Inject] private IMemoryCache Cache { get; set; } = default!;
     [SupplyParameterFromQuery(Name = "edicion")] private Guid? Edicion { get; set; }
     [SupplyParameterFromQuery(Name = "volver")] private string? Volver { get; set; }
+    [SupplyParameterFromQuery(Name = "historial")] private Guid? Historial { get; set; }
     private bool inactivos;
+    private bool PuedeVolverAHistorial => Historial is Guid id && habitos?.Any(h => h.Id == id) == true;
     private HabitoGestion[]? habitos;
     private HabitoGestion? confirmar;
     private Guid? volverFoco;

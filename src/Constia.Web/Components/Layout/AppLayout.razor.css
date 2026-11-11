@@ -61,6 +61,8 @@
         padding-inline-end: max(12px, env(safe-area-inset-right));
     }
 
+    .app-content:has(> .habit-history) { padding:8px 12px 16px; }
+
     .app-content:has(> :is(.edit-habit, .inactive-habits)) {
         padding-block-start: 8px;
     }

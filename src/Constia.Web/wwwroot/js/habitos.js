@@ -43,6 +43,39 @@ document.addEventListener("cancel", event => {
     if (form.dataset.pending !== "true")
         form.requestSubmit(dialog.querySelector("[data-cancel-confirmation]"));
 }, true);
+function restoreHistoryLink() {
+    document.querySelector("[data-history-return]")?.focus();
+}
+Blazor.addEventListener("enhancedload", restoreHistoryLink);
+window.addEventListener("pageshow", restoreHistoryLink);
+
+document.addEventListener("keydown", event => {
+    const day = event.target.closest("[data-history-day]");
+    const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[event.key];
+    if (!day || typeof step !== "number") return;
+    event.preventDefault();
+    const next = day.closest("[data-history-grid]")
+        .querySelector(`[data-history-day="${Number(day.dataset.historyDay) + step}"]`);
+    if (!next) return;
+    day.tabIndex = -1;
+    next.tabIndex = 0;
+    next.focus();
+});
+
+document.addEventListener("click", event => {
+    const day = event.target.closest("[data-history-day]");
+    if (!day) return;
+    const grid = day.closest("[data-history-grid]");
+    grid.querySelector('[aria-pressed="true"]').setAttribute("aria-pressed", "false");
+    grid.querySelector('[tabindex="0"]')?.setAttribute("tabindex", "-1");
+    day.setAttribute("aria-pressed", "true");
+    day.tabIndex = 0;
+    day.focus();
+    document.getElementById("history-date").textContent = day.dataset.fecha;
+    document.getElementById("history-opportunity").textContent = day.dataset.estado;
+    document.getElementById("history-record").textContent = day.dataset.registro;
+});
+
 Blazor.addEventListener("enhancedload", restoreHabits);
 window.addEventListener("pageshow", restoreHabits);
 
