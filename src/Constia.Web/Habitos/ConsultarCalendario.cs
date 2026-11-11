@@ -44,7 +44,7 @@ public sealed class ConsultarCalendario
         return new(new(l.Fecha, mesVisible, desde, hasta, seleccion, rango.Datos, detalle.Datos, rango.Error, detalle.Error));
     }
     private sealed record FechaLocal(DateOnly Fecha);
-    private static async Task<(T? Datos, string? Error, bool Login)> LeerAsync<T>(HttpClient client, string path, CancellationToken ct) where T : class
+    internal static async Task<(T? Datos, string? Error, bool Login)> LeerAsync<T>(HttpClient client, string path, CancellationToken ct) where T : class
     {
         try
         {

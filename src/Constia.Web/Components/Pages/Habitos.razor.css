@@ -15,6 +15,11 @@
 details[open] .habit-chevron { transform:rotate(-90deg); }
 .schedule { display:block; margin-top:4px; font-size:.875rem; color:var(--constia-text-secondary); }
 .habit-detail { padding:0 16px 16px; }
+.habit-detail .history-link {
+    display:grid; place-items:center; width:100%; min-height:44px; margin-top:8px;
+    border:1px solid var(--constia-secondary-action); border-radius:12px;
+    font-weight:700; text-decoration:none;
+}
 .habit-detail h2 { font-size:1rem; }
 .week { padding:0; display:flex; flex-wrap:wrap; gap:6px; list-style:none; }
 .week li { padding:6px; border-radius:10px; border:1px solid var(--constia-border); }

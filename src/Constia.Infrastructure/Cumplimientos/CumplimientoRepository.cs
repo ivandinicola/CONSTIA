@@ -33,6 +33,18 @@ public sealed class CumplimientoRepository(ConstiaDbContext dbContext) : ICumpli
             : filas.Select(fila => new CumplimientoListado(fila.Id!.Value, fila.Fecha!.Value)).ToArray();
     }
 
+    public async Task<IReadOnlySet<DateOnly>> ListarFechasAsync(
+        Guid habitoId, Guid usuarioId, DateOnly desde, DateOnly hasta, CancellationToken cancellationToken)
+    {
+        var fechas = await dbContext.Set<Cumplimiento>()
+            .Where(c => EF.Property<Guid>(c, "HabitoId") == habitoId
+                && EF.Property<Guid>(c.Habito, "UsuarioId") == usuarioId
+                && c.Fecha >= desde && c.Fecha <= hasta)
+            .Select(c => c.Fecha)
+            .ToListAsync(cancellationToken);
+        return fechas.ToHashSet();
+    }
+
     public Task<bool> ExistePorHabitoYFechaAsync(
         Guid habitId,
         DateOnly fecha,

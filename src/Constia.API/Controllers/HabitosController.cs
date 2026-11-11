@@ -447,10 +447,7 @@ public sealed class HabitosController(
             });
         }
 
-        const int maximoDias = 42;
-        if (!DateOnly.TryParseExact(desde, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var inicio)
-            || !DateOnly.TryParseExact(hasta, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fin)
-            || inicio > fin || fin.DayNumber - inicio.DayNumber >= maximoDias)
+        if (!RangoValido(desde, hasta, out var inicio, out var fin))
         {
             return BadRequest(new ProblemDetails
             {
@@ -482,6 +479,56 @@ public sealed class HabitosController(
                 Extensions = { ["code"] = "habit_status_history_unknown" }
             });
         }
+    }
+
+    [HttpGet("{id:guid}/historial")]
+    [ProducesResponseType(typeof(IReadOnlyList<DiaHistorialHabito>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<IReadOnlyList<DiaHistorialHabito>>> ConsultarHistorial(
+        Guid id,
+        [FromQuery] string? desde,
+        [FromQuery] string? hasta,
+        [FromServices] ConsultarHistorialHabito consulta,
+        CancellationToken cancellationToken)
+    {
+        if (usuarioActual.UsuarioId is not Guid usuarioId)
+        {
+            return Unauthorized();
+        }
+
+        if (!RangoValido(desde, hasta, out var inicio, out var fin))
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Se requiere un rango inclusivo de hasta 42 días en formato yyyy-MM-dd."
+            });
+        }
+
+        try
+        {
+            var dias = await consulta.EjecutarAsync(id, usuarioId, inicio, fin, cancellationToken);
+            return dias is null ? NotFound() : Ok(dias);
+        }
+        catch (HistorialEstadoHabitoNoInicializadoException)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new ProblemDetails
+            {
+                Status = StatusCodes.Status503ServiceUnavailable,
+                Title = "El historial de estados todavía no está disponible.",
+                Extensions = { ["code"] = "habit_status_history_not_initialized" }
+            });
+        }
+    }
+
+    private static bool RangoValido(string? desde, string? hasta, out DateOnly inicio, out DateOnly fin)
+    {
+        var desdeValido = DateOnly.TryParseExact(desde, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out inicio);
+        var hastaValido = DateOnly.TryParseExact(hasta, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out fin);
+        return desdeValido && hastaValido && inicio <= fin && fin.DayNumber - inicio.DayNumber < 42;
     }
 
     [HttpGet("{id:guid}/cumplimientos")]
