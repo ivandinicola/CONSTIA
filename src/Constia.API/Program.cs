@@ -44,6 +44,7 @@ builder.Services.AddScoped<IHabitosDiariosReadRepository, HabitoRepository>();
 builder.Services.AddScoped<ConsultarHabitosDiarios>();
 builder.Services.AddScoped<ConsultarCalendarioHabitos>();
 builder.Services.AddScoped<ConsultarHistorialHabito>();
+builder.Services.AddScoped<ConsultarRachas>();
 builder.Services.AddScoped<ICategoriaHabitoReadRepository, CategoriaHabitoReadRepository>();
 builder.Services.AddScoped<ICumplimientoRepository, CumplimientoRepository>();
 builder.Services.AddScoped<IHistorialCumplimientosRepository, CumplimientoRepository>();
