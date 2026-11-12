@@ -51,7 +51,7 @@ public sealed class ConsultarHistorialHabito
         }
     }
 
-    private static async Task<bool> HistorialSinInicializarAsync(HttpResponseMessage respuesta, CancellationToken ct)
+    internal static async Task<bool> HistorialSinInicializarAsync(HttpResponseMessage respuesta, CancellationToken ct)
     {
         try
         {

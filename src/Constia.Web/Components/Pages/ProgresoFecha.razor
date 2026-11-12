@@ -1,0 +1,15 @@
+@attribute [StreamRendering]
+@using Constia.Web.Habitos
+
+<p id="progress-date">@(hoy is { } fecha ? $"Hasta hoy, {fecha.ToString("d 'de' MMMM", ConsultarProgreso.Cultura)}" : "Hasta hoy")</p>
+
+@code {
+    [Parameter] public Task<(DateOnly? Hoy, bool Login)>? Fecha { get; set; }
+    private DateOnly? hoy;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Fecha is not null)
+            hoy = (await Fecha).Hoy;
+    }
+}

@@ -1,0 +1,158 @@
+@attribute [StreamRendering]
+@using Constia.Web.Habitos
+
+<section id="@Id" aria-labelledby="@($"{Id}-titulo")" data-progress-state="@resultado?.Estado"
+         data-progress-date="@resultado?.Hoy?.ToString("d 'de' MMMM", Cultura)"
+         data-progress-cut="@FechaCorte?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)">
+    @if (EsRachas)
+    {
+        <h2 id="@($"{Id}-titulo")" tabindex="-1" class="progress-streak-title">Rachas</h2>
+    }
+    else
+    {
+        <h2 id="@($"{Id}-titulo")" tabindex="-1">Últimos 30 días</h2>
+        @if ((resultado?.Hoy ?? hoy) is { } fecha)
+        {
+            <p class="progress-range">@fecha.AddDays(-29).ToString("d MMM", Cultura) – @fecha.ToString("d MMM yyyy", Cultura)</p>
+        }
+    }
+    @if (!EsRachas && resultado?.Periodo is not null)
+    {
+        @ControlActualizacion("Actualizar", true)
+    }
+    <div aria-busy="@(resultado is null ? "true" : "false")">
+        @if (EsRachas)
+        {
+            <div class="progress-streaks">
+                @Tarjeta("Racha actual", resultado?.Rachas?.Actual)
+                @Tarjeta("Mejor racha", resultado?.Rachas?.Mejor)
+            </div>
+        }
+        @if (resultado?.Periodo is { } periodo)
+        {
+            <div class="progress-summary">
+                @if (periodo.Porcentaje is int porcentaje)
+                {
+                    <div><strong>@periodo.Cumplidos de @periodo.Programados</strong><p>oportunidades cumplidas</p></div>
+                    <strong class="progress-rate">@porcentaje %</strong>
+                }
+                else
+                {
+                    <strong>Sin oportunidades en este período</strong>
+                }
+            </div>
+            <h3 id="progress-series">Evolución diaria</h3>
+            <table aria-labelledby="progress-series">
+                <thead><tr><th scope="col">Fecha</th><th scope="col">Cumplimiento</th></tr></thead>
+                <tbody>
+                    @foreach (var dia in periodo.Dias.Reverse())
+                    {
+                        var hoy = dia.Fecha == resultado.Hoy;
+                        <tr class="@(hoy ? "progress-today" : null)">
+                            <th scope="row">
+                                <time datetime="@dia.Fecha.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)">@dia.Fecha.ToString("d MMM", Cultura)</time>
+                                @if (hoy) { <span> · Hoy</span> }
+                            </th>
+                            <td>
+                                <span class="@(dia.Programados == 0 ? "progress-neutral" : null)">@(dia.Programados == 0 ? "Sin oportunidades" : $"{dia.Cumplidos} de {dia.Programados}")</span>
+                                @if (hoy) { <span class="progress-in-course">En curso</span> }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        @if ((resultado?.Estado is EstadoProgreso.Insuficiente or EstadoProgreso.SinInicializar or EstadoProgreso.Error) && !MensajeEntreRachas)
+        {
+            <div class="progress-problem">
+                <strong>@Mensaje</strong>
+                @if (resultado.Estado == EstadoProgreso.Insuficiente)
+                {
+                    <p>@(EsRachas ? "No podemos determinar las rachas." : "No podemos calcular el resumen ni la evolución de este período.")</p>
+                }
+                else if (resultado.Estado == EstadoProgreso.SinInicializar)
+                {
+                    <p>Los datos del período estarán disponibles cuando termine la inicialización.</p>
+                }
+                else if (resultado.Estado == EstadoProgreso.Error)
+                {
+                    <p>Volvé a consultar esta sección.</p>
+                }
+            </div>
+        }
+    </div>
+    @if (resultado?.Rachas is { } rachas)
+    {
+        <p class="progress-range" data-progress-cut-note hidden>Rachas al @rachas.FechaCorte.ToString("d 'de' MMMM", Cultura)</p>
+    }
+    <div class="progress-status" role="status">
+        <span class="progress-spinner" hidden="@(resultado is not null)" aria-hidden="true"></span>
+        <span data-progress-message class="@(resultado is null || MensajeEntreRachas ? null : "visually-hidden")">@(resultado is null ? CargaTexto : Mensaje ?? (EsRachas ? "Rachas disponibles." : "Período disponible."))</span>
+    </div>
+    @if (resultado?.Estado == EstadoProgreso.Error)
+    {
+        @ControlActualizacion("Reintentar", false)
+    }
+    else if (resultado?.Rachas is not null)
+    {
+        @ControlActualizacion("Actualizar", true)
+    }
+</section>
+
+@code {
+    [Parameter] public bool EsRachas { get; set; }
+    [Parameter] public Task<(DateOnly? Hoy, bool Login)>? FechaLocal { get; set; }
+    [Parameter] public Task<SeccionProgreso>? Carga { get; set; }
+    [Parameter] public SeccionProgreso? Resultado { get; set; }
+    [Parameter] public Action? SesionVencida { get; set; }
+
+    private SeccionProgreso? resultado;
+    private DateOnly? hoy;
+    private string Id => EsRachas ? "progress-streaks" : "progress-period";
+    private DateOnly? FechaCorte => EsRachas ? resultado?.Rachas?.FechaCorte : resultado?.Hoy;
+    private string Ruta => EsRachas ? "/progreso/seccion/rachas" : "/progreso/seccion/periodo";
+    private string CargaTexto => EsRachas ? "Cargando rachas…" : "Cargando el período…";
+    private static System.Globalization.CultureInfo Cultura => ConsultarProgreso.Cultura;
+    private bool MensajeEntreRachas => EsRachas && resultado?.Estado == EstadoProgreso.SinInicializar;
+    private string? Mensaje => resultado?.Estado switch
+    {
+        EstadoProgreso.Insuficiente => "Historial insuficiente",
+        EstadoProgreso.SinInicializar => "Historial todavía sin inicializar",
+        EstadoProgreso.Error => EsRachas ? "No pudimos cargar las rachas" : "No pudimos cargar el período",
+        _ => null
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        resultado = Resultado;
+        if (FechaLocal is not null)
+        {
+            hoy = (await FechaLocal).Hoy;
+            StateHasChanged();
+        }
+        if (Carga is not null)
+            resultado = await Carga;
+        if (resultado?.Estado == EstadoProgreso.Login)
+            SesionVencida?.Invoke();
+    }
+
+    private RenderFragment ControlActualizacion(string accion, bool soloSiDesfasado) =>
+        @<button class="progress-retry" type="button" data-progress-retry="@Ruta" data-loading="@CargaTexto"
+                 data-progress-stale-action="@(soloSiDesfasado ? "" : null)" hidden="@soloSiDesfasado"
+                 aria-label="@($"{accion} {(EsRachas ? "rachas" : "período")}")">@accion</button>;
+
+    private RenderFragment Tarjeta(string titulo, MetricaProgreso? metrica) => @<div class="progress-streak">
+        <h3>@titulo</h3>
+        @if (metrica?.Valor is int dias)
+        {
+            <div class="progress-streak-value">
+                <img class="progress-flame" src="/assets/constia-iconos-v1/constia-racha.png" width="34" height="34" alt="" />
+                <div><strong>@dias</strong><p>@(dias == 1 ? "día" : "días")</p></div>
+            </div>
+        }
+        else if (metrica is not null)
+        {
+            <p class="progress-unavailable">@(metrica.Estado == "no_aplicable" ? "No aplicable" : "No disponible por historial incompleto")</p>
+        }
+    </div>;
+}

@@ -1,0 +1,23 @@
+.progress-page {
+    inline-size: 100%;
+    max-inline-size: 44rem;
+    min-inline-size: 0;
+}
+
+.progress-page h1 {
+    margin: 0;
+    inline-size: fit-content;
+    font-size: 1.875rem;
+    line-height: 1.15;
+    letter-spacing: -.025em;
+}
+
+.progress-page header {
+    margin-block-end: 12px;
+}
+
+.progress-page header ::deep p {
+    margin: 2px 0 0;
+    font-size: .875rem;
+    color: var(--constia-text-secondary);
+}

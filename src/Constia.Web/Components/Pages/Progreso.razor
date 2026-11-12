@@ -1,0 +1,55 @@
+@page "/progreso"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [StreamRendering]
+@layout AppLayout
+@using Constia.Web.Habitos
+@inject ConsultarProgreso Consulta
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Progreso · CONSTIA</PageTitle>
+<div class="progress-page">
+    <header>
+        <h1 id="progress-title" tabindex="-1" autofocus>Progreso</h1>
+        <ProgresoFecha Fecha="local" />
+    </header>
+    <p id="progress-announcement" class="visually-hidden" role="status"></p>
+    <ProgresoSeccion EsRachas="true" Carga="rachas" SesionVencida="IrAlLogin" />
+    <ProgresoSeccion Carga="periodo" FechaLocal="local" SesionVencida="IrAlLogin" />
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext Http { get; set; } = default!;
+    private HttpClient? client;
+    private Task<(DateOnly? Hoy, bool Login)>? local;
+    private Task<SeccionProgreso>? rachas;
+    private Task<SeccionProgreso>? periodo;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Http.Response.Headers.CacheControl = "no-store";
+        try
+        {
+            client = await Consulta.ClienteAsync(Http);
+        }
+        catch (InvalidOperationException)
+        {
+            rachas = periodo = Task.FromResult(new SeccionProgreso(EstadoProgreso.Error));
+            return;
+        }
+
+        if (client is null)
+        {
+            IrAlLogin();
+            return;
+        }
+
+        var ct = Http.RequestAborted;
+        rachas = ConsultarProgreso.RachasAsync(client, ct);
+        local = ConsultarProgreso.FechaLocalAsync(client, ct);
+        periodo = ConsultarProgreso.PeriodoAsync(client, local, ct);
+    }
+
+    private void IrAlLogin() => Navigation.NavigateTo("/login", forceLoad: true);
+    public void Dispose() => client?.Dispose();
+}
