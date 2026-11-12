@@ -1,5 +1,8 @@
 using Constia.Web.Components;
 using Constia.Web.Configuration;
+using Constia.Web.Components.Pages;
+using Constia.Web.Habitos;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -44,6 +47,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<Constia.Web.Habitos.AltaHabito>();
 builder.Services.AddSingleton<Constia.Web.Habitos.ConsultarCalendario>();
 builder.Services.AddSingleton<Constia.Web.Habitos.ConsultarHistorialHabito>();
+builder.Services.AddSingleton<ConsultarProgreso>();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
@@ -99,6 +103,38 @@ app.MapPost("/logout", async (HttpContext http, IAntiforgery antiforgery, IMemor
 
     await http.SignOutAsync();
     return Results.LocalRedirect("/login");
+}).RequireAuthorization();
+
+app.MapGet("/progreso/seccion/{seccion}", async Task<IResult> (string seccion, HttpContext http,
+    ConsultarProgreso consulta, CancellationToken ct) =>
+{
+    if (seccion is not ("rachas" or "periodo"))
+        return Results.NotFound();
+
+    http.Response.Headers.CacheControl = "no-store";
+    var esRachas = seccion == "rachas";
+    SeccionProgreso resultado;
+    try
+    {
+        using var client = await consulta.ClienteAsync(http);
+        if (client is null)
+            return Results.LocalRedirect("/login");
+
+        resultado = esRachas
+            ? await ConsultarProgreso.RachasAsync(client, ct)
+            : await ConsultarProgreso.PeriodoAsync(client,
+                ConsultarProgreso.FechaLocalAsync(client, ct), ct);
+    }
+    catch (InvalidOperationException)
+    {
+        resultado = new(EstadoProgreso.Error);
+    }
+
+    if (resultado.Estado == EstadoProgreso.Login)
+        return Results.LocalRedirect("/login");
+
+    return new RazorComponentResult<ProgresoSeccion>(
+        new { EsRachas = esRachas, Resultado = resultado }) { PreventStreamingRendering = true };
 }).RequireAuthorization();
 
 app.MapStaticAssets();

@@ -89,6 +89,29 @@
     }
 }
 
+
+@media (max-width: 63.999rem) {
+    .app-shell:has(.progress-page) .app-header {
+        justify-content: flex-start;
+        padding-block: max(32px, env(safe-area-inset-top)) 10px;
+    }
+
+    .app-shell:has(.progress-page) .app-header ::deep .constia-brand {
+        font-size: 1.125rem;
+    }
+
+    .app-shell:has(.progress-page) .app-header ::deep img {
+        inline-size: 34px;
+        block-size: 34px;
+    }
+
+    .app-content:has(> .progress-page) {
+        padding-block-start: 4px;
+    }
+}
+
+.app-content:has(> .progress-page) { align-content: start; }
+
 /* Adaptación de UI-001 para revisión: no es un breakpoint aprobado de Penpot. */
 @media (min-width: 64rem) {
     .app-scroll {
