@@ -137,6 +137,48 @@ app.MapGet("/progreso/seccion/{seccion}", async Task<IResult> (string seccion, H
         new { EsRachas = esRachas, Resultado = resultado }) { PreventStreamingRendering = true };
 }).RequireAuthorization();
 
+app.MapGet("/habitos/{id:guid}/estadisticas/seccion/{seccion}", async Task<IResult> (
+    Guid id, string seccion, HttpContext http, ConsultarProgreso consulta, CancellationToken ct) =>
+{
+    if (seccion is not ("rachas" or "periodo"))
+        return Results.NotFound();
+
+    http.Response.Headers.CacheControl = "no-store";
+    var esRachas = seccion == "rachas";
+    SeccionProgreso resultado;
+    try
+    {
+        using var client = await consulta.ClienteAsync(http);
+        if (client is null)
+            return Results.LocalRedirect("/login");
+
+        if (esRachas)
+        {
+            var (habito, login) = await ConsultarEstadisticasHabito.DetalleAsync(client, id, ct);
+            if (login)
+                return Results.LocalRedirect("/login");
+
+            resultado = habito is null ? new(EstadoProgreso.Error)
+                : await ConsultarEstadisticasHabito.RachasAsync(client, id, habito, ct);
+        }
+        else
+        {
+            resultado = await ConsultarEstadisticasHabito.PeriodoAsync(client, id,
+                ConsultarProgreso.FechaLocalAsync(client, ct), ct);
+        }
+    }
+    catch (InvalidOperationException)
+    {
+        resultado = new(EstadoProgreso.Error);
+    }
+
+    if (resultado.Estado == EstadoProgreso.Login)
+        return Results.LocalRedirect("/login");
+
+    return new RazorComponentResult<ProgresoSeccion>(
+        new { EsRachas = esRachas, IdHabito = id, Resultado = resultado }) { PreventStreamingRendering = true };
+}).RequireAuthorization();
+
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

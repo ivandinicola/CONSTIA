@@ -1,0 +1,41 @@
+.habit-statistics {
+    inline-size: 100%;
+    max-inline-size: 44rem;
+    min-inline-size: 0;
+}
+
+h1 {
+    margin: 0;
+    inline-size: fit-content;
+    max-inline-size: 100%;
+    font-size: clamp(1.45rem, 7vw, 1.75rem);
+    line-height: 1.15;
+    letter-spacing: -.025em;
+    border-radius: 4px;
+}
+
+header p {
+    margin: 2px 0 0;
+    font-size: .875rem;
+    color: var(--constia-text-secondary);
+    overflow-wrap: anywhere;
+}
+
+.statistics-back {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: 44px;
+    padding-inline: 18px;
+    margin-block: 10px;
+    border: 1px solid var(--constia-border);
+    border-radius: 14px;
+    color: var(--constia-secondary-action);
+    font-size: .8125rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+h1:focus-visible, a:focus-visible {
+    outline: var(--constia-focus-ring);
+    outline-offset: 2px;
+}

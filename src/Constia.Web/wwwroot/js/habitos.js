@@ -45,6 +45,11 @@ document.addEventListener("cancel", event => {
 }, true);
 function restoreHistoryLink() {
     document.querySelector("[data-history-return]")?.focus();
+    const statistics = document.querySelector("[data-history-stats-return]");
+    if (statistics) {
+        statistics.removeAttribute("data-history-stats-return");
+        if (document.activeElement === document.body) statistics.focus();
+    }
 }
 Blazor.addEventListener("enhancedload", restoreHistoryLink);
 window.addEventListener("pageshow", restoreHistoryLink);
@@ -74,6 +79,12 @@ document.addEventListener("click", event => {
     document.getElementById("history-date").textContent = day.dataset.fecha;
     document.getElementById("history-opportunity").textContent = day.dataset.estado;
     document.getElementById("history-record").textContent = day.dataset.registro;
+    const statistics = document.getElementById("history-statistics");
+    if (statistics) {
+        const url = new URL(statistics.href);
+        url.searchParams.set("fecha", day.dataset.iso);
+        statistics.href = url.href;
+    }
 });
 
 Blazor.addEventListener("enhancedload", restoreHabits);

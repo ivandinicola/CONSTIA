@@ -3,16 +3,26 @@
 @attribute [StreamRendering]
 @layout AppLayout
 @using Constia.Web.Habitos
+@using System.Globalization
 @inject ConsultarHistorialHabito Consulta
 @inject NavigationManager Navigation
 
+@{ var seleccion = resultado?.Vista is { } mesVisible ? Seleccionar(mesVisible) : null; }
 <PageTitle>Historial de hábito · CONSTIA</PageTitle>
 <section class="habit-history" aria-labelledby="habit-history-title">
     <header>
-        <h1 id="habit-history-title" tabindex="-1" autofocus="@(Foco is not ("anterior" or "siguiente") || resultado?.Error is not null)">Historial de hábito</h1>
-        @if ((resultado?.Nombre ?? nombreDuranteCarga) is { } nombre) { <p>@nombre</p> }
+        <h1 id="habit-history-title" tabindex="-1" autofocus="@(Foco is not ("anterior" or "siguiente" or "estadisticas") || resultado is { Error: not null, Nombre: null })">Historial de hábito</h1>
+        @if ((resultado?.Nombre ?? nombreDuranteCarga) is { } nombre) { <p>@nombre@if (resultado?.HabitoInactivo == true) { <text> · Inactivo</text> }</p> }
     </header>
-    <a class="history-back" href="@VolverUrl" data-enhance-nav="false">‹ Volver a @(Inactivos ? "Inactivos" : "Activos")</a>
+    <nav class="history-actions" aria-label="Navegación del hábito">
+        <a class="history-back" href="@VolverUrl" data-enhance-nav="false">‹ Volver a @(Inactivos ? "Inactivos" : "Activos")</a>
+        @if ((resultado?.Nombre ?? nombreDuranteCarga) is { } nombreHabito)
+        {
+            <a id="history-statistics" class="history-back" href="@EstadisticasUrl(resultado?.Vista?.Mes, seleccion?.Fecha)"
+               data-enhance-nav="false" aria-label="Ver estadísticas de @nombreHabito"
+               data-history-stats-return="@(Foco == "estadisticas" && resultado is not null ? "" : null)">Ver estadísticas</a>
+        }
+    </nav>
     @if (resultado is null)
     {
         <div class="history-loading" role="status"><span aria-hidden="true"></span>Cargando historial…</div>
@@ -26,10 +36,9 @@
         </div>
         <a class="history-retry" href="@Navigation.Uri" data-enhance-nav="false">Reintentar</a>
     }
-    else if (resultado.Vista is { } vista)
+    else if (resultado.Vista is { } vista && seleccion is not null)
     {
         var (desde, hasta) = ConsultarCalendario.Rango(vista.Mes);
-        var seleccion = vista.Mes.Month == vista.Hoy.Month && vista.Mes.Year == vista.Hoy.Year ? vista.Dias[^1] : vista.Dias[0];
         var puedeAvanzar = vista.Mes < new DateOnly(vista.Hoy.Year, vista.Hoy.Month, 1);
         <div class="history-month">
             <nav class="history-month-nav" aria-label="Navegación mensual">
@@ -59,7 +68,7 @@
                         <button type="button" class="history-day @dia.Estado" aria-pressed="@(dia == seleccion ? "true" : "false")"
                                 tabindex="@(dia == seleccion ? "0" : "-1")"
                                 aria-label="@($"{fecha.ToString("D", Cultura)}. {texto}. {(dia.TieneRegistro ? "Registro guardado" : "Sin registro")}.")"
-                                data-history-day="@n" data-fecha="@FechaTexto(fecha)" data-estado="@texto" data-registro="@Registro(dia)">
+                                data-history-day="@n" data-iso="@fecha.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" data-fecha="@FechaTexto(fecha)" data-estado="@texto" data-registro="@Registro(dia)">
                             <span aria-hidden="true">@fecha.Day</span>
                             <span aria-hidden="true">@signo @if (dia.TieneRegistro) { <span class="record-dot">●</span> }</span>
                         </button>

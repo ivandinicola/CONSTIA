@@ -13,6 +13,7 @@ public partial class HistorialHabito
     [SupplyParameterFromQuery] public string? Mes { get; set; }
     [SupplyParameterFromQuery] public string? Origen { get; set; }
     [SupplyParameterFromQuery] public string? Foco { get; set; }
+    [SupplyParameterFromQuery] public string? Fecha { get; set; }
     [CascadingParameter] private HttpContext Http { get; set; } = default!;
     [Inject] private IHttpClientFactory Clients { get; set; } = default!;
 
@@ -46,6 +47,23 @@ public partial class HistorialHabito
             StateHasChanged();
         });
         if (resultado.Login) Navigation.NavigateTo("/login", forceLoad: true);
+    }
+
+    private string EstadisticasUrl(DateOnly? mes, DateOnly? fecha) =>
+        ConsultarEstadisticasHabito.Url(Id, true, Inactivos,
+            mes?.ToString("yyyy-MM", CultureInfo.InvariantCulture) ?? Mes,
+            mes is null ? Fecha : fecha?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+
+    private DiaHistorial Seleccionar(MesHistorial vista)
+    {
+        if (DateOnly.TryParseExact(Fecha, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fecha))
+        {
+            var indice = fecha.DayNumber - vista.Mes.DayNumber;
+            if (indice >= 0 && indice < vista.Dias.Length)
+                return vista.Dias[indice];
+        }
+
+        return vista.Mes.Year == vista.Hoy.Year && vista.Mes.Month == vista.Hoy.Month ? vista.Dias[^1] : vista.Dias[0];
     }
 
     private string MesUrl(DateOnly mes, int delta) =>

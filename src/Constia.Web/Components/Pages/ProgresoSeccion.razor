@@ -2,6 +2,8 @@
 @using Constia.Web.Habitos
 
 <section id="@Id" aria-labelledby="@($"{Id}-titulo")" data-progress-state="@resultado?.Estado"
+         data-habit-progress="@(IdHabito is not null ? "" : null)"
+         data-habit-inactive="@(resultado?.HabitoInactivo == true ? "" : null)"
          data-progress-date="@resultado?.Hoy?.ToString("d 'de' MMMM", Cultura)"
          data-progress-cut="@FechaCorte?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)">
     @if (EsRachas)
@@ -16,7 +18,7 @@
             <p class="progress-range">@fecha.AddDays(-29).ToString("d MMM", Cultura) – @fecha.ToString("d MMM yyyy", Cultura)</p>
         }
     }
-    @if (!EsRachas && resultado?.Periodo is not null)
+    @if (!EsRachas && (resultado?.Periodo is not null || resultado?.PeriodoHabito is not null))
     {
         @ControlActualizacion("Actualizar", true)
     }
@@ -24,8 +26,8 @@
         @if (EsRachas)
         {
             <div class="progress-streaks">
-                @Tarjeta("Racha actual", resultado?.Rachas?.Actual)
-                @Tarjeta("Mejor racha", resultado?.Rachas?.Mejor)
+                @Tarjeta("Racha actual", resultado?.Rachas?.Actual, resultado?.HabitoInactivo == true)
+                @Tarjeta("Mejor racha", resultado?.Rachas?.Mejor, false)
             </div>
         }
         @if (resultado?.Periodo is { } periodo)
@@ -55,6 +57,53 @@
                             </th>
                             <td>
                                 <span class="@(dia.Programados == 0 ? "progress-neutral" : null)">@(dia.Programados == 0 ? "Sin oportunidades" : $"{dia.Cumplidos} de {dia.Programados}")</span>
+                                @if (hoy) { <span class="progress-in-course">En curso</span> }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        @if (resultado?.PeriodoHabito is { } periodoHabito)
+        {
+            <div class="progress-summary">
+                @if (periodoHabito.HistorialParcial || periodoHabito.Porcentaje is not null)
+                {
+                    <div>
+                        @if (periodoHabito.Programados > 0)
+                        {
+                            <strong>@periodoHabito.Cumplidos de @periodoHabito.Programados</strong>
+                            <p>@(periodoHabito.HistorialParcial ? "oportunidades confirmadas" : "oportunidades cumplidas")</p>
+                        }
+                        @if (periodoHabito.Porcentaje is null)
+                        {
+                            <p class="progress-unavailable">Porcentaje no disponible · historial insuficiente</p>
+                        }
+                    </div>
+                    @if (periodoHabito.Porcentaje is int porcentaje)
+                    {
+                        <strong class="progress-rate">@porcentaje %</strong>
+                    }
+                }
+                else
+                {
+                    <strong>Sin oportunidades en este período</strong>
+                }
+            </div>
+            <h3 id="progress-series">Evolución diaria</h3>
+            <table aria-labelledby="progress-series">
+                <thead><tr><th scope="col">Fecha</th><th scope="col">Estado</th></tr></thead>
+                <tbody>
+                    @foreach (var dia in periodoHabito.Dias.Reverse())
+                    {
+                        var hoy = dia.Fecha == resultado.Hoy;
+                        <tr class="@(hoy ? "progress-today" : null)">
+                            <th scope="row">
+                                <time datetime="@dia.Fecha.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)">@dia.Fecha.ToString("d MMM", Cultura)</time>
+                                @if (hoy) { <span> · Hoy</span> }
+                            </th>
+                            <td>
+                                <span class="progress-day-state @dia.Estado">@EstadoDia(dia.Estado)</span>
                                 @if (hoy) { <span class="progress-in-course">En curso</span> }
                             </td>
                         </tr>
@@ -101,6 +150,7 @@
 
 @code {
     [Parameter] public bool EsRachas { get; set; }
+    [Parameter] public Guid? IdHabito { get; set; }
     [Parameter] public Task<(DateOnly? Hoy, bool Login)>? FechaLocal { get; set; }
     [Parameter] public Task<SeccionProgreso>? Carga { get; set; }
     [Parameter] public SeccionProgreso? Resultado { get; set; }
@@ -110,10 +160,10 @@
     private DateOnly? hoy;
     private string Id => EsRachas ? "progress-streaks" : "progress-period";
     private DateOnly? FechaCorte => EsRachas ? resultado?.Rachas?.FechaCorte : resultado?.Hoy;
-    private string Ruta => EsRachas ? "/progreso/seccion/rachas" : "/progreso/seccion/periodo";
+    private string Ruta => $"{(IdHabito is { } id ? $"/habitos/{id}/estadisticas" : "/progreso")}/seccion/{(EsRachas ? "rachas" : "periodo")}";
     private string CargaTexto => EsRachas ? "Cargando rachas…" : "Cargando el período…";
     private static System.Globalization.CultureInfo Cultura => ConsultarProgreso.Cultura;
-    private bool MensajeEntreRachas => EsRachas && resultado?.Estado == EstadoProgreso.SinInicializar;
+    private bool MensajeEntreRachas => EsRachas && resultado is { Estado: EstadoProgreso.SinInicializar, HabitoInactivo: false };
     private string? Mensaje => resultado?.Estado switch
     {
         EstadoProgreso.Insuficiente => "Historial insuficiente",
@@ -141,13 +191,25 @@
                  data-progress-stale-action="@(soloSiDesfasado ? "" : null)" hidden="@soloSiDesfasado"
                  aria-label="@($"{accion} {(EsRachas ? "rachas" : "período")}")">@accion</button>;
 
-    private RenderFragment Tarjeta(string titulo, MetricaProgreso? metrica) => @<div class="progress-streak">
+    private static string EstadoDia(string estado) => estado switch
+    {
+        "cumplido" => "Cumplido",
+        "pendiente" => "Pendiente",
+        "no_programado" => "No programado",
+        _ => "Desconocido"
+    };
+
+    private RenderFragment Tarjeta(string titulo, MetricaProgreso? metrica, bool inactivo) => @<div class="progress-streak">
         <h3>@titulo</h3>
-        @if (metrica?.Valor is int dias)
+        @if (inactivo)
+        {
+            <p class="progress-inactive">Inactivo</p>
+        }
+        else if (metrica?.Valor is int dias)
         {
             <div class="progress-streak-value">
                 <img class="progress-flame" src="/assets/constia-iconos-v1/constia-racha.png" width="34" height="34" alt="" />
-                <div><strong>@dias</strong><p>@(dias == 1 ? "día" : "días")</p></div>
+                <div><strong>@dias</strong><p>@(IdHabito is not null ? dias == 1 ? "ocasión" : "ocasiones" : dias == 1 ? "día" : "días")</p></div>
             </div>
         }
         else if (metrica is not null)

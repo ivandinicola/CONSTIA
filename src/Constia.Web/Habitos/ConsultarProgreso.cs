@@ -32,9 +32,12 @@ public sealed class ConsultarProgreso(IHttpClientFactory clients)
         return (respuesta.Datos is { Fecha.DayNumber: >= 29 } local ? local.Fecha : null, respuesta.Login);
     }
 
-    public static async Task<SeccionProgreso> RachasAsync(HttpClient client, CancellationToken ct)
+    public static Task<SeccionProgreso> RachasAsync(HttpClient client, CancellationToken ct) =>
+        RachasAsync(client, "api/habitos/rachas", ct);
+
+    internal static async Task<SeccionProgreso> RachasAsync(HttpClient client, string ruta, CancellationToken ct)
     {
-        var (estado, datos) = await LeerAsync<RachasProgreso>(client, "api/habitos/rachas", ct);
+        var (estado, datos) = await LeerAsync<RachasProgreso>(client, ruta, ct);
         if (estado != EstadoProgreso.Disponible)
             return new(estado);
 
@@ -72,7 +75,7 @@ public sealed class ConsultarProgreso(IHttpClientFactory clients)
         _ => false
     };
 
-    private static async Task<(EstadoProgreso Estado, T? Datos)> LeerAsync<T>(
+    internal static async Task<(EstadoProgreso Estado, T? Datos)> LeerAsync<T>(
         HttpClient client, string ruta, CancellationToken ct) where T : class
     {
         try
@@ -108,7 +111,8 @@ public enum EstadoProgreso { Disponible, Insuficiente, SinInicializar, Error, Lo
 public sealed record MetricaProgreso(string Estado, int? Valor);
 public sealed record RachasProgreso(DateOnly FechaCorte, MetricaProgreso Actual, MetricaProgreso Mejor);
 public sealed record SeccionProgreso(EstadoProgreso Estado, DateOnly? Hoy = null,
-    RachasProgreso? Rachas = null, PeriodoProgreso? Periodo = null);
+    RachasProgreso? Rachas = null, PeriodoProgreso? Periodo = null,
+    PeriodoEstadisticasHabito? PeriodoHabito = null, bool HabitoInactivo = false);
 
 public sealed record PeriodoProgreso(DiaResumen[] Dias)
 {

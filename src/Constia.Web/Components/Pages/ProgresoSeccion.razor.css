@@ -12,6 +12,14 @@ h2:focus-visible, button:focus-visible {
     outline-offset: 2px;
 }
 
+.progress-day-state.cumplido { color: #176042; font-weight: 650; }
+.progress-day-state.pendiente { color: #923d32; font-weight: 650; }
+.progress-day-state.desconocido { color: #5943bd; font-weight: 650; }
+.progress-day-state.no_programado { color: var(--constia-text-secondary); }
+[data-habit-progress] .progress-summary .progress-unavailable { margin-block-start: 6px; color: var(--constia-secondary-action); }
+[data-habit-progress] .progress-summary { margin-block-end: 16px; }
+[data-habit-progress] th, [data-habit-progress] td { padding-block: 5px; }
+
 .progress-range, .progress-neutral { color: var(--constia-text-secondary); }
 .progress-range { font-size: .875rem; margin-block: 3px 8px; }
 
@@ -41,6 +49,7 @@ h2:focus-visible, button:focus-visible {
 .progress-streak-value strong { font-size: 1.875rem; line-height: 1.2; }
 .progress-streak-value p, .progress-unavailable { color: var(--constia-text-secondary); font-size: .8125rem; }
 .progress-unavailable { margin-block-start: 12px; font-weight: 650; overflow-wrap: anywhere; }
+.progress-inactive { margin-block-start: 6px; font-size: 1rem; font-weight: 750; }
 .progress-flame { flex: none; object-fit: contain; }
 
 .progress-summary {
@@ -127,7 +136,7 @@ tbody th { white-space: nowrap; font-weight: 500; }
     font-weight: 650;
     color: var(--constia-text-secondary);
 }
-#progress-streaks:is(:not([data-progress-state]), [data-progress-state="SinInicializar"]) .progress-status {
+#progress-streaks:is(:not([data-progress-state]), [data-progress-state="SinInicializar"]:where(:not([data-habit-inactive]))) .progress-status {
     position: absolute;
     inset: 34px 0 0;
     display: grid;
@@ -179,4 +188,31 @@ tbody th { white-space: nowrap; font-weight: 500; }
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
+}
+
+#progress-streaks[data-habit-progress]:not([data-habit-inactive]):is([data-progress-state="Error"], [data-progress-state="Insuficiente"]) .progress-problem {
+    position: absolute;
+    inset: 38px 0 0;
+    display: grid;
+    place-content: center;
+    margin: 0;
+    padding: 8px;
+    background: transparent;
+    font-size: .875rem;
+}
+
+#progress-streaks[data-habit-progress]:not([data-habit-inactive])[data-progress-state="Error"] .progress-problem {
+    place-content: start center;
+}
+
+#progress-streaks[data-habit-progress]:not([data-habit-inactive])[data-progress-state="Error"] .progress-problem p {
+    display: none;
+}
+
+#progress-streaks[data-habit-progress]:not([data-habit-inactive])[data-progress-state="Error"] .progress-retry {
+    position: absolute;
+    inset-block-start: 68px;
+    inset-inline: 0;
+    inline-size: min(100%, 10rem);
+    margin: 0 auto;
 }
