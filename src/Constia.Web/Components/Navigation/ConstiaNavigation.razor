@@ -23,7 +23,15 @@
 </nav>
 
 @code {
-    private bool EnHabitos => new Uri(Navigation.Uri).AbsolutePath.TrimEnd('/') == "/habitos";
+    private bool EnHabitos
+    {
+        get
+        {
+            var ruta = new Uri(Navigation.Uri).AbsolutePath.TrimEnd('/');
+            return ruta == "/habitos" || (ruta.StartsWith("/habitos/", StringComparison.Ordinal) &&
+                (ruta.EndsWith("/historial", StringComparison.Ordinal) || ruta.EndsWith("/estadisticas", StringComparison.Ordinal)));
+        }
+    }
     private static readonly (string Label, string Icon)[] Items =
     [
         ("Logros", "constia-logros.png"),

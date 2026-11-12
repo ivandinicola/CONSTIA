@@ -38,18 +38,21 @@ public sealed class ConsultarHistorialHabito
                 return new(Nombre: habito.Nombre, Error: "Volvé a intentar o regresá a tus hábitos.");
 
             var dias = await respuesta.Content.ReadFromJsonAsync<DiaHistorial[]>(ct);
-            if (dias is null || dias.Length != hasta.DayNumber - visible.DayNumber + 1 ||
-                dias.Where((d, i) => d is null || d.Fecha.DayNumber != visible.DayNumber + i ||
-                    d.Estado is not ("cumplido" or "pendiente" or "no_programado" or "desconocido")).Any())
+            if (!RangoValido(dias, visible, hasta))
                 return new(Nombre: habito.Nombre, Error: "La respuesta del historial no es válida. Volvé a intentar.");
 
-            return new(habito.Nombre, new(hoy.Fecha, visible, dias));
+            return new(habito.Nombre, new(hoy.Fecha, visible, dias!), HabitoInactivo: habito.Estado == 1);
         }
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or JsonException or NotSupportedException)
         {
             return new(Nombre: habito.Nombre, Error: "Revisá tu conexión e intentá nuevamente.");
         }
     }
+
+    internal static bool RangoValido(DiaHistorial[]? dias, DateOnly desde, DateOnly hasta) =>
+        dias is not null && dias.Length == hasta.DayNumber - desde.DayNumber + 1 &&
+        !dias.Where((d, i) => d is null || d.Fecha.DayNumber != desde.DayNumber + i ||
+            d.Estado is not ("cumplido" or "pendiente" or "no_programado" or "desconocido")).Any();
 
     internal static async Task<bool> HistorialSinInicializarAsync(HttpResponseMessage respuesta, CancellationToken ct)
     {
@@ -66,10 +69,10 @@ public sealed class ConsultarHistorialHabito
 
     private sealed record ErrorHistorial(string? Code);
     private sealed record FechaLocal(DateOnly Fecha);
-    private sealed record NombreHabito(string Nombre);
+    private sealed record NombreHabito(string Nombre, int? Estado);
 }
 
 public sealed record DiaHistorial(DateOnly Fecha, string Estado, bool TieneRegistro);
 public sealed record MesHistorial(DateOnly Hoy, DateOnly Mes, DiaHistorial[] Dias);
 public sealed record ResultadoHistorial(
-    string? Nombre = null, MesHistorial? Vista = null, string? Error = null, bool Login = false, bool SinInicializar = false);
+    string? Nombre = null, MesHistorial? Vista = null, string? Error = null, bool Login = false, bool SinInicializar = false, bool HabitoInactivo = false);

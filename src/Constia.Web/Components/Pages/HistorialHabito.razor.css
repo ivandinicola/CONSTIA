@@ -7,7 +7,10 @@
     display:inline-grid; place-items:center; min-height:44px; border:1px solid var(--constia-border);
     border-radius:12px; color:var(--constia-ink); text-decoration:none; font-weight:700;
 }
-.history-back { justify-self:start; margin-inline-start:16px; padding-inline:14px; }
+.history-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin-inline:clamp(2px, 4vw, 16px); }
+.history-back { padding-inline:clamp(4px, 2vw, 14px); font-size:.8125rem; text-align:center; }
+#history-statistics { background:var(--constia-secondary-action); color:white; }
+.history-back:focus-visible { outline:var(--constia-focus-ring); outline-offset:2px; }
 .history-month, .history-detail, .history-error {
     background:var(--constia-surface); border:1px solid var(--constia-border); border-radius:22px; padding:8px;
 }

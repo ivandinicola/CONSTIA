@@ -53,8 +53,9 @@
 
             const restoreFocus = document.activeElement === button;
             section.replaceWith(updated);
-            if (updated.dataset.progressDate) {
-                document.getElementById("progress-date").textContent = "Hasta hoy, " + updated.dataset.progressDate;
+            const date = document.getElementById("progress-date");
+            if (date && updated.dataset.progressDate) {
+                date.textContent = "Hasta hoy, " + updated.dataset.progressDate;
             }
             reconcileProgressDates();
             if (restoreFocus) {

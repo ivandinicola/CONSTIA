@@ -1,0 +1,86 @@
+@page "/habitos/{Id:guid}/estadisticas"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [StreamRendering]
+@layout AppLayout
+@using Constia.Web.Habitos
+@inject ConsultarProgreso Consulta
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Estadísticas del hábito · CONSTIA</PageTitle>
+<div class="progress-page habit-statistics">
+    <header>
+        <h1 id="habit-statistics-title" tabindex="-1" autofocus>Estadísticas del hábito</h1>
+        @if (habito is not null) { <p>@habito.Nombre@if (habito.Inactivo) { <text> · Inactivo</text> }</p> }
+    </header>
+    <a class="statistics-back" href="@VolverUrl" data-enhance-nav="false">‹ Volver a Historial</a>
+    <p id="progress-announcement" class="visually-hidden" role="status"></p>
+    @if (errorDetalle)
+    {
+        <p role="alert">No pudimos cargar el hábito.</p>
+        <a class="statistics-back" href="@Navigation.Uri" data-enhance-nav="false">Reintentar</a>
+    }
+    else
+    {
+        <ProgresoSeccion EsRachas="true" IdHabito="Id" Carga="rachas" SesionVencida="IrAlLogin" />
+        <ProgresoSeccion IdHabito="Id" Carga="periodo" FechaLocal="local" SesionVencida="IrAlLogin" />
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+    [SupplyParameterFromQuery] public string? Origen { get; set; }
+    [SupplyParameterFromQuery] public string? Mes { get; set; }
+    [SupplyParameterFromQuery] public string? Fecha { get; set; }
+    [CascadingParameter] private HttpContext Http { get; set; } = default!;
+
+    private HttpClient? client;
+    private DetalleEstadisticasHabito? habito;
+    private bool errorDetalle;
+    private Task<(DateOnly? Hoy, bool Login)>? local;
+    private Task<SeccionProgreso>? rachas;
+    private Task<SeccionProgreso>? periodo;
+
+    private string VolverUrl => ConsultarEstadisticasHabito.Url(Id, false, Origen == "inactivos", Mes, Fecha);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Http.Response.Headers.CacheControl = "no-store";
+        try
+        {
+            client = await Consulta.ClienteAsync(Http);
+        }
+        catch (InvalidOperationException)
+        {
+            errorDetalle = true;
+            return;
+        }
+
+        if (client is null)
+        {
+            IrAlLogin();
+            return;
+        }
+
+        var ct = Http.RequestAborted;
+        var (detalle, login) = await ConsultarEstadisticasHabito.DetalleAsync(client, Id, ct);
+        if (login)
+        {
+            IrAlLogin();
+            return;
+        }
+        if (detalle is null)
+        {
+            errorDetalle = true;
+            return;
+        }
+
+        habito = detalle;
+        rachas = ConsultarEstadisticasHabito.RachasAsync(client, Id, detalle, ct);
+        local = ConsultarProgreso.FechaLocalAsync(client, ct);
+        periodo = ConsultarEstadisticasHabito.PeriodoAsync(client, Id, local, ct);
+    }
+
+    private void IrAlLogin() => Navigation.NavigateTo("/login", forceLoad: true);
+    public void Dispose() => client?.Dispose();
+}
