@@ -75,7 +75,7 @@ public partial class EditarHabito
             using var respuestaIconos = await client.GetAsync("api/habitos/iconos", ct);
             if (!PuedeContinuar(respuestaCategorias) || !PuedeContinuar(respuestaIconos)) return;
             categorias = await respuestaCategorias.Content.ReadFromJsonAsync<CategoriaAlta[]>(ct) ?? [];
-            iconos = await respuestaIconos.Content.ReadFromJsonAsync<IconoAlta[]>(ct) ?? [];
+            iconos = PresentacionHabitos.OrdenarCatalogoIconos(await respuestaIconos.Content.ReadFromJsonAsync<IconoAlta[]>(ct)) ?? [];
             if (categorias.Length == 0 || iconos.Length == 0)
             {
                 error = "No pudimos cargar las opciones. Reintentá sin perder el borrador.";
@@ -127,6 +127,14 @@ public partial class EditarHabito
                 return;
             }
 
+            var iconoElegido = Datos.IconoId;
+            var cambiarIcono = !string.IsNullOrEmpty(iconoElegido) && iconoElegido != actual.IconoId;
+            if (cambiarIcono && !iconos.Any(icono => icono.Id == iconoElegido))
+            {
+                error = "Ese ícono ya no está disponible. Elegí otro o conservá el ícono actual.";
+                return;
+            }
+
             using var request = new HttpRequestMessage(HttpMethod.Put, ruta);
             request.Headers.IfMatch.Add(version);
             var cuerpo = new Dictionary<string, object?>
@@ -134,7 +142,7 @@ public partial class EditarHabito
                 ["nombre"] = Datos.Nombre, ["descripcion"] = Datos.Descripcion, ["diasProgramados"] = Datos.Dias
             };
             if (Datos.CategoriaId is Guid categoria) cuerpo["categoriaId"] = categoria;
-            if (!string.IsNullOrWhiteSpace(Datos.IconoId)) cuerpo["iconoId"] = Datos.IconoId;
+            if (cambiarIcono) cuerpo["iconoId"] = iconoElegido;
             request.Content = JsonContent.Create(cuerpo);
             guardando = true;
             using var respuesta = await client.SendAsync(request, ct);
