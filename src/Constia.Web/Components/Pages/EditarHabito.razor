@@ -46,33 +46,23 @@
             <fieldset>
                 <legend>Ícono</legend>
                 <details class="edit-icon-picker">
-                    <summary>@(string.IsNullOrEmpty(datos.IconoId)
-                        ? "Sin ícono · Elegir"
-                        : $"{iconos.FirstOrDefault(i => i.Id == datos.IconoId)?.Nombre ?? "Ícono del borrador"} · Cambiar")</summary>
-                @if (string.IsNullOrEmpty(datos.IconoId) || actual?.IconoId is null || iconos.Length == 0)
-                {
-                    <label><input type="radio" name="Datos.IconoId" value="" checked="@(string.IsNullOrEmpty(datos.IconoId))" /> @(actual?.IconoId is null ? "Sin ícono" : "Conservar ícono actual")</label>
-                }
-                <div class="edit-icons">
-                    @foreach (var icono in iconos.OrderBy(i => i.Orden))
+                    @{ var seleccion = iconos.FirstOrDefault(i => i.Id == (datos.IconoId ?? actual?.IconoId)); }
+                    <summary>@(seleccion is not null ? $"{seleccion.Nombre} · Cambiar"
+                        : actual?.IconoId is null ? "Sin ícono · Elegir" : "Ícono actual · Cambiar")</summary>
+                    @if (!iconos.Any(i => i.Id == actual?.IconoId))
                     {
-                        if (PresentacionHabitos.Icono(icono.Id) is { } recurso)
+                        <label><input type="radio" name="Datos.IconoId" value="" checked="@(seleccion is null)" /> @(actual?.IconoId is null ? "Sin ícono" : "Conservar ícono actual")</label>
+                    }
+                    <div class="edit-icons">
+                        @foreach (var icono in iconos)
                         {
                             <label>
-                                <input type="radio" name="Datos.IconoId" value="@icono.Id" checked="@(datos.IconoId == icono.Id)" />
-                                <img src="@Assets[$"assets/constia-iconos-v1/{recurso}"]" width="40" height="40" alt="" />
+                                <input type="radio" name="Datos.IconoId" value="@icono.Id" checked="@(seleccion?.Id == icono.Id)" />
+                                <img src="@Assets[$"assets/constia-iconos-v1/{PresentacionHabitos.Icono(icono.Id)}"]" width="40" height="40" alt="" />
                                 <span>@icono.Nombre</span>
                             </label>
                         }
-                    }
-                    @if (!string.IsNullOrWhiteSpace(datos.IconoId) && !iconos.Any(i => i.Id == datos.IconoId))
-                    {
-                        <label>
-                            <input type="radio" name="Datos.IconoId" value="@datos.IconoId" checked />
-                            Ícono del borrador
-                        </label>
-                    }
-                </div>
+                    </div>
                 </details>
             </fieldset>
             <fieldset>
@@ -130,7 +120,7 @@
                         <p>@vigente.Nombre</p>
                         <p>@vigente.Descripcion</p>
                         <p>@(categorias.FirstOrDefault(c => c.Id == vigente.CategoriaId)?.Nombre ?? "Sin categoría")</p>
-                        <p>@(iconos.FirstOrDefault(i => i.Id == vigente.IconoId)?.Nombre ?? "Sin ícono")</p>
+                        <p>@(iconos.FirstOrDefault(i => i.Id == vigente.IconoId)?.Nombre ?? (vigente.IconoId is null ? "Sin ícono" : "Ícono actual fuera del catálogo"))</p>
                         <p>@PresentacionHabitos.Resumen(vigente.DiasProgramados)</p>
                         <p>Tu borrador sigue en el formulario. Revisá las diferencias antes de guardar.</p>
                     </section>

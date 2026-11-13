@@ -14,6 +14,7 @@ public sealed record EstadoAlta(Guid Id, int Revision, int Paso, DatosAlta Datos
 // shortcut: borradores y coordinación de una instancia; necesitan almacenamiento durable e idempotencia API antes de soportar réplicas o recuperación entre reinicios.
 public sealed class AltaHabito(IMemoryCache cache, TimeProvider clock)
 {
+    private const string DatosRechazados = "La API rechazó los datos. Revisá el campo indicado y volvé a confirmar.";
     private readonly object acceso = new();
     private sealed class Entrada(EstadoAlta estado, DateTimeOffset vence)
     {
@@ -66,7 +67,7 @@ public sealed class AltaHabito(IMemoryCache cache, TimeProvider clock)
         {
             var b = entrada.Vista;
             if (b.Estado != "editable" || b.Revision != revision) return b;
-            b = b with { Revision = b.Revision + 1, Error = null, Campo = null, LoginRequerido = false };
+            b = b with { Revision = b.Revision + 1, Error = null, Campo = accion == "catalogos" ? b.Campo : null, LoginRequerido = false };
             if (datos is not null && accion is "volver" or "continuar")
             {
                 // Solo el paso visible puede modificar su parte del borrador, también al volver.
@@ -120,13 +121,18 @@ public sealed class AltaHabito(IMemoryCache cache, TimeProvider clock)
             if (categorias.StatusCode == HttpStatusCode.OK && iconos.StatusCode == HttpStatusCode.OK)
             {
                 var c = await categorias.Content.ReadFromJsonAsync<CategoriaAlta[]>(ct);
-                var i = await iconos.Content.ReadFromJsonAsync<IconoAlta[]>(ct);
-                if (c is { Length: 10 } && i is { Length: 16 } &&
+                var i = PresentacionHabitos.OrdenarCatalogoIconos(await iconos.Content.ReadFromJsonAsync<IconoAlta[]>(ct));
+                if (c is { Length: 10 } && i is not null &&
                     c.All(x => x is not null && x.Id != Guid.Empty && !string.IsNullOrWhiteSpace(x.Nombre)) &&
-                    i.All(x => x is not null && PresentacionHabitos.Icono(x.Id) is not null && !string.IsNullOrWhiteSpace(x.Nombre)) &&
-                    c.Select(x => x.Id).Distinct().Count() == 10 && i.Select(x => x.Id).Distinct().Count() == 16 &&
-                    c.Select(x => x.Orden).Order().SequenceEqual(Enumerable.Range(1,10)) && i.Select(x => x.Orden).Order().SequenceEqual(Enumerable.Range(1,16)))
-                    return b with { Catalogos = new(c.OrderBy(x => x.Orden).ToArray(), i.OrderBy(x => x.Orden).ToArray()), Error = null };
+                    c.Select(x => x.Id).Distinct().Count() == 10 &&
+                    c.Select(x => x.Orden).Order().SequenceEqual(Enumerable.Range(1,10)))
+                {
+                    b = b with { Catalogos = new(c.OrderBy(x => x.Orden).ToArray(), i), Error = null };
+                    if (b.Datos.IconoId is { } elegido && !i.Any(x => x.Id == elegido))
+                        return b with { Paso = 2, Campo = "iconoid", Datos = b.Datos with { IconoId = null },
+                            Error = "El ícono elegido ya no está disponible. Elegí otro para continuar." };
+                    return b.Campo == "iconoid" ? b with { Error = DatosRechazados } : b;
+                }
             }
         }
         catch (Exception ex) when (RespuestaFallida(ex)) { /* No usar opciones inventadas ante catálogos incompletos. */ }
@@ -154,11 +160,16 @@ public sealed class AltaHabito(IMemoryCache cache, TimeProvider clock)
                 {
                     using var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
                     if (problem.RootElement.ValueKind == JsonValueKind.Object && problem.RootElement.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Object)
-                        campo = errors.EnumerateObject().Select(p => p.Name.ToLowerInvariant()).FirstOrDefault(k => k is "nombre" or "categoriaid" or "iconoid" or "diasprogramados") ?? campo;
+                    {
+                        var campos = errors.EnumerateObject().Select(p => p.Name.ToLowerInvariant()).ToArray();
+                        campo = campos.Contains("iconoid") ? "iconoid"
+                            : campos.FirstOrDefault(k => k is "nombre" or "categoriaid" or "diasprogramados") ?? campo;
+                    }
                 }
                 catch (JsonException) { /* El rechazo es conocido aunque falte un cuerpo ProblemDetails. */ }
-                return b with { Paso = campo == "iconoid" ? 2 : campo == "diasprogramados" ? 3 : 1, Campo = campo,
-                    Error = "La API rechazó los datos. Revisá el campo indicado y volvé a confirmar." };
+                b = b with { Paso = campo == "iconoid" ? 2 : campo == "diasprogramados" ? 3 : 1,
+                    Campo = campo, Error = DatosRechazados };
+                return campo == "iconoid" ? await CatalogosAsync(client, b, ct) : b;
             }
             else if (response.StatusCode == HttpStatusCode.Unauthorized)
                 return b with { LoginRequerido = true, Error = "Tu sesión ya no es válida. Volvé a iniciar sesión." };
