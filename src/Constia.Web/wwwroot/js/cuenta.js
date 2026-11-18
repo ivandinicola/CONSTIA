@@ -66,3 +66,35 @@ window.addEventListener("pageshow", event => {
     document.getElementById("login-status").textContent = "";
     form.querySelector('input[type="password"]').value = "";
 });
+
+document.addEventListener("DOMContentLoaded", () => {
+    function prepararZonaDeCuenta() {
+        const form = document.querySelector("form[data-account-zone]");
+        if (form && !form.dataset.zoneReady) {
+            form.dataset.zoneReady = "true";
+            const select = form.querySelector("select");
+            const zonas = constiaCuenta.zonas();
+            if (zonas.length === 0) {
+                form.querySelector("[data-zone-unavailable]").hidden = false;
+            } else {
+                const seleccion = select.value;
+                const guardada = select.dataset.savedZone;
+                const opciones = [...new Set([...zonas, guardada].filter(Boolean))].sort();
+                select.replaceChildren(new Option("Elegí tu zona horaria", ""),
+                    ...opciones.map(zona => new Option(zona, zona)));
+                // Conservar la selección que rechazó el servidor para que el usuario pueda corregirla.
+                if (seleccion && !opciones.includes(seleccion)) {
+                    const rechazada = new Option(seleccion, seleccion);
+                    rechazada.disabled = true;
+                    select.add(rechazada);
+                }
+                select.value = seleccion;
+                form.querySelector('button[type="submit"]').disabled = false;
+            }
+        }
+        document.querySelector("[data-zone-focus]")?.focus();
+    }
+
+    prepararZonaDeCuenta();
+    window.Blazor?.addEventListener("enhancedload", prepararZonaDeCuenta);
+});
