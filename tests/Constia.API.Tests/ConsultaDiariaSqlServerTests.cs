@@ -131,6 +131,19 @@ public sealed class ConsultaDiariaSqlServerTests(ITestOutputHelper output)
                 new { timeZoneId = "Asia/Tokyo" });
             Assert.Equal(HttpStatusCode.NoContent, cambio.StatusCode);
             await VerificarHoy(clientOeste, sabado, oesteSabado.Id, cumplido: false);
+            await using var verificacion = CreateContext(database.ConnectionString);
+            var guardado = await verificacion.Habitos.AsNoTracking()
+                .Include(h => h.Programaciones)
+                .Include(h => h.PeriodosEstado)
+                .SingleAsync(h => h.Id == oesteViernes.Id);
+            Assert.Equal(viernes, guardado.FechaInicio);
+            var programacion = Assert.Single(guardado.Programaciones);
+            Assert.Equal(viernes, programacion.VigenteDesde);
+            Assert.Null(programacion.VigenteHasta);
+            var estado = Assert.Single(guardado.PeriodosEstado);
+            Assert.Equal(viernes, estado.VigenteDesde);
+            Assert.Null(estado.VigenteHasta);
+            Assert.Equal(viernes, (await verificacion.Set<Cumplimiento>().AsNoTracking().SingleAsync()).Fecha);
             output.WriteLine("00:05 UTC. Oeste: 2026-10-09, Este: 2026-10-10, Oeste tras el PUT con el mismo Bearer: 2026-10-10.");
         }
         finally

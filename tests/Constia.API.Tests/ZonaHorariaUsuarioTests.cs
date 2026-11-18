@@ -194,6 +194,42 @@ public sealed class ZonaHorariaUsuarioTests(JwtApiFactory factory) : IClassFixtu
         Assert.Equal(otroUsuarioZonaInicial, otroUsuario.TimeZoneId);
     }
 
+    [Fact]
+    public async Task ConsultarZonaHoraria_SinBearerOUsuario_Devuelve401()
+    {
+        using var anonimo = factory.CreateClient();
+        using var inexistente = ClienteAutenticado(Guid.NewGuid());
+        using var primera = await anonimo.GetAsync("/api/usuarios/mi-zona-horaria");
+        using var segunda = await inexistente.GetAsync("/api/usuarios/mi-zona-horaria");
+        Assert.Equal(HttpStatusCode.Unauthorized, primera.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, segunda.StatusCode);
+    }
+
+    [Fact]
+    public async Task ConsultarZonaHoraria_DevuelveZonaPersistidaDelUsuarioSinCache()
+    {
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+        using var primera = await client.GetAsync("/api/usuarios/mi-zona-horaria");
+        Assert.Equal(HttpStatusCode.OK, primera.StatusCode);
+        Assert.True(primera.Headers.CacheControl?.NoStore);
+        Assert.Equal(factory.Usuario.TimeZoneId, (await primera.Content.ReadFromJsonAsync<ZonaDto>())!.TimeZoneId);
+
+        var original = factory.Usuario.TimeZoneId;
+        try
+        {
+            using var cambio = await client.PutAsJsonAsync("/api/usuarios/mi-zona-horaria", new { timeZoneId = "Asia/Tokyo" });
+            Assert.Equal(HttpStatusCode.NoContent, cambio.StatusCode);
+            var vigente = await client.GetFromJsonAsync<ZonaDto>("/api/usuarios/mi-zona-horaria");
+            Assert.Equal("Asia/Tokyo", vigente!.TimeZoneId);
+        }
+        finally
+        {
+            factory.Usuario.CambiarZonaHoraria(original);
+        }
+    }
+
+    private sealed record ZonaDto(string TimeZoneId);
+
     private HttpClient ClienteAutenticado(Guid subject)
     {
         var client = factory.CreateClient();

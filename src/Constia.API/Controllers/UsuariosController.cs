@@ -33,6 +33,21 @@ public sealed class UsuariosController(
         catch (ZonaHorariaPersistidaInvalidaException)
         { return Problem(statusCode: StatusCodes.Status500InternalServerError, title: "No se pudo determinar la fecha local del usuario."); }
     }
+    [Authorize]
+    [HttpGet("mi-zona-horaria")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ProducesResponseType(typeof(ZonaHorariaUsuarioResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ZonaHorariaUsuarioResponse>> ConsultarZonaHoraria(
+        [FromServices] IUsuarioRepository usuarios,
+        CancellationToken cancellationToken)
+    {
+        if (usuarioActual.UsuarioId is not Guid id || await usuarios.BuscarPorIdAsync(id, cancellationToken) is not { } usuario)
+            return Unauthorized();
+
+        return Ok(new ZonaHorariaUsuarioResponse(usuario.TimeZoneId));
+    }
+
     [HttpPost]
     [EnableRateLimiting("correo")]
     [ProducesResponseType(typeof(RegistroUsuarioResponse), StatusCodes.Status201Created)]

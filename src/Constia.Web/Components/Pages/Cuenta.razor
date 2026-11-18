@@ -6,13 +6,42 @@
 <h1 tabindex="-1">Mi cuenta</h1>
 <p>Hola, @Http.User.Identity?.Name.</p>
 
+@if (zonaGuardada is not null)
+{
+    <p>Zona horaria guardada: <strong>@zonaGuardada</strong></p>
+}
+
+@if (zonaGuardada is not null || !string.IsNullOrWhiteSpace(Seleccion))
+{
+    <form method="post" @formname="cambiar-zona" @onsubmit="GuardarAsync" data-account-zone>
+        <AntiforgeryToken />
+        <div>
+            <label for="zona-cuenta">Zona horaria</label>
+            <select id="zona-cuenta" name="Seleccion" class="cuenta-zona" data-saved-zone="@(zonaGuardada ?? string.Empty)" required
+                    aria-invalid="@(zonaInvalida ? "true" : null)" aria-describedby="@(error is not null ? "zona-error" : null)">
+                <option value="@(Seleccion ?? zonaGuardada)" selected>@(Seleccion ?? zonaGuardada)</option>
+            </select>
+        </div>
+        <button type="submit" disabled>Guardar zona horaria</button>
+        <p hidden data-zone-unavailable>Este navegador no pudo cargar la lista de zonas horarias.</p>
+    </form>
+}
+else
+{
+    <p><a href="/cuenta" data-enhance-nav="false">Reintentar</a></p>
+}
+
+@if (error is not null)
+{
+    <p id="zona-error" class="cuenta-error" role="alert" tabindex="-1" data-zone-focus>@error</p>
+}
+else if (guardado)
+{
+    <p role="status" tabindex="-1" data-zone-focus>Guardamos tu zona horaria.</p>
+}
+
+<p><a href="/hoy" data-enhance-nav="false">Ir a Hoy</a></p>
 <form method="post" action="/logout">
     <AntiforgeryToken />
     <button type="submit">Cerrar sesión</button>
 </form>
-
-@code {
-    [CascadingParameter] private HttpContext Http { get; set; } = default!;
-
-    protected override void OnInitialized() => Http.Response.Headers.CacheControl = "no-store";
-}
