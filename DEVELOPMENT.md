@@ -12,10 +12,10 @@ Debe mantenerse actualizado a medida que evolucione el proyecto.
 
 Para desarrollar CONSTIA se necesitan:
 
-* Windows.
+* Windows con PowerShell 7.
 * .NET SDK 10.
 * Git.
-* Docker Desktop.
+* Docker Desktop con Docker Compose v2 o posterior y Docker Engine 28.0.0 o posterior.
 * Docker con soporte para WSL 2.
 * SQL Server 2022 mediante Docker.
 * Un editor compatible con el proyecto, como Visual Studio Code o Codex.
@@ -58,6 +58,8 @@ git --version
 dotnet ef --version
 ```
 
+Si falta la herramienta, instalá la versión indicada en la sección de migraciones con `dotnet tool install --global dotnet-ef --version 10.0.12`.
+
 ### Docker
 
 ```powershell
@@ -65,79 +67,72 @@ docker --version
 docker run hello-world
 ```
 
-Docker Desktop debe estar ejecutándose.
+Docker Desktop debe estar ejecutándose. Antes de levantar SQL Server con Compose, verificá que la versión del servidor sea 28.0.0 o posterior.
+
+```powershell
+docker version --format '{{.Server.Version}}'
+```
+
+En versiones anteriores, otros equipos del mismo segmento de red podían acceder a puertos publicados en localhost. [Publicación de puertos en Docker](https://docs.docker.com/engine/network/port-publishing/#publishing-ports).
 
 ---
 
 ## 4. SQL Server de desarrollo
 
-CONSTIA utiliza SQL Server 2022 para desarrollo local.
+Desde la raíz del checkout, usá Docker Compose con el motor Linux activo. El `compose.yaml` fija SQL Server 2022 Developer por digest y acepta su EULA mediante `ACCEPT_EULA=Y`. Publica SQL únicamente en `127.0.0.1`. El puerto local predeterminado es `11433` y se puede cambiar con `CONSTIA_SQL_PORT`.
 
-La base de datos se ejecuta mediante Docker.
-
-### Contenedor
-
-Nombre previsto:
-
-```text
-habittracker-sqlserver
-```
-
-### Puerto
-
-```text
-1433
-```
-
-### Imagen
-
-```text
-mcr.microsoft.com/mssql/server:2022-latest
-```
-
-### Volumen
-
-```text
-habittracker-sql-data
-```
-
-El volumen permite conservar los datos aunque el contenedor sea detenido o eliminado.
-
-### Verificar el contenedor
+Elegí un nombre de proyecto Compose propio. Con `constia-dev`, el volumen de datos se llama `constia-dev_sql-data`. Para validar una instalación limpia, usá un nombre nuevo y comprobá que no exista un volumen de ese proyecto antes de arrancar.
 
 ```powershell
-docker ps
+$env:COMPOSE_PROJECT_NAME = 'constia-dev'
+$env:CONSTIA_SQL_PORT = '11433'
+$env:MSSQL_SA_PASSWORD = Read-Host 'Contraseña local de SQL Server (sa)' -MaskInput
+docker compose up -d --wait
+docker compose ps
 ```
 
-El contenedor debe aparecer como activo.
+Usá una contraseña que cumpla la política de SQL Server. La salida de `docker compose ps` debe mostrar `healthy`: el control ejecuta `SELECT 1` con autenticación y comprueba el código de salida de `sqlcmd`. Un contenedor que solo figura como iniciado todavía puede estar inicializando SQL.
 
-### Verificar los logs
+## 5. Configuración local
+
+Si usás la alternativa `.env`, Compose lee la contraseña desde ese archivo local ignorado por Git. El ejemplo de conexión para EF y la API toma `MSSQL_SA_PASSWORD` de la sesión de PowerShell. Antes de construir la cadena, cargá en esa sesión la misma contraseña mediante entrada enmascarada.
 
 ```powershell
-docker logs habittracker-sqlserver
+$env:MSSQL_SA_PASSWORD = Read-Host 'Misma contraseña de SQL Server configurada en .env' -MaskInput
 ```
 
-SQL Server debe indicar que está listo para aceptar conexiones.
+Cargá la siguiente configuración en la sesión de PowerShell 7 que ejecuta las migraciones y la API. Usá `Read-Host -MaskInput` para los secretos. Si abrís otra terminal, cargá allí la configuración que corresponda. Conservá los valores secretos fuera de Git y evitá imprimir las variables, la configuración resuelta de Compose o las cadenas de conexión.
 
----
+| Variable | Uso |
+|---|---|
+| `MSSQL_SA_PASSWORD` | Contraseña de SQL Server para el volumen de desarrollo. |
+| `ConnectionStrings__DefaultConnection` | Conexión de la API y de EF a la base local `ConstiaLocal`. |
+| `JwtSettings__SigningKey` | Clave exclusiva de la API local, con al menos 32 bytes UTF-8. |
+| `JwtSettings__Issuer`, `JwtSettings__Audience`, `JwtSettings__ExpirationMinutes` | Emisor, audiencia y vigencia del JWT local. |
+| `CONSTIA_STATE_HISTORY_CONNECTION` | La misma conexión, solo para el inicializador TEMP-005. |
+| `Api__BaseUrl` | URL de la API para Web. En `Development` ya es `https://localhost:7260/`. |
 
-## 5. Credenciales y secretos
+```powershell
+$sql = [System.Data.SqlClient.SqlConnectionStringBuilder]::new()
+$sql['Data Source'] = "127.0.0.1,$env:CONSTIA_SQL_PORT"
+$sql['Initial Catalog'] = 'ConstiaLocal'
+$sql['User ID'] = 'sa'
+$sql['Password'] = $env:MSSQL_SA_PASSWORD
+$sql['Encrypt'] = $true
+$sql['TrustServerCertificate'] = $true
+$env:ConnectionStrings__DefaultConnection = $sql.ConnectionString
+$env:JwtSettings__SigningKey = Read-Host 'Clave JWT local' -MaskInput
+$env:JwtSettings__Issuer = 'constia-local'
+$env:JwtSettings__Audience = 'constia-web-local'
+$env:JwtSettings__ExpirationMinutes = '60'
+$env:Resend__Enabled = 'false'
+$env:Bienvenida__CapturarEventos = 'false'
+$env:Bienvenida__ProcesamientoHabilitado = 'false'
+$env:Bienvenida__EnvioHabilitado = 'false'
+$env:Bienvenida__MantenimientoHabilitado = 'false'
+```
 
-Las credenciales de desarrollo no deben almacenarse directamente en el repositorio.
-
-No deben incluirse en:
-
-* Código fuente.
-* `README.md`.
-* `DEVELOPMENT.md`.
-* `appsettings.json` versionado.
-* Commits.
-* Issues.
-* Documentación pública.
-
-Los secretos deberán gestionarse mediante mecanismos apropiados de configuración de desarrollo.
-
-La contraseña utilizada actualmente para el contenedor local de SQL Server existe únicamente como configuración de desarrollo y no forma parte de este repositorio.
+`TrustServerCertificate` se usa para el SQL Server de desarrollo en loopback. Para HTTPS entre el navegador, Web y la API, usá el certificado local de ASP.NET Core.
 
 ---
 
@@ -204,44 +199,47 @@ Las pruebas deben ejecutarse después de cambios relevantes, especialmente cuand
 
 ---
 
-## 10. Entity Framework Core
+## 10. Migraciones e inicialización local
 
-Las migraciones de base de datos serán administradas mediante Entity Framework Core.
-
-Comandos habituales:
+Con SQL en estado `healthy` y la configuración local cargada, prepará el certificado HTTPS y aplicá las migraciones versionadas desde la raíz. Usá `dotnet-ef` 10.0.12, la versión de EF Core referenciada en el proyecto.
 
 ```powershell
-dotnet ef migrations add <NombreMigracion>
+dotnet dev-certs https --trust
+dotnet ef database update --project src/Constia.Infrastructure --startup-project src/Constia.API -- --environment Development
 ```
 
-y:
+En la base local nueva, antes de arrancar la API, elegí un corte UTC y completá TEMP-005. Si necesitás reintentar una captura, reutilizá el mismo corte. Verificá que `status` informe `snapshot captured: True`, `expected legacy habits: 0`, `snapshot rows: 0` y `completed: True`. La sección 16 documenta el procedimiento separado para bases con datos existentes.
 
 ```powershell
-dotnet ef database update
+$env:CONSTIA_STATE_HISTORY_CONNECTION = $env:ConnectionStrings__DefaultConnection
+$corteUtc = [DateTime]::UtcNow.ToString('o', [Globalization.CultureInfo]::InvariantCulture)
+dotnet run --project tools/Constia.StateHistoryBackfill -- capture --cutover-utc $corteUtc --apply
+dotnet run --project tools/Constia.StateHistoryBackfill -- backfill --apply
+dotnet run --project tools/Constia.StateHistoryBackfill -- status
 ```
-
-Las migraciones deberán representar cambios intencionales en el modelo y mantenerse versionadas junto con el código.
-
-No se deberán modificar manualmente las tablas de la base de datos para reemplazar el flujo normal de migraciones durante el desarrollo.
 
 ---
 
 ## 11. Ejecución de la aplicación
 
-Los comandos concretos para ejecutar `Constia.API` y `Constia.Web` se documentarán una vez creados los proyectos.
+Arrancá la API en la terminal con su configuración y esperá que escuche en `https://localhost:7260`.
 
-La ejecución local deberá permitir levantar:
-
-```text
-Constia.Web
-     │
-     │ HTTP
-     ▼
-Constia.API
-     │
-     ▼
-SQL Server
+```powershell
+${env:Logging__LogLevel__Microsoft.AspNetCore.Hosting.Diagnostics} = 'Information'
+dotnet run --project src/Constia.API --launch-profile https
 ```
+
+En otra terminal arrancá Web y abrí `https://localhost:7158`. El perfil de desarrollo de Web ya apunta a la API por HTTPS.
+
+```powershell
+dotnet run --project src/Constia.Web --launch-profile https
+```
+
+Comprobá la instalación con una cuenta sintética verificada, preparada únicamente en la base de ensayo. Para prepararla sin enviar correo, usá `VerificacionCorreoRepository.RegistrarAsync` y luego `ConfirmarAsync` con un token generado para la prueba, como en `EmailVerificationSqlServerTests`. La cuenta se guarda primero como pendiente y después pasa a verificada en la base desechable. Iniciá sesión desde Web y comprobá que Hoy cargue. El `200` de `GET /api/habitos/diarios/hoy` verifica que la API autenticó la solicitud y pudo consultar la base con el historial inicializado.
+
+Desde Mis hábitos, abrí Nuevo hábito, completá nombre y categoría y avanzá al selector. Para la revisión con el catálogo original, comprobá que Web reciba `200` de `GET /api/habitos/categorias` y `GET /api/habitos/iconos` en la API real y que el selector muestre los 16 IDs originales en orden, de `libro` a `billete`. Terminá ahí el ensayo. Estos GET los realiza el servidor Web y se comprueban en los registros de estado y ruta de la API, sin registrar credenciales ni cuerpos.
+
+Para detener el entorno local y conservar el volumen, usá `docker compose down` con el mismo nombre de proyecto. En un ensayo desechable, comprobá las etiquetas de proyecto del contenedor, la red y el volumen antes de ejecutar `docker compose down --volumes` con ese nombre.
 
 ### Compatibilidad del registro (UI-002)
 
