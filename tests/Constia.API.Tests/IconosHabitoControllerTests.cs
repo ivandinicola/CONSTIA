@@ -32,7 +32,19 @@ public sealed class IconosHabitoControllerTests
         ("brote", "Brote", 13),
         ("portatil", "Portátil", 14),
         ("musica", "Música", 15),
-        ("billete", "Billete", 16)
+        ("billete", "Billete", 16),
+        ("estiramientos", "Estiramientos", 17),
+        ("higiene-bucal", "Higiene bucal", 18),
+        ("medicacion", "Medicación", 19),
+        ("diario", "Diario", 20),
+        ("hogar", "Hogar", 21),
+        ("planificacion", "Planificación", 22),
+        ("cuidado-personal", "Cuidado personal", 23),
+        ("caminata", "Caminata", 24),
+        ("idiomas", "Idiomas", 25),
+        ("desconexion-digital", "Desconexión digital", 26),
+        ("vinculos", "Vínculos", 27),
+        ("bicicleta", "Bicicleta", 28)
     ];
 
     [Theory]
@@ -53,7 +65,7 @@ public sealed class IconosHabitoControllerTests
     }
 
     [Fact]
-    public async Task Listar_ConJwtValido_DevuelveLosDieciseisIconosYSoloLosTresCamposAprobados()
+    public async Task Listar_ConJwtValido_DevuelveLosVeintiochoIconosYSoloLosTresCamposAprobados()
     {
         using var factory = new JwtApiFactory();
         using var client = factory.CreateClient();
@@ -65,7 +77,7 @@ public sealed class IconosHabitoControllerTests
         Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var iconos = document.RootElement.EnumerateArray().ToArray();
-        Assert.Equal(16, iconos.Length);
+        Assert.Equal(28, iconos.Length);
         for (var index = 0; index < iconos.Length; index++)
         {
             var icono = iconos[index];
@@ -98,7 +110,7 @@ public sealed class IconosHabitoControllerTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal(16, document.RootElement.GetArrayLength());
+        Assert.Equal(28, document.RootElement.GetArrayLength());
         Assert.Same(habito, Assert.Single(factory.HabitosPersistidos));
         Assert.Equal("Leer", habito.Nombre);
         Assert.Equal(EstadoHabito.Activo, habito.Estado);

@@ -888,6 +888,38 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     }
 
     [Fact]
+    public async Task CrearYEditarHabito_PersisteIconosNuevosSinCambiarCategoria()
+    {
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+        var categoriaId = CatalogoCategoriasHabito.Todas[4].Id;
+        var nombre = $"Estiramientos {Guid.NewGuid()}";
+        var diasProgramados = new[] { (int)DayOfWeek.Monday, (int)DayOfWeek.Wednesday };
+        using var alta = await client.PostAsJsonAsync("/api/habitos", new
+        {
+            nombre, categoriaId, iconoId = "estiramientos", diasProgramados
+        });
+        Assert.Equal(HttpStatusCode.Created, alta.StatusCode);
+        var creado = Assert.IsType<HabitoResponse>(await alta.Content.ReadFromJsonAsync<HabitoResponse>());
+        Assert.Equal("estiramientos", creado.IconoId);
+        Assert.Equal(categoriaId, creado.CategoriaId);
+
+        var ruta = $"/api/habitos/{creado.Id:D}";
+        using var detalle = await client.GetAsync(ruta);
+        Assert.Equal(HttpStatusCode.OK, detalle.StatusCode);
+        using var edicion = new HttpRequestMessage(HttpMethod.Put, ruta)
+        {
+            Content = JsonContent.Create(new { nombre, iconoId = "cuidado-personal", diasProgramados })
+        };
+        edicion.Headers.IfMatch.Add(Assert.IsType<EntityTagHeaderValue>(detalle.Headers.ETag));
+        using var respuesta = await client.SendAsync(edicion);
+        Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
+
+        var releido = Assert.IsType<HabitoResponse>(await client.GetFromJsonAsync<HabitoResponse>(ruta));
+        Assert.Equal("cuidado-personal", releido.IconoId);
+        Assert.Equal(categoriaId, releido.CategoriaId);
+    }
+
+    [Fact]
     public async Task CrearHabito_IgnoraUsuarioIdEnJsonYUsaElSubDelToken()
     {
         using var client = ClienteAutenticado(factory.Usuario.Id);

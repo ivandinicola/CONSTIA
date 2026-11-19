@@ -21,19 +21,31 @@ public sealed class CatalogoIconosHabitoTests
         ("brote", "Brote", 13),
         ("portatil", "Portátil", 14),
         ("musica", "Música", 15),
-        ("billete", "Billete", 16)
+        ("billete", "Billete", 16),
+        ("estiramientos", "Estiramientos", 17),
+        ("higiene-bucal", "Higiene bucal", 18),
+        ("medicacion", "Medicación", 19),
+        ("diario", "Diario", 20),
+        ("hogar", "Hogar", 21),
+        ("planificacion", "Planificación", 22),
+        ("cuidado-personal", "Cuidado personal", 23),
+        ("caminata", "Caminata", 24),
+        ("idiomas", "Idiomas", 25),
+        ("desconexion-digital", "Desconexión digital", 26),
+        ("vinculos", "Vínculos", 27),
+        ("bicicleta", "Bicicleta", 28)
     ];
 
     public static IEnumerable<object[]> IdentificadoresOficiales =>
         Esperados.Select(icono => new object[] { icono.Id });
 
     [Fact]
-    public void Todos_ExponeLosDieciseisValoresExactosEnElOrdenAprobado()
+    public void Todos_ExponeLosVeintiochoValoresExactosEnElOrdenAprobado()
     {
         Assert.Equal(Esperados, CatalogoIconosHabito.Todos
             .Select(icono => (icono.Id, icono.Nombre, icono.Orden)).ToArray());
-        Assert.Equal(16, CatalogoIconosHabito.Todos.Select(icono => icono.Id).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(16, CatalogoIconosHabito.Todos.Select(icono => icono.Orden).Distinct().Count());
+        Assert.Equal(28, CatalogoIconosHabito.Todos.Select(icono => icono.Id).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(28, CatalogoIconosHabito.Todos.Select(icono => icono.Orden).Distinct().Count());
     }
 
     [Theory]
@@ -90,7 +102,7 @@ public sealed class CatalogoIconosHabitoTests
         }
 
         Assert.Equal(10, categorias.Length);
-        Assert.Equal(16, CatalogoIconosHabito.Todos.Count);
+        Assert.Equal(28, CatalogoIconosHabito.Todos.Count);
         Assert.Equal(categorias, CatalogoCategoriasHabito.Todas
             .Select(categoria => (categoria.Id, categoria.Nombre, categoria.Orden)).ToArray());
     }

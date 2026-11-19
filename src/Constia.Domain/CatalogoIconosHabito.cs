@@ -21,7 +21,19 @@ public static class CatalogoIconosHabito
             new("brote", "Brote", 13),
             new("portatil", "Portátil", 14),
             new("musica", "Música", 15),
-            new("billete", "Billete", 16)
+            new("billete", "Billete", 16),
+            new("estiramientos", "Estiramientos", 17),
+            new("higiene-bucal", "Higiene bucal", 18),
+            new("medicacion", "Medicación", 19),
+            new("diario", "Diario", 20),
+            new("hogar", "Hogar", 21),
+            new("planificacion", "Planificación", 22),
+            new("cuidado-personal", "Cuidado personal", 23),
+            new("caminata", "Caminata", 24),
+            new("idiomas", "Idiomas", 25),
+            new("desconexion-digital", "Desconexión digital", 26),
+            new("vinculos", "Vínculos", 27),
+            new("bicicleta", "Bicicleta", 28)
         ]);
 
     public static bool EsOficial(string? iconoId) =>

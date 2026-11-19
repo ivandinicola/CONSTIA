@@ -10,7 +10,7 @@ public sealed class ListarIconosHabitoTests
     {
         var resultado = new ListarIconosHabito().Ejecutar();
 
-        Assert.Equal(16, resultado.Count);
+        Assert.Equal(28, resultado.Count);
         Assert.All(resultado, icono => Assert.IsType<IconoHabitoListado>(icono));
         Assert.Equal(CatalogoIconosHabito.Todos.Select(icono => (icono.Id, icono.Nombre, icono.Orden)),
             resultado.Select(icono => (icono.Id, icono.Nombre, icono.Orden)));
