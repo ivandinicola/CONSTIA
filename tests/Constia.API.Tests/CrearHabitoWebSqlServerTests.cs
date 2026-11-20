@@ -23,8 +23,9 @@ public sealed class CrearHabitoWebSqlServerTests(ITestOutputHelper output)
         {
             var user = new Usuario("UI006", "ui006@example.invalid", "hash-sintetico", "Etc/UTC");
             var otro = new Usuario("Otro", "otro-ui006@example.invalid", "hash-sintetico", "Pacific/Auckland");
+            var legado = HabitoHistorico.Crear(user, "Paseo breve", null, new DateOnly(2026, 10, 16), [DayOfWeek.Friday]);
             await using (var db = CreateContext(database.ConnectionString))
-            { db.AddRange(user, otro); await db.SaveChangesAsync(); }
+            { db.AddRange(user, otro, legado); await db.SaveChangesAsync(); }
             using var fixture = new ConsultaDiariaSqlServerTests.HostSql(database.ConnectionString, new());
             using var host = fixture.WithWebHostBuilder(b => b.ConfigureTestServices(s => s.AddSingleton<TimeProvider>(new Reloj())));
             using var client = host.CreateClient(new() { BaseAddress = new("https://localhost") });
@@ -32,19 +33,35 @@ public sealed class CrearHabitoWebSqlServerTests(ITestOutputHelper output)
                 client.DefaultRequestHeaders.Authorization = new("Bearer", scope.ServiceProvider.GetRequiredService<IAccessTokenService>().Emitir(user.Id, user.Nombre, user.Email).Value);
             var categorias = await client.GetFromJsonAsync<CategoriaHabitoListado[]>("/api/habitos/categorias");
             var iconos = await client.GetFromJsonAsync<IconoHabitoListado[]>("/api/habitos/iconos");
-            Assert.Equal(10, categorias!.Length); Assert.Equal(16, iconos!.Length);
+            Assert.Equal(10, categorias!.Length); Assert.Equal(28, iconos!.Length);
             var categoria = categorias.Single(c => c.Nombre == "Aprendizaje y crecimiento").Id;
             using var first = await client.PostAsJsonAsync("/api/habitos", new { nombre = "Nombre de más de cincuenta caracteres para no inventar una restricción de interfaz", categoriaId = categoria, iconoId = "billete", diasProgramados = new[] { 1, 0, 1 } });
             Assert.Equal(HttpStatusCode.Created, first.StatusCode);
             var antes = (await first.Content.ReadFromJsonAsync<HabitoResponse>())!;
             Assert.Equal(new DateOnly(2026, 11, 8), antes.StartDate);
             Assert.Equal(HttpStatusCode.NoContent, (await client.PutAsJsonAsync("/api/usuarios/mi-zona-horaria", new { timeZoneId = "America/Los_Angeles" })).StatusCode);
-            using var second = await client.PostAsJsonAsync("/api/habitos", new { nombre = "Sin descripción", categoriaId = categoria, iconoId = "libro", diasProgramados = new[] { 2, 4, 2 } });
+            using var second = await client.PostAsJsonAsync("/api/habitos", new { nombre = "Sin descripción", categoriaId = categoria, iconoId = "estiramientos", diasProgramados = new[] { 2, 4, 2 } });
             Assert.Equal(HttpStatusCode.Created, second.StatusCode);
             var despues = (await second.Content.ReadFromJsonAsync<HabitoResponse>())!;
             Assert.Equal(new DateOnly(2026, 11, 7), despues.StartDate);
             Assert.Null(despues.Descripcion);
             Assert.Equal(new[] { DayOfWeek.Tuesday, DayOfWeek.Thursday }, despues.DiasProgramados);
+            Assert.Equal("estiramientos", despues.IconoId);
+            await using (var antesDeEditar = CreateContext(database.ConnectionString))
+                Assert.Equal("estiramientos", (await antesDeEditar.Habitos.AsNoTracking().SingleAsync(h => h.Id == despues.Id)).IconoId);
+
+            using var detalle = await client.GetAsync($"/api/habitos/{despues.Id:D}");
+            Assert.Equal(HttpStatusCode.OK, detalle.StatusCode);
+            using var edicion = new HttpRequestMessage(HttpMethod.Put, $"/api/habitos/{despues.Id:D}")
+            {
+                Content = JsonContent.Create(new { nombre = despues.Nombre, iconoId = "caminata", diasProgramados = new[] { 2, 4 } })
+            };
+            edicion.Headers.IfMatch.Add(Assert.IsType<System.Net.Http.Headers.EntityTagHeaderValue>(detalle.Headers.ETag));
+            using var respuesta = await client.SendAsync(edicion);
+            Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
+            var releido = await client.GetFromJsonAsync<HabitoResponse>($"/api/habitos/{despues.Id:D}");
+            Assert.Equal("caminata", releido!.IconoId);
+
             await using var verify = CreateContext(database.ConnectionString);
             var saved = await new HabitoRepository(verify).BuscarPorIdYUsuarioAsync(despues.Id, user.Id, default);
             Assert.NotNull(saved); Assert.Null(await new HabitoRepository(verify).BuscarPorIdYUsuarioAsync(despues.Id, otro.Id, default));
@@ -52,8 +69,12 @@ public sealed class CrearHabitoWebSqlServerTests(ITestOutputHelper output)
             Assert.Equal(new DateOnly(2026, 11, 7), Assert.Single(saved.Programaciones).VigenteDesde);
             Assert.Equal(new DateOnly(2026, 11, 7), Assert.Single(saved.PeriodosEstado).VigenteDesde);
             Assert.Equal(2, saved.DiasProgramados.Count); Assert.DoesNotContain(saved.DiasProgramados, d => d.Dia == DayOfWeek.Saturday);
-            Assert.Equal(2, await verify.Habitos.CountAsync());
-            output.WriteLine("Host HTTP + EF real: catálogos 10/16; 00:05 UTC -> 08/11 UTC; mismo token y zona vigente Los Ángeles -> 07/11. Inicio no programado permitido. Días únicos y vigencias persistidas. Propiedad aislada. Nombre >50 válido.");
+            Assert.Equal("caminata", saved.IconoId);
+            Assert.Equal(categoria, saved.CategoriaId);
+            Assert.Equal("billete", (await verify.Habitos.AsNoTracking().SingleAsync(h => h.Id == antes.Id)).IconoId);
+            Assert.Null((await verify.Habitos.AsNoTracking().SingleAsync(h => h.Id == legado.Id)).IconoId);
+            Assert.Equal(3, await verify.Habitos.CountAsync());
+            output.WriteLine("Host HTTP + EF real: catálogos 10/28; 00:05 UTC -> 08/11 UTC; mismo token y zona vigente Los Ángeles -> 07/11. Inicio no programado permitido. Días únicos y vigencias persistidas. Propiedad aislada. Nombre >50 válido. Alta Estiramientos y edición Caminata releídas en contextos separados. Billete y legado sin ícono preservados.");
         }
         finally { await DropDisposableDatabaseAsync(database); output.WriteLine("Base temporal eliminada por fixture."); }
     }

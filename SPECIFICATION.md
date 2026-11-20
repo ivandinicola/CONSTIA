@@ -64,7 +64,7 @@ Para crear un hábito se deberá proporcionar como mínimo:
 
 * Nombre.
 * Una categoría válida del catálogo oficial, mediante su identificador estable.
-* Un ícono válido del catálogo oficial de dieciséis recursos, mediante un identificador estable.
+* Un ícono válido del catálogo oficial de veintiocho recursos, mediante un identificador estable.
 * Al menos un día programado.
 
 La descripción será opcional.
@@ -130,7 +130,7 @@ Los ejemplos y los íconos de referencia están en `MVP-SCOPE.md`, sección 3.11
 * Los identificadores serán estables entre despliegues y no dependerán del nombre visible. La estrategia técnica de claves y precarga se propone en el análisis de impacto; todavía no se crearon seeds.
 * Se podrá consultar y editar la categoría dentro de las operaciones de hábitos, con las mismas garantías de propiedad, integridad y concurrencia que la edición general. Omitirla conserva el valor actual y V1 no permite eliminar una categoría ya asignada. Esta decisión no habilita reactivación ni cambios en `FechaInicio`.
 * No se permitirá crear, editar ni eliminar categorías personalizadas en V1.
-* Categoría e ícono son independientes. Todo hábito nuevo requiere un ícono oficial válido entre los dieciséis recursos disponibles. Billete está aprobado como recurso de referencia de Finanzas personales, pero puede elegirse para cualquier categoría. Elegir o cambiar una categoría no impone ni cambia automáticamente el ícono.
+* Categoría e ícono son independientes. Todo hábito nuevo requiere un ícono oficial válido entre los veintiocho recursos disponibles. Billete está aprobado como recurso de referencia de Finanzas personales, pero puede elegirse para cualquier categoría. Elegir o cambiar una categoría no impone ni cambia automáticamente el ícono.
 * Cambiar solo la categoría no modifica días, estado, cumplimientos ni fechas históricas y no crea una versión de programación semanal. No se aprueban métricas históricas por categoría ni una reconstrucción retrospectiva de categorías desconocidas.
 
 ### Transición de hábitos existentes

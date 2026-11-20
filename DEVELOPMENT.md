@@ -237,7 +237,7 @@ dotnet run --project src/Constia.Web --launch-profile https
 
 Comprobá la instalación con una cuenta sintética verificada, preparada únicamente en la base de ensayo. Para prepararla sin enviar correo, usá `VerificacionCorreoRepository.RegistrarAsync` y luego `ConfirmarAsync` con un token generado para la prueba, como en `EmailVerificationSqlServerTests`. La cuenta se guarda primero como pendiente y después pasa a verificada en la base desechable. Iniciá sesión desde Web y comprobá que Hoy cargue. El `200` de `GET /api/habitos/diarios/hoy` verifica que la API autenticó la solicitud y pudo consultar la base con el historial inicializado.
 
-Desde Mis hábitos, abrí Nuevo hábito, completá nombre y categoría y avanzá al selector. Para la revisión con el catálogo original, comprobá que Web reciba `200` de `GET /api/habitos/categorias` y `GET /api/habitos/iconos` en la API real y que el selector muestre los 16 IDs originales en orden, de `libro` a `billete`. Terminá ahí el ensayo. Estos GET los realiza el servidor Web y se comprueban en los registros de estado y ruta de la API, sin registrar credenciales ni cuerpos.
+Desde Mis hábitos, abrí Nuevo hábito, completá nombre y categoría y avanzá al selector. Para v0.1.0, comprobá que Web reciba `200` de `GET /api/habitos/categorias` y `GET /api/habitos/iconos` en la API real y que el selector muestre los 28 IDs en orden: los 16 originales de `libro` a `billete`, seguidos de los 12 aprobados de `estiramientos` a `bicicleta`. En una base aislada, verificá también alta con Estiramientos, edición a Caminata y relectura independiente; conservá una asignación anterior y un legado sin ícono. Estos GET los realiza el servidor Web y se comprueban en los registros de estado y ruta de la API, sin registrar credenciales ni cuerpos.
 
 Para detener el entorno local y conservar el volumen, usá `docker compose down` con el mismo nombre de proyecto. En un ensayo desechable, comprobá las etiquetas de proyecto del contenedor, la red y el volumen antes de ejecutar `docker compose down --volumes` con ese nombre.
 
@@ -491,3 +491,14 @@ Recursos: dieciséis PNG existentes; check original del master Control · Realiz
 Adaptación autorizada de PEN-002: conteos y detalle de solo lectura, sin puntos ni colores por categoría y sin acciones de registro. No se infieren categorías históricas desde metadatos actuales. Se conservan grilla lunes–domingo, Hoy/selección, estados diferenciados y neutralidad; las fechas futuras son planificación, no incumplimiento. El porcentaje del detalle se muestra solo para fechas no futuras y con oportunidades conocidas. La fecha elegida tiene contorno y texto «Elegido», además de color.
 
 Un 422 de STAT-005 impide acreditar el resumen de todo el rango: no identifica celdas desconocidas. El detalle seleccionado usa su propia respuesta y puede estar disponible aun con error del rango. Inversamente, un error del detalle no invalida por sí solo los conteos acreditados. 503 se distingue de historia desconocida; vacío requiere 200 válido. Sin POST de cumplimiento, sin escritura, sin idempotencia nueva ni cambio de los contratos COMP-007/STAT-005. El dock activa Calendario y conserva Hoy/Cuenta.
+
+## Despliegue gradual del catálogo de íconos (28 requeridos para v0.1.0)
+
+1. Desplegar Web compatible y retirar todas las instancias de Web anterior. Con la API de 16, verificar que el alta ofrezca las 16 opciones y permita guardar. Web ya incluye los recursos para representar IDs nuevos asignados.
+2. Desplegar la API ampliada. Verificar que el alta ofrezca los 28 íconos y que se pueda editar y releer un ID nuevo. Durante el cambio, Web compatible acepta ambos catálogos completos. La ampliación usa la columna existente `IconoId` y no requiere migración.
+
+Para revertir la ampliación, volver primero a la API de 16 con Web compatible activa. Si ya se guardaron IDs nuevos, conservar esa Web para seguir mostrando sus imágenes. La edición omite `iconoId` al conservar la asignación y permite cambiarla por un ícono ofrecido por la API activa.
+
+Web anterior con API ampliada queda fuera del orden admitido: el alta exige el catálogo de 16 y queda bloqueada al recibir 28.
+
+La verificación local acredita el candidato, no las instancias de un entorno desplegado. Antes de ampliar la API en destino, identificar todas las instancias Web que reciben tráfico y acreditar que ejecutan Web compatible (PR #44 o posterior). El catálogo completo de 28 es requisito aprobado de v0.1.0; volver temporalmente a 16 es una reversión operativa, no el cumplimiento de ese requisito.
