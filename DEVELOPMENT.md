@@ -13,7 +13,8 @@ Debe mantenerse actualizado a medida que evolucione el proyecto.
 Para desarrollar CONSTIA se necesitan:
 
 * Windows con PowerShell 7.
-* .NET SDK 10.
+* .NET SDK 10 para restaurar y compilar.
+* .NET Runtime y ASP.NET Core Runtime 10 corregidos en la raíz/arquitectura que ejecuta API y Web; referencia local validada: Windows x64 10.0.15. Ver la sección .NET.
 * Git.
 * Docker Desktop con Docker Compose v2 o posterior y Docker Engine 28.0.0 o posterior.
 * Docker con soporte para WSL 2.
@@ -44,7 +45,18 @@ Antes de trabajar en CONSTIA, verificar que las herramientas principales estén 
 dotnet --version
 ```
 
-La versión utilizada por el proyecto debe corresponder a .NET 10.
+Los proyectos usan `net10.0`. El SDK compila; no identifica por sí solo el runtime que cargará una aplicación framework-dependent. En el equipo local ensayado se conservaron SDK 10.0.401 y Desktop Runtime 10.0.12 y se actualizaron .NET Runtime y ASP.NET Core Runtime x64 a 10.0.15. Desktop e IIS no formaron parte de la corrección de API.
+
+Infrastructure referencia `System.Security.Cryptography.Pkcs` 9.0.21 y lo propaga a sus consumidores. Para los dos avisos diagnosticados, la rama 10 del paquete/framework debe estar corregida desde 10.0.13; se validó localmente 10.0.15. Consultá los [avisos oficiales 454](https://github.com/dotnet/announcements/issues/454) y [468](https://github.com/dotnet/announcements/issues/468). Usá un parche corregido y soportado; no vuelvas a 10.0.12 para resolver un problema operativo.
+
+Antes de arrancar, comprobá la raíz efectiva, la arquitectura y ambos frameworks. En Windows x64, para la instalación ensayada:
+
+```powershell
+& "$env:ProgramFiles/dotnet/dotnet.exe" --info
+& "$env:ProgramFiles/dotnet/dotnet.exe" --list-runtimes
+```
+
+La lista de instalados no prueba cuál seleccionó el proceso. Para acreditar una instalación, registrá host/arquitectura, framework seleccionado y, dentro del mismo PID de API completa, ruta, FileVersion, InformationalVersion y SHA256 de Pkcs. `AssemblyVersion` y una auditoría NuGet limpia no bastan. La evidencia local usó carga explícita de diagnóstico mediante un hook temporal externo, luego retirado: acredita resolución en API completa, no uso de CMS por el negocio. No hay un endpoint diagnóstico de producto. Las publicaciones autocontenidas requieren su propia revisión y republicación; actualizar una raíz compartida no las corrige automáticamente.
 
 ### Git
 
@@ -134,11 +146,13 @@ $env:Bienvenida__MantenimientoHabilitado = 'false'
 
 `TrustServerCertificate` se usa para el SQL Server de desarrollo en loopback. Para HTTPS entre el navegador, Web y la API, usá el certificado local de ASP.NET Core.
 
+Este procedimiento mantiene correo real y bienvenida deshabilitados. El registro público no se acredita creando una cuenta sintética verificada en el repositorio. Para habilitarlo en un destino autorizado hacen falta la configuración de verificación/activación y del transporte, entre ellas `VerificacionCorreo__PublicUrl`, `Resend__Enabled`, `Resend__ApiKey` y `Resend__FromAddress`. Guardá sus valores fuera de Git y no los imprimas. Consultá las [opciones del transporte](src/Constia.API/Configuration/ResendC1ServiceCollectionExtensions.cs) y el [servicio de verificación](src/Constia.Application/Usuarios/ServicioVerificacionCorreo.cs); las variables del transporte por sí solas no acreditan activación, recepción ni confirmación en destino. Sin disponibilidad del canal, el alta puede responder `503 registration_unavailable`. No habilites envíos reales como parte de esta guía de ensayo.
+
 ---
 
 ## 6. Estructura esperada
 
-La solución tendrá una estructura similar a:
+La solución contiene Web, API, Application, Domain e Infrastructure; hay proyectos de pruebas separados y herramientas de operación. Estructura principal:
 
 ```text
 CONSTIA/
@@ -157,15 +171,21 @@ CONSTIA/
 │   ├── Constia.Domain/
 │   └── Constia.Infrastructure/
 │
-└── tests/
-    └── Constia.Tests/
+├── tests/
+│   ├── Constia.Tests/
+│   ├── Constia.API.Tests/
+│   ├── Constia.Web.Tests/
+│   └── Constia.EnvioUnico.Tests/
+└── tools/
+    ├── Constia.StateHistoryBackfill/
+    └── Constia.EnvioUnico/
 ```
 
 ---
 
 ## 7. Restaurar dependencias
 
-Una vez creada la solución, desde la raíz del repositorio:
+Desde la raíz del checkout:
 
 ```powershell
 dotnet restore
@@ -208,7 +228,7 @@ dotnet dev-certs https --trust
 dotnet ef database update --project src/Constia.Infrastructure --startup-project src/Constia.API -- --environment Development
 ```
 
-En la base local nueva, antes de arrancar la API, elegí un corte UTC y completá TEMP-005. Si necesitás reintentar una captura, reutilizá el mismo corte. Verificá que `status` informe `snapshot captured: True`, `expected legacy habits: 0`, `snapshot rows: 0` y `completed: True`. La sección 16 documenta el procedimiento separado para bases con datos existentes.
+En el código de referencia de v0.1.0 hay 14 migraciones versionadas. No se aplican automáticamente al arrancar la API. En la base local nueva, antes de arrancar la API, elegí un corte UTC y completá TEMP-005. Si necesitás reintentar una captura, reutilizá el mismo corte. Verificá que `status` informe `snapshot captured: True`, `expected legacy habits: 0`, `snapshot rows: 0` y `completed: True`. La sección 16 documenta el procedimiento separado para bases con datos existentes.
 
 ```powershell
 $env:CONSTIA_STATE_HISTORY_CONNECTION = $env:ConnectionStrings__DefaultConnection
@@ -470,7 +490,7 @@ Al revertir ambas migraciones TEMP-005 en orden inverso, el `Down()` de `Constra
 
 ## UI-005 — Mis hábitos
 
-`/habitos` requiere la sesión web vigente. Consume el listado completo de activos; la expansión usa sus datos y no genera una consulta de detalle por tarjeta. Crear está disponible mediante UI-006/UI-008 en `/habitos/nuevo`; editar y consultar inactivos permanecen no disponibles hasta UI-007 y UI-014.
+`/habitos` requiere la sesión web vigente. Consume el listado completo de activos; la expansión usa sus datos y no genera una consulta de detalle por tarjeta. Crear está disponible en `/habitos/nuevo`, editar en `/habitos/{id}/editar` e Inactivos en `/habitos/inactivos`. Desde cada tarjeta expandida se accede al historial y desde allí a las estadísticas individuales, con restauración de navegación y foco.
 
 La desactivación usa una confirmación explícita, POST del mismo origen con antifalsificación y DELETE autenticado solo desde Web. Un 204 confirma; si se pierde la respuesta, el detalle solo acredita el estado final. Los resultados inciertos se conservan y se consultan sin reenviar automáticamente. La coordinación comparte el alcance de una instancia de las sesiones: reiniciar invalida las sesiones; antes de desplegar réplicas hacen falta sesiones, claves y coordinación compartidas. No hay reactivación en V1.
 
@@ -482,7 +502,7 @@ La coordinación retiene como máximo ocho borradores por sesión, cada uno por 
 
 El alcance es una sola instancia, como las sesiones Web. Un reinicio invalida sesiones y pierde esta coordinación; la API no tiene idempotencia durable de creación. Revisar Mis hábitos antes de iniciar otro borrador tras una incertidumbre o un reinicio. Antes de réplicas o reintentos durables hacen falta almacenamiento/coordinación compartidos y un contrato de idempotencia API; esta entrega no los incorpora.
 
-Recursos: dieciséis PNG existentes; check original del master Control · Realizado · PNG de Penpot (media 129977ce-683b-806a-8008-c92f778e5bc6), y confeti oficial aprobado. Sin ilustraciones sustitutas.
+Recursos: veintiocho PNG oficiales, con los 16 IDs originales en el mismo orden y 12 incorporaciones aprobadas; check original del master Control · Realizado · PNG de Penpot (media 129977ce-683b-806a-8008-c92f778e5bc6), y confeti oficial aprobado. Sin ilustraciones sustitutas.
 
 ## UI-010 — Calendario de consulta
 
@@ -502,3 +522,19 @@ Para revertir la ampliación, volver primero a la API de 16 con Web compatible a
 Web anterior con API ampliada queda fuera del orden admitido: el alta exige el catálogo de 16 y queda bloqueada al recibir 28.
 
 La verificación local acredita el candidato, no las instancias de un entorno desplegado. Antes de ampliar la API en destino, identificar todas las instancias Web que reciben tráfico y acreditar que ejecutan Web compatible (PR #44 o posterior). El catálogo completo de 28 es requisito aprobado de v0.1.0; volver temporalmente a 16 es una reversión operativa, no el cumplimiento de ese requisito.
+
+## Edición, historial y Progreso en v0.1.0
+
+La edición precarga nombre, descripción, categoría, ícono y días. El detalle entrega ETag; Web lo envía como If-Match y un formulario obsoleto recibe `412` sin sobrescribir el guardado anterior. Se conserva el borrador; «Revisar versión actual» hace GET y un nuevo PUT requiere una acción explícita. El PUT sin If-Match conserva el contrato anterior, por lo que no acredita que ese cliente detecte formularios desactualizados. Omitir `categoriaId` o `iconoId` conserva su asignación, incluso en un legado; null explícito no la borra. Web omite el ícono al conservarlo y solo envía el campo al elegir otro disponible.
+
+El historial de un hábito propio, activo o inactivo, separa oportunidad y registro persistido. Puede devolver `200` con días desconocidos; un registro fuera de programación o en un día desconocido sigue visible y no se convierte en oportunidad cumplida. El registro de nuevos cumplimientos se realiza desde Hoy; Calendario e Historial son de consulta.
+
+Progreso y Estadísticas del hábito resumen 30 días civiles inclusivos, incluido hoy, y reintentan sus secciones independientemente. Si los cortes difieren, se identifican por fecha: un período rezagado conserva «Hoy»/«En curso» en su última fecha, y las rachas muestran su propio corte. No se presenta ese dato como una lectura nueva del reloj. Cero conocido, ausencia de oportunidades y falta de historia tienen mensajes distintos.
+
+## Evidencia y límites de la versión de código
+
+La [matriz V1](docs/releases/v0.1.0-aceptacion.md) enlaza la CI del SHA de código y las entregas verificadas. El ensayo de instalación limpia de PR #45 usó un checkout y volumen nuevos, 14 migraciones y TEMP-005; en aquel momento la API ofrecía 16 íconos. PR #47 y el ensayo posterior del runtime acreditaron el catálogo de 28, alta/edición y relectura SQL independiente con Web/API/SQL reales. Son evidencias locales complementarias, no una repetición idéntica de toda la V1 sobre cada commit.
+
+Los recorridos de teclado, foco y anchos 280/320/390 se verificaron en Chromium emulado. No acreditan dispositivo físico, Safari real ni lector de pantalla. Algunas pantallas anteriores se probaron con API sintética; las evidencias distinguen esos casos de los recorridos reales. El bloqueo de DLL HTTP en Windows se resolvió para las pruebas certificadas mediante Linux aislado, sin cambiar la política del equipo.
+
+La preparación documental no publica un servicio, no habilita correo real ni certifica instalaciones externas. Antes de un despliegue, verificá su configuración, host/runtime efectivos y el orden de Web/API; para réplicas, además deben resolverse los límites de sesiones y coordinación ya descritos. Las [notas de versión](docs/releases/v0.1.0.md) detallan las adaptaciones visuales aprobadas y lo diferido.
