@@ -10,9 +10,11 @@ La aplicación permite definir hábitos, elegir los días en los que deben reali
 
 ## Estado del proyecto
 
-**Versión:** 0.1.0 — MVP en desarrollo
+**Candidato documental:** v0.1.0 — versión de código validada localmente.
 
-CONSTIA se encuentra actualmente en etapa de desarrollo.
+El código de referencia es `395a2773524f801c70aa226d44c23908401d2229`, con [CI aprobada](https://github.com/ivandinicola/CONSTIA/actions/runs/44739455506). Las [notas de versión](docs/releases/v0.1.0.md) y la [matriz de aceptación V1](docs/releases/v0.1.0-aceptacion.md) están preparadas para revisión. La etiqueta y su SHA definitivo se aprobarán después de integrar y verificar el candidato documental.
+
+Esta preparación no anuncia un servicio público ni acredita un despliegue. El alcance local admite una sola instancia de Web; los requisitos y límites están en [DEVELOPMENT.md](DEVELOPMENT.md).
 
 El alcance funcional de la primera versión está definido en:
 
@@ -26,10 +28,11 @@ El alcance funcional de la primera versión está definido en:
 
 ### Usuarios
 
-* Registro de usuario.
+* Registro y confirmación de correo; cuenta pendiente hasta verificarla.
 * Inicio de sesión.
-* Autenticación.
+* Autenticación y cierre de sesión con cookie protegida; JWT usado desde el servidor Web.
 * Acceso aislado a los datos propios de cada usuario.
+* Selección explícita de zona IANA y cambio desde Mi cuenta, sin reescribir fechas históricas.
 
 ### Hábitos
 
@@ -40,10 +43,12 @@ El alcance funcional de la primera versión está definido en:
 * Consultar hábitos inactivos.
 * Definir los días de la semana en los que se realiza cada hábito.
 * Asignar una categoría del catálogo oficial de diez opciones, independiente del ícono.
-* Elegir un ícono válido del catálogo oficial de dieciséis recursos, independientemente de la categoría.
+* Elegir un ícono válido del catálogo oficial de veintiocho recursos, independientemente de la categoría.
 * Asignar automáticamente la fecha de inicio desde la fecha civil local del usuario en el backend.
 
-Las decisiones de categoría e ícono obligatorios en nuevas altas y FechaInicio automática están aprobadas y pendientes de adaptación en código. Los hábitos históricos podrán conservar ambos identificadores nulos. Omitir la categoría al editar conserva su valor; no se permite eliminar una ya asignada. El contrato nuevo rechazará solicitudes que incluyan `FechaInicio`. Su alcance y nombres exactos están en [`MVP-SCOPE.md`](MVP-SCOPE.md) y [`SPECIFICATION.md`](SPECIFICATION.md); el [análisis de impacto](docs/superpowers/plans/2026-10-19-categorias-v1-fecha-inicio.md) describe la transición de hábitos existentes y el trabajo futuro.
+Las altas requieren categoría, ícono y al menos un día; el backend asigna `FechaInicio` y rechaza su envío por el cliente. Los hábitos legados pueden conservar categoría e ícono nulos. Al editar, omitir esos campos conserva su valor y no se permite borrarlos explícitamente. La edición Web usa ETag/If-Match y conserva el borrador ante un conflicto `412`.
+
+El [análisis de impacto de octubre](docs/superpowers/plans/2026-10-19-categorias-v1-fecha-inicio.md) es un antecedente histórico. Los contratos vigentes están en [SPECIFICATION.md](SPECIFICATION.md), y su evidencia integrada en la matriz V1.
 
 ### Cumplimientos
 
@@ -63,7 +68,8 @@ Las decisiones de categoría e ícono obligatorios en nuevas altas y FechaInicio
 * Estadísticas generales.
 * Estadísticas individuales por hábito.
 * Historial de progreso.
-* Visualización mediante calendario/heatmap.
+* Calendario mensual de consulta e historial por hábito, con oportunidad y registro separados.
+* Resúmenes generales y por hábito de los últimos 30 días civiles, con estados parciales y reintentos por sección.
 
 ---
 
@@ -106,30 +112,24 @@ CONSTIA/
 │   ├── Constia.Application
 │   ├── Constia.Domain
 │   └── Constia.Infrastructure
-└── tests/
-    └── Constia.Tests
+├── tests/
+│   ├── Constia.Tests
+│   ├── Constia.API.Tests
+│   ├── Constia.Web.Tests
+│   └── Constia.EnvioUnico.Tests
+└── tools/
+    ├── Constia.StateHistoryBackfill
+    └── Constia.EnvioUnico
 ```
 
 De manera general:
 
 ```text
-Constia.Web
-      │
-      │ HTTP
-      ▼
-Constia.API
-      │
-      ▼
-Constia.Application
-      │
-      ▼
-Constia.Domain
-      │
-      ▼
-Constia.Infrastructure
-      │
-      ▼
-   SQL Server
+Constia.Web ── HTTP ──> Constia.API
+Constia.API ──> Constia.Application, Constia.Infrastructure
+Constia.Application ──> Constia.Domain
+Constia.Infrastructure ──> Constia.Application, Constia.Domain
+Constia.Infrastructure ── persistencia ──> SQL Server
 ```
 
 La explicación detallada de responsabilidades y dependencias se encuentra en [`ARCHITECTURE.md`](ARCHITECTURE.md).
@@ -144,7 +144,9 @@ La explicación detallada de responsabilidades y dependencias se encuentra en [`
 | [`MVP-SCOPE.md`](MVP-SCOPE.md)         | Alcance funcional del MVP                              |
 | [`SPECIFICATION.md`](SPECIFICATION.md) | Reglas y comportamiento funcional de V1                |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md)   | Arquitectura y responsabilidades técnicas              |
-| `DEVELOPMENT.md`                       | Guía para configurar y ejecutar el proyecto            |
+| [`DEVELOPMENT.md`](DEVELOPMENT.md) | Instalación local, migraciones, TEMP-005 y límites operativos |
+| [Aceptación V1](docs/releases/v0.1.0-aceptacion.md) | Criterios, evidencia y pendientes de aprobación |
+| [Notas v0.1.0](docs/releases/v0.1.0.md) | Alcance de la versión de código y límites |
 
 ---
 
@@ -206,4 +208,4 @@ El proyecto se construye de forma incremental, manteniendo trazabilidad entre re
 
 ## Base documental AUD-BASE · 19/10/2026
 
-La reconciliación parte de main remoto `30058bbcd90e8f6a3733784f6826470eb67989d4`, con COMP-005 y TEMP-005 integrados. Conserva sus reglas temporales, incluida la ventana de cumplimientos de hoy o ayer. PEN-006 tiene aprobación visual estática para diez categorías y dieciséis íconos; no acredita implementación funcional. Esta tarea solo prepara Git y documentación: no implementa funcionalidades ni aplica migraciones.
+La reconciliación partió de main remoto `30058bbcd90e8f6a3733784f6826470eb67989d4`, con COMP-005 y TEMP-005 integrados. Conservó sus reglas temporales, incluida la ventana de cumplimientos de hoy o ayer. PEN-006 tenía aprobación visual estática para diez categorías y dieciséis íconos, que no acreditaba implementación funcional. En aquella etapa solo se preparó Git y documentación. Las entregas posteriores están integradas; consultar la matriz V1 para el estado vigente.

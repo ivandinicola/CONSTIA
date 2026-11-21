@@ -1,5 +1,7 @@
 # CONSTIA — MVP Scope
 
+Alcance vigente de la versión de código v0.1.0, validada localmente. La [matriz V1](docs/releases/v0.1.0-aceptacion.md) separa evidencia integrada, límites y aprobación pendiente de versión. Los antecedentes de AUD-BASE se conservan en la sección 7.
+
 ## 1. Producto
 
 **CONSTIA — Tu constancia, día a día.**
@@ -126,7 +128,7 @@ Solo se almacenarán los cumplimientos realizados.
 
 No se generarán registros separados para representar un hábito no realizado.
 
-Solo se podrán registrar cumplimientos para hoy o ayer, entendidos como fechas civiles locales del usuario. Se rechazarán fechas anteriores a ayer, futuras, anteriores a `FechaInicio` o no programadas según la programación histórica, así como nuevos cumplimientos de hábitos actualmente inactivos. La fecha local se calculará desde un instante UTC y la zona horaria IANA persistida del usuario. Un hábito ajeno o inexistente responderá `404`; la falta de autenticación válida responderá `401`; un duplicado responderá `409`. COMP-004 realizará una comprobación previa y COMP-005 incorporará la garantía ante concurrencia.
+Solo se podrán registrar cumplimientos para hoy o ayer, entendidos como fechas civiles locales del usuario. Se rechazarán fechas anteriores a ayer, futuras, anteriores a `FechaInicio` o no programadas según la programación histórica, así como nuevos cumplimientos de hábitos actualmente inactivos. La fecha local se calculará desde un instante UTC y la zona horaria IANA persistida del usuario. Un hábito ajeno o inexistente responderá `404`; la falta de autenticación válida responderá `401`; un duplicado responderá `409`. COMP-004 comprueba previamente el duplicado y COMP-005 garantiza la unicidad ante concurrencia en la base.
 
 Si un cumplimiento ya registrado deja de corresponder a un día programado debido a una edición consolidada de esa fecha, permanecerá almacenado como hecho realizado. No se contará como oportunidad programada ni contribuirá a métricas basadas en cumplimientos programados; no se eliminará ni modificará retroactivamente.
 
@@ -138,7 +140,7 @@ El usuario podrá consultar sus hábitos organizados por fecha.
 
 Para cada día se deberán mostrar únicamente los hábitos cuyo estado histórico sea **Activo** en esa fecha, cuya `FechaInicio` ya se alcanzó y cuya versión de programación vigente incluía ese día. Un estado desconocido no se presentará como Inactivo ni como incumplimiento; la interfaz deberá poder diferenciarlo hasta que el historial esté disponible.
 
-La interfaz permitirá registrar cumplimientos desde la vista correspondiente.
+La vista de registro es Hoy. Adaptación aprobada para v0.1.0: Calendario muestra conteos y detalle de solo lectura, sin registro ni indicadores por categoría. Las fechas futuras representan planificación. La selección se identifica también por texto y los días sin oportunidades son neutros.
 
 ---
 
@@ -146,7 +148,7 @@ La interfaz permitirá registrar cumplimientos desde la vista correspondiente.
 
 Los cumplimientos históricos de los hábitos deberán conservarse.
 
-El usuario podrá consultar el historial de un hábito activo o inactivo.
+El usuario podrá consultar el historial de un hábito activo o inactivo. La consulta mensual separa el estado de la oportunidad del registro persistido, incluidos registros fuera de programación y días desconocidos; las fechas futuras quedan fuera de la selección. Los rangos de consulta admiten como máximo 42 días inclusivos.
 
 ---
 
@@ -177,7 +179,7 @@ La racha individual se calculará según los cumplimientos consecutivos en las o
 
 Las ocasiones programadas se determinarán mediante la versión histórica correspondiente y el estado vigente del hábito en cada fecha. Los hábitos inactivos conservarán su historial y los cumplimientos fuera de programación no contarán como cumplimientos programados.
 
-Esto permitirá comparar hábitos diarios con hábitos programados únicamente determinados días.
+Esto permite comparar hábitos diarios con hábitos programados únicamente determinados días. La actual de un hábito inactivo es no aplicable; la mejor histórica se conserva cuando puede determinarse. Hoy y ayer pendientes solo cortan al vencer la ventana de registro. La mejor considera todo el historial aplicable, sin limitarse a 42 días.
 
 ---
 
@@ -199,6 +201,8 @@ V1 incluirá estadísticas básicas:
 * Cantidad de cumplimientos.
 * Porcentaje de cumplimiento.
 * Historial.
+
+Los resúmenes generales y por hábito abarcan los últimos 30 días civiles, incluido hoy como «En curso». El porcentaje usa oportunidades cumplidas sobre programadas y se redondea al entero más cercano, con mitades hacia arriba. Se distinguen cero conocido, período sin oportunidades e historial insuficiente. Las métricas determinables permanecen visibles aunque otra no esté disponible; los registros fuera de programación no contribuyen al porcentaje. Ver SPECIFICATION, sección 9.
 
 ---
 
@@ -229,11 +233,11 @@ Decisión funcional aprobada el **19/10/2026**: las categorías predefinidas for
 | Creatividad y ocio | Tocar música, dibujar, practicar hobbies | Nota musical |
 | Hogar y vida cotidiana | Ordenar, limpiar, cuidar plantas o mascotas | Brote |
 
-Cada hábito nuevo deberá pertenecer a una sola categoría válida del catálogo, identificada por un ID estable y no por su nombre visible. También deberá tener un ícono oficial válido. La categoría podrá consultarse y editarse mediante las operaciones de hábitos, respetando propiedad y reglas generales de V1. Omitir la categoría en una edición conservará su valor; no se permitirá eliminar una categoría ya asignada. Editar un hábito histórico sin categoría no obligará a clasificarlo. La semántica de `null` explícito y la edición de ícono se precisarán en API-CAT-01. No habrá creación, edición ni eliminación de categorías personalizadas.
+Cada hábito nuevo deberá pertenecer a una sola categoría válida del catálogo, identificada por un ID estable y no por su nombre visible. También deberá tener un ícono oficial válido. La categoría podrá consultarse y editarse mediante las operaciones de hábitos, respetando propiedad y reglas generales de V1. Omitir la categoría en una edición conservará su valor; no se permitirá eliminar una categoría ya asignada. Editar un hábito histórico sin categoría no obligará a clasificarlo. La edición distingue campo ausente de `null`: omitir categoría o ícono conserva el valor; informar `null` explícito, vacío o un ID no válido se rechaza con `400`. No se permite borrar asignaciones. No habrá creación, edición ni eliminación de categorías personalizadas.
 
 Categoría e ícono son conceptos independientes: el usuario podrá elegir cualquiera de los veintiocho íconos oficiales para su hábito; la categoría no impone uno automáticamente. La referencia visual de la tabla no es una restricción de selección. Billete es el recurso oficial de referencia para Finanzas personales y puede elegirse para cualquier categoría; Finanzas personales no lo selecciona automáticamente.
 
-Los hábitos históricos podrán conservar `CategoriaId` e `IconoId` nulos, sin asignaciones arbitrarias ni pérdida de información histórica. Las nuevas creaciones requerirán ambos identificadores oficiales válidos una vez habilitada la funcionalidad. La estrategia recomendada y sus verificaciones están en el [análisis de impacto](docs/superpowers/plans/2026-10-19-categorias-v1-fecha-inicio.md); todavía no se ejecutó ninguna migración.
+Los hábitos históricos podrán conservar `CategoriaId` e `IconoId` nulos, sin asignaciones arbitrarias ni pérdida de información histórica. Las nuevas creaciones requieren ambos identificadores oficiales válidos. Las migraciones de categorías e ícono y los contratos están integrados. La ampliación de 16 a 28 reutiliza `IconoId` y no requiere otra migración. El [análisis de impacto](docs/superpowers/plans/2026-10-19-categorias-v1-fecha-inicio.md) conserva el diagnóstico de octubre como antecedente, no como instrucción pendiente.
 
 Antecedente histórico: PEN-006 fue aprobado visualmente el 18/10/2026 con cinco categorías y quince íconos. Las revisiones aprobadas el 19/10/2026 conservan esa aprobación inicial y establecen diez categorías sin íconos en el Paso 1 y dieciséis íconos en grilla 4 × 4 en el Paso 2, con Billete en fila 4/columna 4. La aprobación es exclusivamente visual y estática: no certifica selección, desplazamiento, navegación, persistencia ni accesibilidad funcional. AUD-BASE no modifica Penpot ni inicia PEN-007.
 
@@ -296,8 +300,14 @@ CONSTIA V1 se considerará completada cuando:
 * El código se encuentre versionado mediante Git.
 * La versión inicial pueda documentarse como `v0.1.0`.
 
+La entrega acordada es una versión de código validada localmente, con una instancia Web y límites explícitos. No requiere acreditar un servicio público para etiquetar el código. La etiqueta y su SHA definitivo se aprobarán después de integrar y verificar el candidato documental; preparar estas notas no equivale a crearla ni cierra por sí solo DEVOPS-006/007.
+
 ## 7. Trazabilidad de decisiones funcionales
 
 El 19/10/2026 se aprobó incluir el catálogo de diez categorías oficiales y calcular automáticamente `FechaInicio` según la fecha civil local del usuario. Esto reemplaza la exclusión anterior de Categorías y resuelve los dos pendientes funcionales registrados durante PEN-006; no certifica su implementación ni modifica aprobaciones visuales anteriores. Las categorías personalizadas siguen fuera de V1. Reglas detalladas en `SPECIFICATION.md`, secciones 2.3 y 2.5.
 
 La reconciliación AUD-BASE del 19/10/2026 incorpora además la obligatoriedad de categoría e ícono válidos en nuevas altas, su independencia, la conservación de valores nulos históricos y el rechazo expreso de `FechaInicio` enviada en el contrato nuevo. Conserva las reglas temporales de main integrado, incluida la ventana de cumplimientos de hoy o ayer y la inicialización de TEMP-005; no implementa estas nuevas decisiones en código.
+
+### Estado integrado y adaptaciones posteriores
+
+Las referencias a «no implementar» de AUD-BASE describen aquella revisión del 19/10, no el estado actual. Categorías, íconos, FechaInicio local y edición están integrados; el catálogo V1 tiene 28 opciones y conserva los 16 IDs originales y su orden. Se mantienen los diseños estáticos originales como referencia histórica, junto con las adaptaciones aprobadas: botones nativos en lugar de gestos, Calendario de consulta y selectores ampliados. La matriz enlaza las entregas y separa fidelidad visual de validación funcional. Ninguna de estas notas declara una coincidencia visual exacta con todos los frames ni una validación en destino.
