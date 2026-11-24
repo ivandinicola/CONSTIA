@@ -1,4 +1,5 @@
 using Constia.API.Authentication;
+using Constia.API.Errors;
 using Constia.Application.Cumplimientos;
 using Constia.Application.Habitos;
 using Constia.Application.Usuarios;
@@ -115,6 +116,8 @@ builder.Services
     });
 
 builder.Services.AddControllers();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+builder.Services.AddProblemDetails();
 Constia.API.Configuration.ResendC1ServiceCollectionExtensions.AddResendC1(builder.Services, builder.Configuration);
 
 Constia.API.Configuration.BienvenidaC3AServiceCollectionExtensions.AddBienvenidaC3A(builder.Services, builder.Configuration);
@@ -125,6 +128,7 @@ var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 
+app.UseExceptionHandler();
 app.UseHttpsRedirection();
 
 app.UseRouting();
