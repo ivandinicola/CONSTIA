@@ -1,5 +1,6 @@
 using Constia.API.Authentication;
 using Constia.API.Errors;
+using Constia.API.Documentation;
 using Constia.Application.Cumplimientos;
 using Constia.Application.Habitos;
 using Constia.Application.Usuarios;
@@ -118,6 +119,8 @@ builder.Services
 builder.Services.AddControllers();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddProblemDetails();
+if (builder.Environment.IsDevelopment())
+    builder.Services.AddConstiaOpenApi();
 Constia.API.Configuration.ResendC1ServiceCollectionExtensions.AddResendC1(builder.Services, builder.Configuration);
 
 Constia.API.Configuration.BienvenidaC3AServiceCollectionExtensions.AddBienvenidaC3A(builder.Services, builder.Configuration);
@@ -136,6 +139,19 @@ app.UseRateLimiter();
 app.UseAuthentication();
 
 app.UseAuthorization();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/openapi/v1.json", "CONSTIA API v1");
+        options.SupportedSubmitMethods(Swashbuckle.AspNetCore.SwaggerUI.SubmitMethod.Get);
+        options.ConfigObject.PersistAuthorization = false;
+        options.ConfigObject.AdditionalItems["queryConfigEnabled"] = false;
+        options.ConfigObject.AdditionalItems["validatorUrl"] = null;
+    });
+}
 
 app.MapControllers();
 

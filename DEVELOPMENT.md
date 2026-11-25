@@ -538,3 +538,28 @@ La [matriz V1](docs/releases/v0.1.0-aceptacion.md) enlaza la CI del SHA de códi
 Los recorridos de teclado, foco y anchos 280/320/390 se verificaron en Chromium emulado. No acreditan dispositivo físico, Safari real ni lector de pantalla. Algunas pantallas anteriores se probaron con API sintética; las evidencias distinguen esos casos de los recorridos reales. El bloqueo de DLL HTTP en Windows se resolvió para las pruebas certificadas mediante Linux aislado, sin cambiar la política del equipo.
 
 La preparación documental no publica un servicio, no habilita correo real ni certifica instalaciones externas. Antes de un despliegue, verificá su configuración, host/runtime efectivos y el orden de Web/API; para réplicas, además deben resolverse los límites de sesiones y coordinación ya descritos. Las [notas de versión](docs/releases/v0.1.0.md) detallan las adaptaciones visuales aprobadas y lo diferido.
+
+## API-005 — Documento OpenAPI y Swagger UI locales
+
+Con la configuración local y el perfil HTTPS de API descritos arriba, en `Development`:
+
+- Documento generado nativo: `https://localhost:7260/openapi/v1.json` (OpenAPI 3.1).
+- Swagger UI: `https://localhost:7260/swagger` y sus recursos locales, sin CDN ni validador externo.
+- En `Production`, `Staging` y los demás entornos no se registran el documento, la UI ni sus recursos. Esto no agrega puertos, CORS ni acceso remoto: conservar los bindings locales existentes. `Development` no reemplaza el aislamiento de red; no exponer ese perfil a redes o datos reales.
+
+El generador es `Microsoft.AspNetCore.OpenApi` 10.0.15; `Swashbuckle.AspNetCore.SwaggerUI` 10.3.1 aporta solamente la interfaz. No se usa SwaggerGen ni un segundo generador. Las 23 operaciones aprovechan la metadata MVC y completan esquemas, errores y encabezados mediante transformadores de documentación, sin cambiar las respuestas de los controladores.
+
+Las 19 operaciones protegidas declaran Bearer por operación; login, registro, verificación y reenvío son anónimos. `Authorize` acepta un JWT **sintético** del entorno aislado, en memoria de la página: no copiar credenciales reales ni el ticket protegido de Web. No se precargan tokens ni se persiste autorización; recargar pierde esa autorización. No guardar capturas, curl, HAR o respuestas de login que incluyan credenciales. Los campos sensibles no contienen ejemplos ni valores predeterminados de credenciales.
+
+`Try it out` está habilitado solamente para GET. Los POST, PUT y DELETE se pueden consultar pero no ejecutar desde esta UI, incluido correo. Esta restricción de presentación **no sustituye la autenticación ni la autorización de la API**: otros clientes conservan sus contratos y permisos. No modificarla para ensayar escrituras contra la base habitual. Las pruebas HTTP usan repositorios y correo falsos; las pruebas de SQL requieren el aislamiento documentado por separado.
+
+El documento conserva las variantes existentes:
+
+- Validación por campo (`errors`) y `ProblemDetails`, sin exigir `code`/`traceId` en todos los errores de negocio. Las alternativas solapadas usan `anyOf`.
+- Detalle con ETag y PUT con `If-Match` opcional; sintaxis inválida `400`, versión obsoleta `412`, conflictos de vigencia/concurrencia `409`. Omitir la precondición conserva el contrato anterior.
+- `422` por historia insuficiente de rango/rachas y `503` con `habit_status_history_not_initialized` por falta de inicialización global. El historial por hábito puede devolver `200` con días desconocidos y mantiene `tieneRegistro` independiente de la oportunidad. Las rachas permiten disponibilidad parcial, cero conocido y métricas no aplicables/no disponibles.
+- `500` inesperado seguro de API-003: título fijo, `internal_error`, `traceId`, `application/problem+json` y `no-store`. Coexiste con el `500` previsto de zona persistida inválida, que no garantiza ese código. Una respuesta iniciada o un transporte fallido pueden impedir recibir el cuerpo; no se acredita saneamiento integral de logs EF/Kestrel.
+
+Una respuesta perdida o un `500` posterior a guardar no demuestra rollback. No reenviar automáticamente operaciones de escritura. La documentación no introduce idempotencia, reejecuciones, nuevos permisos ni comportamiento de negocio.
+
+Referencias: [OpenAPI nativo de ASP.NET Core 10](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/openapi/aspnetcore-openapi?view=aspnetcore-10.0), [UI separada](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/openapi/using-openapi-documents?view=aspnetcore-10.0) y [configuración Swagger UI](https://swagger.io/docs/open-source-tools/swagger-ui/usage/configuration/).
