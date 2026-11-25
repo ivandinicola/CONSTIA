@@ -647,6 +647,58 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
     }
 
     [Fact]
+    public async Task RegistrarCumplimiento_AyerProgramadoSoloEnVersionHistorica_Devuelve201()
+    {
+        var hoy = new DateOnly(2026, 10, 10);
+        var ayer = new DateOnly(2026, 10, 9);
+        var usuario = new Usuario("Historia", "historia@example.invalid", "hash-sintetico", "Etc/UTC");
+        factory.UsuariosPersistidos[usuario.Id] = usuario;
+        var habit = CrearHabitoConIdYFecha(usuario, "Leer", Guid.NewGuid(),
+            new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), [DayOfWeek.Friday]);
+        habit.ActualizarConfiguracionVersionada(habit.Nombre, habit.Descripcion, [DayOfWeek.Saturday], hoy);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticadoParaCumplimientos(usuario.Id);
+        Assert.Contains(habit.ObtenerProgramacionPara(ayer)!.DiasProgramados, d => d.Dia == ayer.DayOfWeek);
+        Assert.DoesNotContain(habit.DiasProgramados, d => d.Dia == ayer.DayOfWeek);
+        var guardadosAntes = factory.CantidadDeCumplimientosGuardados;
+
+        using var response = await client.PostAsJsonAsync($"/api/habitos/{habit.Id:D}/cumplimientos", new { fecha = ayer });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = Assert.IsType<CumplimientoResponse>(await response.Content.ReadFromJsonAsync<CumplimientoResponse>());
+        var guardado = Assert.Single(factory.CumplimientosPersistidos);
+        Assert.Equal(ayer, body.Fecha);
+        Assert.Equal((habit.Id, ayer), guardado.Key);
+        Assert.Equal(guardado.Value.Id, body.Id);
+        Assert.Equal(guardadosAntes + 1, factory.CantidadDeCumplimientosGuardados);
+    }
+
+    [Fact]
+    public async Task RegistrarCumplimiento_AyerProgramadoSoloEnVersionActual_Devuelve400()
+    {
+        var hoy = new DateOnly(2026, 10, 10);
+        var ayer = new DateOnly(2026, 10, 9);
+        var usuario = new Usuario("Historia", "historia-inversa@example.invalid", "hash-sintetico", "Etc/UTC");
+        factory.UsuariosPersistidos[usuario.Id] = usuario;
+        var habit = CrearHabitoConIdYFecha(usuario, "Leer", Guid.NewGuid(),
+            new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), [DayOfWeek.Monday]);
+        habit.ActualizarConfiguracionVersionada(habit.Nombre, habit.Descripcion, [DayOfWeek.Friday], hoy);
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticadoParaCumplimientos(usuario.Id);
+        Assert.DoesNotContain(habit.ObtenerProgramacionPara(ayer)!.DiasProgramados, d => d.Dia == ayer.DayOfWeek);
+        Assert.Contains(habit.DiasProgramados, d => d.Dia == ayer.DayOfWeek);
+        var guardadosAntes = factory.CantidadDeCumplimientosGuardados;
+
+        using var response = await client.PostAsJsonAsync($"/api/habitos/{habit.Id:D}/cumplimientos", new { fecha = ayer });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = Assert.IsType<ProblemDetails>(await response.Content.ReadFromJsonAsync<ProblemDetails>());
+        Assert.Equal(400, problem.Status);
+        Assert.Empty(factory.CumplimientosPersistidos);
+        Assert.Equal(guardadosAntes, factory.CantidadDeCumplimientosGuardados);
+    }
+
+    [Fact]
     public async Task RegistrarCumplimiento_Ayer_UsaLaVersionHistoricaAplicable()
     {
         var usuario = new Usuario("Zona argentina", $"{Guid.NewGuid()}@example.invalid", "fake-hash",
