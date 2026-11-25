@@ -31,6 +31,48 @@ public sealed class RegistrarCumplimientoTests
     }
 
     [Fact]
+    public async Task EjecutarAsync_AyerProgramadoSoloEnVersionHistorica_AdmiteUnaEscritura()
+    {
+        var hoy = new DateOnly(2026, 10, 10);
+        var ayer = new DateOnly(2026, 10, 9);
+        var usuario = CrearUsuario("Etc/UTC");
+        var habit = CrearHabito(usuario, [DayOfWeek.Friday]);
+        habit.ActualizarConfiguracionVersionada(habit.Nombre, habit.Descripcion, [DayOfWeek.Saturday], hoy);
+        var store = CrearCaso(usuario, habit);
+        Assert.Contains(habit.ObtenerProgramacionPara(ayer)!.DiasProgramados, d => d.Dia == ayer.DayOfWeek);
+        Assert.DoesNotContain(habit.DiasProgramados, d => d.Dia == ayer.DayOfWeek);
+
+        var resultado = Assert.IsType<CumplimientoRegistrado>(
+            await store.Caso.EjecutarAsync(habit.Id, usuario.Id, ayer));
+
+        var guardado = Assert.Single(store.Cumplimientos.Agregados);
+        Assert.Equal(ayer, resultado.Fecha);
+        Assert.Equal(guardado.Id, resultado.Id);
+        Assert.Equal(ayer, guardado.Fecha);
+        Assert.Same(habit, guardado.Habito);
+        Assert.Equal("Etc/UTC", store.FechaLocal.TimeZoneIdRecibido);
+    }
+
+    [Fact]
+    public async Task EjecutarAsync_AyerProgramadoSoloEnVersionActual_RechazaSinEscribir()
+    {
+        var hoy = new DateOnly(2026, 10, 10);
+        var ayer = new DateOnly(2026, 10, 9);
+        var usuario = CrearUsuario("Etc/UTC");
+        var habit = CrearHabito(usuario, [DayOfWeek.Monday]);
+        habit.ActualizarConfiguracionVersionada(habit.Nombre, habit.Descripcion, [DayOfWeek.Friday], hoy);
+        var store = CrearCaso(usuario, habit);
+        Assert.DoesNotContain(habit.ObtenerProgramacionPara(ayer)!.DiasProgramados, d => d.Dia == ayer.DayOfWeek);
+        Assert.Contains(habit.DiasProgramados, d => d.Dia == ayer.DayOfWeek);
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.Caso.EjecutarAsync(habit.Id, usuario.Id, ayer));
+
+        Assert.Equal("fecha", error.ParamName);
+        Assert.Empty(store.Cumplimientos.Agregados);
+    }
+
+    [Fact]
     public async Task EjecutarAsync_RegistraAyerYUsaLaProgramacionHistoricaAplicable()
     {
         var usuario = CrearUsuario("America/Argentina/Buenos_Aires");
