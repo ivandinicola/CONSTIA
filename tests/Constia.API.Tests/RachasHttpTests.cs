@@ -73,6 +73,48 @@ public sealed class RachasHttpTests
         Assert.Equal(esperado, await client.GetFromJsonAsync<RachasResponse>($"/api/habitos/{legado.Id}/rachas"));
     }
 
+    [Theory]
+    [InlineData(3, 1)]
+    [InlineData(2, 0)]
+    public async Task General_AgregaCuatroOportunidadesConProgramacionHistorica(int cumplidos, int valorEsperado)
+    {
+        using var host = new JwtApiFactory();
+        using var client = host.CreateClient();
+        Autenticar(client, host.Services, host.Usuario);
+        var fecha = new DateOnly(2026, 10, 8);
+        var corte = new DateOnly(2026, 10, 10);
+        var habitos = Enumerable.Range(0, 4)
+            .Select(i => HabitoHistorico.Crear(host.Usuario, $"Hábito {i}", null, fecha, [DayOfWeek.Thursday]))
+            .ToArray();
+        foreach (var habito in habitos)
+        {
+            habito.ActualizarConfiguracionVersionada(habito.Nombre, null, [DayOfWeek.Sunday], corte);
+            var anterior = habito.ObtenerProgramacionPara(fecha)!;
+            Assert.Equal(fecha, anterior.VigenteDesde);
+            Assert.Equal(corte, anterior.VigenteHasta);
+            Assert.Equal(DayOfWeek.Thursday, Assert.Single(anterior.DiasProgramados).Dia);
+            Assert.Equal(corte, habito.ObtenerProgramacionPara(corte)!.VigenteDesde);
+            Assert.Equal(DayOfWeek.Sunday, Assert.Single(habito.DiasProgramados).Dia);
+            Assert.Equal(EstadoHabito.Activo, habito.ObtenerEstadoPara(fecha));
+        }
+        Assert.Equal(4, habitos.Select(h => h.Id).Distinct().Count());
+        Assert.Equal("Etc/UTC", host.Usuario.TimeZoneId);
+        host.ReemplazarHabitos(habitos);
+        foreach (var habito in habitos.Take(cumplidos))
+            host.CumplimientosPersistidos[(habito.Id, fecha)] = new Cumplimiento(habito, fecha);
+        var escriturasAntes = host.CantidadDeCumplimientosGuardados;
+
+        using var response = await client.GetAsync("/api/habitos/rachas");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var metrica = new MetricaRachaResponse("disponible", valorEsperado);
+        Assert.Equal(new RachasResponse(corte, metrica, metrica),
+            await response.Content.ReadFromJsonAsync<RachasResponse>());
+        Assert.Equal(cumplidos, host.CumplimientosPersistidos.Count);
+        Assert.All(host.CumplimientosPersistidos.Keys, key => Assert.Equal(fecha, key.Item2));
+        Assert.Equal(escriturasAntes, host.CantidadDeCumplimientosGuardados);
+    }
+
     private static void QuitarPeriodos(Habito habito)
     {
         var periodos = (List<PeriodoEstadoHabito>)typeof(Habito)
