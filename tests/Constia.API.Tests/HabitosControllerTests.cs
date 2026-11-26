@@ -206,6 +206,53 @@ public sealed class HabitosControllerTests(JwtApiFactory factory) : IClassFixtur
         Assert.Equal("Caminar", habit.Nombre);
     }
 
+    [Theory]
+    [InlineData("W/\"1\"")]
+    [InlineData("\"1\", \"2\"")]
+    [InlineData("*")]
+    [InlineData("\"0\"")]
+    [InlineData("\"01\"")]
+    public async Task EditarHabito_IfMatchInvalido_Devuelve400SinMutarNiGuardar(string ifMatch)
+    {
+        var habit = CrearHabitoConIdYFecha(factory.Usuario, "Leer", Guid.NewGuid(),
+            new DateTimeOffset(2026, 2, 3, 4, 5, 6, TimeSpan.Zero));
+        factory.ReemplazarHabitos([habit]);
+        using var client = ClienteAutenticado(factory.Usuario.Id);
+        var ruta = $"/api/habitos/{habit.Id:D}";
+        using var detalleAntes = await client.GetAsync(ruta);
+        Assert.Equal(HttpStatusCode.OK, detalleAntes.StatusCode);
+        var cuerpoAntes = await detalleAntes.Content.ReadAsStringAsync();
+        var versionAntes = habit.ConcurrencyVersion;
+        var programacionesAntes = JsonSerializer.Serialize(habit.Programaciones);
+        var estadosAntes = JsonSerializer.Serialize(habit.PeriodosEstado);
+        var guardadosAntes = factory.CantidadDeHabitosGuardados;
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, ruta)
+        {
+            Content = JsonContent.Create(CrearRequestEdicion("Caminar", "Descripción nueva", [DayOfWeek.Friday]))
+        };
+        Assert.True(request.Headers.TryAddWithoutValidation("If-Match", ifMatch));
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        var problema = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.NotNull(problema);
+        Assert.Equal(400, problema.Status);
+        Assert.Equal("If-Match debe contener la versión devuelta por el detalle del hábito.", problema.Title);
+        Assert.Null(problema.Detail);
+        Assert.Null(response.Headers.ETag);
+        Assert.Equal(guardadosAntes, factory.CantidadDeHabitosGuardados);
+        Assert.Same(habit, Assert.Single(factory.HabitosPersistidos));
+        Assert.Equal(versionAntes, habit.ConcurrencyVersion);
+        Assert.Equal(programacionesAntes, JsonSerializer.Serialize(habit.Programaciones));
+        Assert.Equal(estadosAntes, JsonSerializer.Serialize(habit.PeriodosEstado));
+        using var detalleDespues = await client.GetAsync(ruta);
+        Assert.Equal(HttpStatusCode.OK, detalleDespues.StatusCode);
+        Assert.Equal(detalleAntes.Headers.ETag, detalleDespues.Headers.ETag);
+        Assert.Equal(cuerpoAntes, await detalleDespues.Content.ReadAsStringAsync());
+    }
+
     [Fact]
     public async Task EditarHabito_Inexistente_Devuelve404()
     {
