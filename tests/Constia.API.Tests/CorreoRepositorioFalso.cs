@@ -53,6 +53,7 @@ internal sealed class CorreoRepositorioFalso(JwtApiFactory factory, IUsuarioPass
             actual?.Invalidar(now);
             var nuevo = new DesafioVerificacionCorreo(u.Id,u.Email,hash,now);
             factory.DesafiosCorreo[nuevo.Id] = nuevo;
+            factory.RegistrarReenvioGuardado();
             return Task.FromResult<EmisionCorreo?>(new(nuevo.Id,u.Email,u.Nombre,nuevo.EmitidoEnUtc,nuevo.ExpiraEnUtc));
         }
     }

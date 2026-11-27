@@ -33,6 +33,9 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
 
     private int _cantidadDeCambiosGuardados;
     private int _cantidadDeUsuariosGuardados;
+    private int _reenviosGuardados;
+    internal int ReenviosGuardados => Volatile.Read(ref _reenviosGuardados);
+    internal void RegistrarReenvioGuardado() => Interlocked.Increment(ref _reenviosGuardados);
     private int _cantidadDeHabitosGuardados;
     private int _cantidadDeCumplimientosGuardados;
 
