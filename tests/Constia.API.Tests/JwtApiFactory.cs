@@ -32,10 +32,15 @@ public sealed class JwtApiFactory : WebApplicationFactory<Program>
     internal bool FallarEntregaCorreo { get; set; }
 
     private int _cantidadDeCambiosGuardados;
+    private int _cantidadDeUsuariosGuardados;
     private int _cantidadDeHabitosGuardados;
     private int _cantidadDeCumplimientosGuardados;
 
     public int CantidadDeCambiosGuardados => Volatile.Read(ref _cantidadDeCambiosGuardados);
+
+    public int CantidadDeUsuariosGuardados => Volatile.Read(ref _cantidadDeUsuariosGuardados);
+
+    internal void RegistrarUsuarioGuardado() => Interlocked.Increment(ref _cantidadDeUsuariosGuardados);
 
     public int CantidadDeHabitosGuardados => Volatile.Read(ref _cantidadDeHabitosGuardados);
     public int CantidadDeCumplimientosGuardados => Volatile.Read(ref _cantidadDeCumplimientosGuardados);

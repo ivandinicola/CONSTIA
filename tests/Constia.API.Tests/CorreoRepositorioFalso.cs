@@ -32,6 +32,7 @@ internal sealed class CorreoRepositorioFalso(JwtApiFactory factory, IUsuarioPass
                 return Task.FromResult(new ReservaRegistroCorreo(EstadoReservaCorreo.PresupuestoAgotado));
             var d = new DesafioVerificacionCorreo(u.Id,u.Email,hash,now);
             factory.UsuariosPersistidos[u.Id] = u;
+            factory.RegistrarUsuarioGuardado();
             factory.DesafiosCorreo[d.Id] = d;
             return Task.FromResult(new ReservaRegistroCorreo(EstadoReservaCorreo.Creado,new(d.Id,u.Email,u.Nombre,d.EmitidoEnUtc,d.ExpiraEnUtc)));
         }
